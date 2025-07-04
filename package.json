@@ -27,7 +27,7 @@
     "react-native-chart-kit": "*",
     "@react-navigation/stack": "*",
     "react-native-reanimated": "~3.16.1",
-    "@react-navigation/native": "7.0.18",
+    "@react-navigation/native": "^7.4.2",
     "@react-native-picker/picker": "2.9.0",
     "react-native-gesture-handler": "~2.20.2",
     "@react-navigation/bottom-tabs": "*",
