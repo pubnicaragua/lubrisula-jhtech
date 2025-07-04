@@ -52,7 +52,7 @@ const HistoryItem = ({ history }) => (
 
 export default function InventoryItemDetailScreen({ route, navigation }) {
   // Obtener ítem de los parámetros de navegación
-  const { item } = route.params || {
+  const defaultItem = {
     id: "1",
     name: "Filtro de aceite",
     code: "FIL-001",
@@ -67,6 +67,7 @@ export default function InventoryItemDetailScreen({ route, navigation }) {
     brand: "Toyota",
     lastUpdated: "10 Mar 2023",
   }
+  const { item = defaultItem } = route.params || {}
 
   // Datos de ejemplo para historial
   const historyData = [

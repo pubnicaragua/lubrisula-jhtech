@@ -348,13 +348,17 @@ export default function VehicleDetailScreen({ route, navigation }) {
   const renderImagesTab = () => (
     <View style={styles.tabContent}>
       <View style={styles.imageActions}>
-        <TouchableOpacity style={styles.addImageButton} onPress={handleAddImage}>
+        <TouchableOpacity 
+          style={styles.addImageButton} 
+          onPress={handleAddImage}
+          disabled={isLoading || !vehicle}
+        >
           <Feather name="plus" size={20} color="#fff" />
           <Text style={styles.addImageButtonText}>Añadir imagen</Text>
         </TouchableOpacity>
       </View>
 
-      {vehicle.images && vehicle.images.length > 0 ? (
+      {vehicle?.images && vehicle.images.length > 0 ? (
         <FlatList
           data={vehicle.images}
           keyExtractor={(item) => item.id}

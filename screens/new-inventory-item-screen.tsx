@@ -121,13 +121,45 @@ export default function NewInventoryItemScreen({ navigation }) {
   // Función para guardar el repuesto
   const saveItem = () => {
     if (validateForm()) {
-      // Aquí iría la lógica para guardar el repuesto en la base de datos
-      Alert.alert("Éxito", "Repuesto guardado correctamente", [
-        {
-          text: "OK",
-          onPress: () => navigation.goBack(),
-        },
-      ])
+      const saveItemAsync = async () => {
+        try {
+          // Importar servicio de inventario
+          const inventoryService = await import("../services/inventory-service");
+          
+          // Crear nuevo artículo
+          const newItem = await inventoryService.createInventoryItem({
+            name,
+            sku: code,
+            category,
+            brand,
+            type,
+            priceUSD: parseFloat(price),
+            priceHNL: parseFloat(price) * 24.5, // Convertir a lempiras
+            stock: parseInt(stock),
+            minStock: minStock ? parseInt(minStock) : undefined,
+            supplier,
+            location,
+            description,
+            isActive: true,
+          });
+          
+          if (newItem) {
+            Alert.alert("Éxito", "Repuesto guardado correctamente", [
+              {
+                text: "OK",
+                onPress: () => navigation.goBack(),
+              },
+            ]);
+          } else {
+            Alert.alert("Error", "No se pudo guardar el repuesto");
+          }
+        } catch (error) {
+          console.error("Error al guardar repuesto:", error);
+          Alert.alert("Error", "No se pudo guardar el repuesto");
+        }
+      };
+      
+      saveItemAsync();
     }
   }
 

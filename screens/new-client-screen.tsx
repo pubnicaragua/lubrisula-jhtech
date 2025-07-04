@@ -65,13 +65,38 @@ export default function NewClientScreen({ navigation }) {
   // Función para guardar el cliente
   const saveClient = () => {
     if (validateForm()) {
-      // Aquí iría la lógica para guardar el cliente en la base de datos
-      Alert.alert("Éxito", "Cliente guardado correctamente", [
-        {
-          text: "OK",
-          onPress: () => navigation.goBack(),
-        },
-      ])
+      const saveClientAsync = async () => {
+        try {
+          // Importar servicio de cliente
+          const clientService = await import("../services/client-service");
+          
+          // Crear nuevo cliente
+          const newClient = await clientService.createClient({
+            name,
+            email,
+            phone,
+            address,
+            city,
+            notes,
+          });
+          
+          if (newClient) {
+            Alert.alert("Éxito", "Cliente guardado correctamente", [
+              {
+                text: "OK",
+                onPress: () => navigation.goBack(),
+              },
+            ]);
+          } else {
+            Alert.alert("Error", "No se pudo guardar el cliente");
+          }
+        } catch (error) {
+          console.error("Error al guardar cliente:", error);
+          Alert.alert("Error", "No se pudo guardar el cliente");
+        }
+      };
+      
+      saveClientAsync();
     }
   }
 

@@ -1,6 +1,7 @@
 import type { AppImage } from "../types"
 import { getData, storeData, initializeData } from "./storage-service"
 import * as FileSystem from "expo-file-system"
+import { Platform } from "react-native"
 import * as ImagePicker from "expo-image-picker"
 import * as ImageManipulator from "expo-image-manipulator"
 
@@ -117,6 +118,11 @@ export const takePhoto = async (): Promise<string | null> => {
 // Comprimir imagen para reducir tamaño
 export const compressImage = async (uri: string): Promise<string> => {
   try {
+    // En entorno web, simplemente devolver la URI original
+    if (Platform.OS === 'web') {
+      return uri;
+    }
+    
     const result = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: 1000 } }], {
       compress: 0.7,
       format: ImageManipulator.SaveFormat.JPEG,
@@ -137,6 +143,23 @@ export const saveImage = async (
   description?: string,
 ): Promise<AppImage | null> => {
   try {
+    // En entorno web, crear un objeto de imagen simulado
+    if (Platform.OS === 'web') {
+      const newImage: AppImage = {
+        id: Date.now().toString(),
+        uri: uri, // Usar la URI original
+        type,
+        description,
+        createdAt: new Date().toISOString(),
+      };
+      
+      // Guardar en AsyncStorage
+      const images = await getAllImages();
+      await storeData(IMAGES_STORAGE_KEY, [...images, newImage]);
+      
+      return newImage;
+    }
+    
     await ensureDirectoryExists()
 
     // Comprimir la imagen

@@ -76,7 +76,7 @@ const OrderItem = ({ order, onPress }) => (
 
 export default function ClientDetailScreen({ route, navigation }) {
   // Obtener cliente de los parámetros de navegación
-  const { client } = route.params || {
+  const defaultClient = {
     id: "1",
     name: "Juan Pérez",
     email: "juan.perez@ejemplo.com",
@@ -87,6 +87,7 @@ export default function ClientDetailScreen({ route, navigation }) {
     vehicles: 2,
     lastVisit: "10 Mar 2023",
   }
+  const { client = defaultClient } = route.params || {}
 
   // Datos de ejemplo para vehículos
   const vehicles = [

@@ -42,9 +42,9 @@ const InventoryScreen = ({ navigation }) => {
   const [error, setError] = useState(null)
 
 // 
- // const canManageInventory =
-    permissionService.hasPermission(PERMISSIONS.CREATE_INVENTORY) ||
-    permissionService.hasPermission(PERMISSIONS.UPDATE_INVENTORY)
+  // Usar el hook useAuth para verificar permisos
+  const { hasPermission } = useAuth()
+  const canManageInventory = hasPermission("create_inventory") || hasPermission("update_inventory")
 
   const loadInventoryItems = useCallback(async () => {
     try {
