@@ -116,10 +116,14 @@ export default function DashboardScreen({ navigation }) {
   return (
     <ScrollView
       style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadDashboardData} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadDashboardData} colors={["#1a73e8"]} />}
     >
       <View style={styles.header}>
-        <Image source={require("../assets/autoflowx-logo.png")} style={styles.logo} resizeMode="contain" />
+        <Image 
+          source={{uri: "https://images.pexels.com/photos/3785927/pexels-photo-3785927.jpeg"}} 
+          style={styles.logo} 
+          resizeMode="contain" 
+        />
         <Text style={styles.welcomeText}>Bienvenido, {user?.name || "Usuario"}</Text>
         <Text style={styles.dateText}>
           {new Date().toLocaleDateString("es-ES", {

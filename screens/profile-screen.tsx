@@ -50,7 +50,10 @@ export default function ProfileScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Image source={user?.profilePic || require("../assets/autoflowx-logo.png")} style={styles.profileImage} />
+        <Image 
+          source={user?.profilePic || {uri: "https://images.pexels.com/photos/3785927/pexels-photo-3785927.jpeg"}} 
+          style={styles.profileImage} 
+        />
         <Text style={styles.name}>{user?.name || "Usuario"}</Text>
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>{getRoleText(user?.role)}</Text>
@@ -138,7 +141,11 @@ export default function ProfileScreen() {
       </TouchableOpacity>
 
       <View style={styles.footer}>
-        <Image source={require("../assets/autoflowx-logo.png")} style={styles.footerLogo} resizeMode="contain" />
+        <Image 
+          source={{uri: "https://images.pexels.com/photos/3785927/pexels-photo-3785927.jpeg"}} 
+          style={styles.footerLogo} 
+          resizeMode="contain" 
+        />
         <Text style={styles.versionText}>Versión 1.0.0</Text>
         <Text style={styles.copyrightText}>© {new Date().getFullYear()} AutoFlowX. Todos los derechos reservados.</Text>
       </View>

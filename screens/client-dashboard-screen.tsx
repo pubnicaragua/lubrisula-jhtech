@@ -207,7 +207,11 @@ export default function ClientDashboardScreen({ navigation }) {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#1a73e8"]} />}
     >
       <View style={styles.header}>
-        <Image source={require("../assets/autoflowx-logo.png")} style={styles.logo} resizeMode="contain" />
+        <Image 
+          source={{uri: "https://images.pexels.com/photos/3785927/pexels-photo-3785927.jpeg"}} 
+          style={styles.logo} 
+          resizeMode="contain" 
+        />
         <Text style={styles.welcomeText}>Bienvenido, {user?.name || "Cliente"}</Text>
         <Text style={styles.dateText}>
           {new Date().toLocaleDateString("es-ES", {
@@ -397,7 +401,11 @@ export default function ClientDashboardScreen({ navigation }) {
       </View>
 
       <View style={styles.footer}>
-        <Image source={require("../assets/autoflowx-logo.png")} style={styles.footerLogo} resizeMode="contain" />
+        <Image 
+          source={{uri: "https://images.pexels.com/photos/3785927/pexels-photo-3785927.jpeg"}} 
+          style={styles.footerLogo} 
+          resizeMode="contain" 
+        />
         <Text style={styles.footerText}>© {new Date().getFullYear()} AutoFlowX. Todos los derechos reservados.</Text>
       </View>
     </ScrollView>

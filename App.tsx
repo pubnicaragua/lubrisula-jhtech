@@ -52,7 +52,7 @@ export default function App() {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color="#1a73e8" />
-        <Text style={{ marginTop: 16, fontSize: 16 }}>Inicializando datos...</Text>
+        <Text style={styles.loadingText}>Cargando datos...</Text>
       </View>
     )
   }
@@ -72,7 +72,7 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <NavigationContainer>
-          <StatusBar style="auto" />
+          <StatusBar style="dark" />
           <AppNavigator />
         </NavigationContainer>
       </AuthProvider>
