@@ -19,7 +19,7 @@ import { useFocusEffect } from "@react-navigation/native"
 import { useAuth } from "../context/auth-context"  
 import INVENTARIO_SERVICES, { InventarioType, CategoriaMaterialType, ProveedorType } from "../services/INVETARIO.SERVICE"  
 import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE"  
+import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
   
 export default function InventoryScreen({ navigation }) {  
   const { user } = useAuth()  

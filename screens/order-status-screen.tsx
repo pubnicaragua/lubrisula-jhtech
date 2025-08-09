@@ -18,7 +18,7 @@ import { useFocusEffect } from "@react-navigation/native"
 import { useAuth } from "../context/auth-context"  
 import ORDENES_TRABAJO_SERVICES, { OrdenTrabajoType } from "../services/ORDENES.SERVICE"  
 import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE"  
+import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
   
 // Estados disponibles para las órdenes  
 const ORDER_STATUSES = [  

@@ -1,5 +1,5 @@
 // services/supabase/company-service.ts  
-import { supabase } from '../supabase'  
+import { supabase } from '../../lib/supabase'  
   
 export interface CompanyType {  
   id?: string  

@@ -14,7 +14,7 @@ import {
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useAuth } from "../context/auth-context"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE"  
+import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
 import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
 import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
   

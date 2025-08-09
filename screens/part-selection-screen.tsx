@@ -19,7 +19,7 @@ import { useAuth } from "../context/auth-context"
 import INVENTARIO_SERVICES, { InventarioType } from "../services/INVETARIO.SERVICE"  
 import CATEGORIA_MATERIALES_SERVICES from "../services/CATEGORIA_MATERIALES.SERVICE"  
 import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE"  
+import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
   
 export default function PartSelectionScreen({ navigation, route }) {  
   const { onPartSelect, selectedParts = [], multiSelect = true } = route.params || {}  

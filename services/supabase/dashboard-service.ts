@@ -1,6 +1,6 @@
 import ORDENES_TRABAJO_SERVICES, { OrdenTrabajoType } from "../ORDENES.SERVICE"  
 import CLIENTS_SERVICES, { ClienteType } from "../CLIENTES_SERVICES.SERVICE"  
-import INVENTARIO_SERVICES, { InventarioType } from "../INVETARIO.SERVICE"  
+import INVENTARIO_SERVICES, { InventarioType } from "../INVENTARIO.SERVICE"  
 import DASHBOARD_TALLER_SERVICES, { CabeceraDashboardType, EstadoOrdenType, RendimientoOrdenesSemanalesType } from "../DASHBOARD.TALLER.SERVICE"  
 import VEHICULO_SERVICES, { VehiculoType } from "../VEHICULOS.SERVICE"  
 import CITAS_SERVICES, { CitasDetalleType } from "../CITAS.SERVICE"  

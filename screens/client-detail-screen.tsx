@@ -15,11 +15,12 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
-import VEHICULO_SERVICES, { VehiculoType } from "../services/VEHICULOS.SERVICE"  
-import ORDENES_TRABAJO_SERVICES, { OrdenTrabajoType } from "../services/ORDENES.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE"  
+import { clientService, Client } from "../services/supabase/client-service"
+import { vehicleService, Vehicle } from "../services/supabase/vehicle-service"  
+import { orderService } from "../services/supabase/order-service" 
+import OrdenTrabajo from "../services/supabase/order-service"
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service" 
   
 export default function ClientDetailScreen({ route, navigation }) {  
   const { clientId } = route.params  
@@ -54,7 +55,7 @@ export default function ClientDetailScreen({ route, navigation }) {
       setUserRole(userPermissions?.rol || 'client')  
   
       // Obtener datos del cliente  
-      const clientData = await CLIENTS_SERVICES.GET_CLIENTS_BY_ID(clientId)  
+      const clientData = await clientimport clientService from "../services/supabase/client-service".GET_CLIENTS_BY_ID(clientId)  
         
       if (!clientData) {  
         setError("Cliente no encontrado")  
@@ -78,8 +79,8 @@ export default function ClientDetailScreen({ route, navigation }) {
   
       // Cargar vehículos y órdenes del cliente  
       const [clientVehicles, allOrders] = await Promise.all([  
-        VEHICULO_SERVICES.GET_ALL_VEHICULOS_BY_CLIENT(clientId),  
-        ORDENES_TRABAJO_SERVICES.GET_ALL_ORDENES()  
+        vehicleService.GET_ALL_VEHICULOS_BY_CLIENT(clientId),  
+        orderService.GET_ALL_ORDENES()  
       ])  
   
       setVehicles(clientVehicles)  
@@ -112,7 +113,7 @@ export default function ClientDetailScreen({ route, navigation }) {
         updated_at: new Date().toISOString()  
       }  
   
-      await CLIENTS_SERVICES.UPDATE_CLIENTE(clientId, updatedClient)  
+      await clientimport clientService from "../services/supabase/client-service".UPDATE_CLIENTE(clientId, updatedClient)  
       setClient(updatedClient)  
       setEditModalVisible(false)  
   
@@ -136,7 +137,7 @@ export default function ClientDetailScreen({ route, navigation }) {
           style: "destructive",  
           onPress: async () => {  
             try {  
-              await CLIENTS_SERVICES.DELETE_CLIENTE(clientId)  
+              await clientimport clientService from "../services/supabase/client-service".DELETE_CLIENTE(clientId)  
               Alert.alert("Éxito", "Cliente eliminado correctamente")  
               navigation.goBack()  
             } catch (error) {  

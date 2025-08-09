@@ -85,16 +85,16 @@ export const orderService = {
   getAllOrders: async (filters: Record<string, any> = {}): Promise<Order[]> => {
     try {
       let query = supabase.from('orders').select('*');
-      
+
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           query = query.eq(key, value);
         }
       });
-      
+
       const { data, error } = await query.order('created_at', { ascending: false });
       if (error) throw error;
-      
+
       return (data || []).map(order => ({
         ...order,
         // Map database fields to our type
@@ -127,7 +127,7 @@ export const orderService = {
         .select('*')
         .eq('id', id)
         .single();
-      
+
       if (error || !order) return null;
 
       // Get related data
@@ -211,7 +211,7 @@ export const orderService = {
   ): Promise<Order> => {
     try {
       const orderNumber = `ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-      
+
       const newOrder = {
         ...orderData,
         number: orderNumber,
@@ -224,15 +224,15 @@ export const orderService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      
+
       const { data, error } = await supabase
         .from('orders')
         .insert([newOrder])
         .select()
         .single();
-      
+
       if (error) throw error;
-      
+
       return orderService.getOrderById(data.id) as Promise<Order>;
     } catch (error) {
       handleSupabaseError(error, 'create order');
@@ -253,14 +253,14 @@ export const orderService = {
         paid_amount: updates.paidAmount,
         updated_at: new Date().toISOString(),
       };
-      
+
       const { error } = await supabase
         .from('orders')
         .update(updateData)
         .eq('id', id);
-      
+
       if (error) throw error;
-      
+
       return orderService.getOrderById(id);
     } catch (error) {
       handleSupabaseError(error, `update order ${id}`);
@@ -283,15 +283,15 @@ export const orderService = {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      
+
       const { data, error } = await supabase
         .from('order_comments')
         .insert([newComment])
         .select()
         .single();
-      
+
       if (error) throw error;
-      
+
       return {
         id: data.id,
         userId: data.user_id,
@@ -306,6 +306,25 @@ export const orderService = {
       throw error;
     }
   },
+  getOrdersByClientId(clientId: string): Promise<Order[]> {
+    try {
+      const { data, error } = await supabase
+        .from('ordenes')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('fecha_creacion', { ascending: false })
+
+      if (error) {
+        console.error('Error getting orders by client ID:', error)
+        return []
+      }
+
+      return data || []
+    } catch (error) {
+      console.error('Error in getOrdersByClientId:', error)
+      return []
+    }
+  }
 };
 
 export default orderService;

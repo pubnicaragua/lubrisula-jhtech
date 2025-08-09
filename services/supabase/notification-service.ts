@@ -1,5 +1,5 @@
 // services/supabase/notification-service.ts  
-import { supabase } from '../supabase'  
+import { supabase } from '../../lib/supabase'  
 import * as Notifications from 'expo-notifications'  
   
 export interface NotificationType {  

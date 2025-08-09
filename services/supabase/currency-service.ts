@@ -1,5 +1,5 @@
 // services/supabase/currency-service.ts  
-import { supabase } from '../supabase'  
+import { supabase } from '../../lib/supabase'  
   
 export interface CurrencyType {  
   id?: string  

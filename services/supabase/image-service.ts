@@ -1,5 +1,5 @@
 // services/supabase/image-service.ts  
-import { supabase } from '../supabase'  
+import { supabase } from '../../lib/supabase'  
 import * as FileSystem from 'expo-file-system'  
   
 class ImageService {  

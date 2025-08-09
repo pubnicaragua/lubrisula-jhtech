@@ -18,7 +18,7 @@ import { useAuth } from "../context/auth-context"
 import VEHICULO_SERVICES, { VehiculoType } from "../services/VEHICULOS.SERVICE"  
 import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
 import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE"  
+import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
   
 export default function ClientVehicleScreen({ route, navigation }) {  
   const { clientId } = route.params  

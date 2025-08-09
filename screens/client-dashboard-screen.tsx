@@ -50,12 +50,6 @@ interface VehicleType {
   imagenes?: string[]  
 }  
   
-interface ClientType {  
-  id: string  
-  nombre: string  
-  email?: string  
-  telefono?: string  
-}  
   
 interface AppointmentType {  
   id: string  
@@ -79,8 +73,8 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
     
   const [isLoading, setIsLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
-  const [clientData, setClientData] = useState<ClientType | null>(null)  
-  const [vehicles, setVehicles] = useState<VehicleType[]>([])  
+  const [clientData, setClientData] = useState<clientService.Client | null>(null)  
+  const [vehicles, setVehicles] = useState<vehicleService.Vehicle[]>([])  
   const [orders, setOrders] = useState<OrderType[]>([])  
   const [appointments, setAppointments] = useState<AppointmentType[]>([])  
   const [stats, setStats] = useState<StatsType>({  
@@ -101,15 +95,17 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
       if (!user?.id) return  
   
       // Obtener datos del cliente  
-      const client = await clientService.getClientById(user.id)  
-      setClientData(client)  
+      const client = await clientService.clientService.getClientById(user.id) 
+      if (client) {
+        setClientData(client)  
+      } 
   
       // Obtener vehículos del cliente  
-      const clientVehicles = await vehicleService.getVehiclesByClientId(user.id)  
+      const clientVehicles = await vehicleService.vehicleService.getVehiclesByClientId(user.id)  
       setVehicles(clientVehicles)  
   
       // Obtener órdenes del cliente  
-      const clientOrders = await orderService.getOrdersByClientId(user.id)  
+      const clientOrders = await orderService.orderService.getOrdersByClientId(user.id)  
       setOrders(clientOrders)  
   
       // Obtener citas del cliente  
@@ -125,10 +121,10 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
       )  
   
       // Identificar vehículos con servicios próximos  
-      const vehiclesWithUpcomingService = clientVehicles.filter((vehicle: VehicleType) => {  
-        if (!vehicle.proximo_servicio) return false  
+      const vehiclesWithUpcomingService = clientVehicles.filter((vehicle: vehicleService.Vehicle) => {  
+        if (!vehicle.nextServiceDate) return false  
   
-        const nextService = new Date(vehicle.proximo_servicio)  
+        const nextService = new Date(vehicle.nextServiceDate)  
         const today = new Date()  
         const diffDays = Math.ceil((nextService.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))  
   
