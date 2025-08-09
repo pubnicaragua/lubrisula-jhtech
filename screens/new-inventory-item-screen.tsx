@@ -1,637 +1,623 @@
-"use client"
-
-import { useState } from "react"
-import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  Modal,
-  FlatList,
-} from "react-native"
-import { Feather } from "@expo/vector-icons"
-
-// Componente para campo de formulario
-const FormField = ({ label, icon, placeholder, value, onChangeText, keyboardType = "default" }) => (
-  <View style={styles.fieldContainer}>
-    <Text style={styles.fieldLabel}>{label}</Text>
-    <View style={styles.inputContainer}>
-      <Feather name={icon} size={20} color="#666" style={styles.inputIcon} />
-      <TextInput
-        style={styles.input}
-        placeholder={placeholder}
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType}
-      />
-    </View>
-  </View>
-)
-
-// Componente para selector
-const FormSelector = ({ label, icon, value, placeholder, onPress }) => (
-  <View style={styles.fieldContainer}>
-    <Text style={styles.fieldLabel}>{label}</Text>
-    <TouchableOpacity style={styles.selectorContainer} onPress={onPress}>
-      <Feather name={icon} size={20} color="#666" style={styles.inputIcon} />
-      <Text style={[styles.selectorText, !value && styles.placeholderText]}>{value || placeholder}</Text>
-      <Feather name="chevron-down" size={20} color="#666" />
-    </TouchableOpacity>
-  </View>
-)
-
-export default function NewInventoryItemScreen({ navigation }) {
-  // Estados para el formulario
-  const [name, setName] = useState("")
-  const [code, setCode] = useState("")
-  const [category, setCategory] = useState("")
-  const [brand, setBrand] = useState("")
-  const [type, setType] = useState("")
-  const [price, setPrice] = useState("")
-  const [stock, setStock] = useState("")
-  const [minStock, setMinStock] = useState("")
-  const [location, setLocation] = useState("")
-  const [supplier, setSupplier] = useState("")
-  const [description, setDescription] = useState("")
-
-  // Estados para modales
-  const [showCategoryModal, setShowCategoryModal] = useState(false)
-  const [showBrandModal, setShowBrandModal] = useState(false)
-  const [showTypeModal, setShowTypeModal] = useState(false)
-  const [showSupplierModal, setShowSupplierModal] = useState(false)
-
-  // Datos de ejemplo
-  const categories = [
-    { id: "1", name: "Filtros" },
-    { id: "2", name: "Aceites" },
-    { id: "3", name: "Frenos" },
-    { id: "4", name: "Suspensión" },
-    { id: "5", name: "Eléctricos" },
-  ]
-
-  const brands = [
-    { id: "1", name: "Toyota" },
-    { id: "2", name: "Honda" },
-    { id: "3", name: "Nissan" },
-    { id: "4", name: "Ford" },
-    { id: "5", name: "Genérico" },
-  ]
-
-  const types = [
-    { id: "1", name: "Original" },
-    { id: "2", name: "Genérico" },
-    { id: "3", name: "Remanufacturado" },
-  ]
-
-  const suppliers = [
-    { id: "1", name: "AutoPartes S.A." },
-    { id: "2", name: "Lubricantes Express" },
-    { id: "3", name: "Frenos Seguros" },
-    { id: "4", name: "ElectroAuto" },
-    { id: "5", name: "Suspensiones Pro" },
-  ]
-
-  // Función para validar el formulario
-  const validateForm = () => {
-    if (!name.trim()) {
-      Alert.alert("Error", "Por favor ingresa el nombre del repuesto")
-      return false
-    }
-    if (!code.trim()) {
-      Alert.alert("Error", "Por favor ingresa el código del repuesto")
-      return false
-    }
-    if (!price.trim() || isNaN(Number.parseFloat(price))) {
-      Alert.alert("Error", "Por favor ingresa un precio válido")
-      return false
-    }
-    if (!stock.trim() || isNaN(Number.parseInt(stock))) {
-      Alert.alert("Error", "Por favor ingresa una cantidad de stock válida")
-      return false
-    }
-    return true
-  }
-
-  // Función para guardar el repuesto
-  const saveItem = () => {
-    if (validateForm()) {
-      const saveItemAsync = async () => {
-        try {
-          // Importar servicio de inventario
-          const inventoryService = await import("../services/inventory-service");
-          
-          // Crear nuevo artículo
-          const newItem = await inventoryService.createInventoryItem({
-            name,
-            sku: code,
-            category,
-            brand,
-            type,
-            priceUSD: parseFloat(price),
-            priceHNL: parseFloat(price) * 24.5, // Convertir a lempiras
-            stock: parseInt(stock),
-            minStock: minStock ? parseInt(minStock) : undefined,
-            supplier,
-            location,
-            description,
-            isActive: true,
-          });
-          
-          if (newItem) {
-            Alert.alert("Éxito", "Repuesto guardado correctamente", [
-              {
-                text: "OK",
-                onPress: () => navigation.goBack(),
-              },
-            ]);
-          } else {
-            Alert.alert("Error", "No se pudo guardar el repuesto");
-          }
-        } catch (error) {
-          console.error("Error al guardar repuesto:", error);
-          Alert.alert("Error", "No se pudo guardar el repuesto");
-        }
-      };
-      
-      saveItemAsync();
-    }
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardAvoidingContainer}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Nuevo Repuesto</Text>
-          <View style={styles.placeholder} />
-        </View>
-
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.formSection}>
-            <Text style={styles.sectionTitle}>Información Básica</Text>
-
-            <FormField
-              label="Nombre"
-              icon="package"
-              placeholder="Nombre del repuesto"
-              value={name}
-              onChangeText={setName}
-            />
-
-            <FormField label="Código" icon="hash" placeholder="Código único" value={code} onChangeText={setCode} />
-
-            <FormSelector
-              label="Categoría"
-              icon="folder"
-              value={category}
-              placeholder="Seleccionar categoría"
-              onPress={() => setShowCategoryModal(true)}
-            />
-
-            <FormSelector
-              label="Marca"
-              icon="tag"
-              value={brand}
-              placeholder="Seleccionar marca"
-              onPress={() => setShowBrandModal(true)}
-            />
-
-            <FormSelector
-              label="Tipo"
-              icon="layers"
-              value={type}
-              placeholder="Seleccionar tipo"
-              onPress={() => setShowTypeModal(true)}
-            />
-          </View>
-
-          <View style={styles.formSection}>
-            <Text style={styles.sectionTitle}>Inventario</Text>
-
-            <FormField
-              label="Precio (L.)"
-              icon="dollar-sign"
-              placeholder="0.00"
-              value={price}
-              onChangeText={setPrice}
-              keyboardType="decimal-pad"
-            />
-
-            <FormField
-              label="Stock Inicial"
-              icon="box"
-              placeholder="0"
-              value={stock}
-              onChangeText={setStock}
-              keyboardType="number-pad"
-            />
-
-            <FormField
-              label="Stock Mínimo"
-              icon="alert-circle"
-              placeholder="0"
-              value={minStock}
-              onChangeText={setMinStock}
-              keyboardType="number-pad"
-            />
-
-            <FormField
-              label="Ubicación"
-              icon="map-pin"
-              placeholder="Ej. A-12"
-              value={location}
-              onChangeText={setLocation}
-            />
-
-            <FormSelector
-              label="Proveedor"
-              icon="truck"
-              value={supplier}
-              placeholder="Seleccionar proveedor"
-              onPress={() => setShowSupplierModal(true)}
-            />
-          </View>
-
-          <View style={styles.formSection}>
-            <Text style={styles.sectionTitle}>Descripción</Text>
-
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Descripción</Text>
-              <View style={styles.textAreaContainer}>
-                <TextInput
-                  style={styles.textArea}
-                  placeholder="Descripción detallada del repuesto"
-                  value={description}
-                  onChangeText={setDescription}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.cancelButtonText}>Cancelar</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.saveButton} onPress={saveItem}>
-            <Text style={styles.saveButtonText}>Guardar</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-
-      {/* Modal para seleccionar categoría */}
-      <Modal
-        visible={showCategoryModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowCategoryModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Categoría</Text>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowCategoryModal(false)}>
-                <Feather name="x" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <FlatList
-              data={categories}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => {
-                    setCategory(item.name)
-                    setShowCategoryModal(false)
-                  }}
-                >
-                  <Text style={styles.modalItemText}>{item.name}</Text>
-                  {category === item.name && <Feather name="check" size={20} color="#1a73e8" />}
-                </TouchableOpacity>
-              )}
-              contentContainerStyle={styles.modalList}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal para seleccionar marca */}
-      <Modal
-        visible={showBrandModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowBrandModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Marca</Text>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowBrandModal(false)}>
-                <Feather name="x" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <FlatList
-              data={brands}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => {
-                    setBrand(item.name)
-                    setShowBrandModal(false)
-                  }}
-                >
-                  <Text style={styles.modalItemText}>{item.name}</Text>
-                  {brand === item.name && <Feather name="check" size={20} color="#1a73e8" />}
-                </TouchableOpacity>
-              )}
-              contentContainerStyle={styles.modalList}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal para seleccionar tipo */}
-      <Modal
-        visible={showTypeModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowTypeModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Tipo</Text>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowTypeModal(false)}>
-                <Feather name="x" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <FlatList
-              data={types}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => {
-                    setType(item.name)
-                    setShowTypeModal(false)
-                  }}
-                >
-                  <Text style={styles.modalItemText}>{item.name}</Text>
-                  {type === item.name && <Feather name="check" size={20} color="#1a73e8" />}
-                </TouchableOpacity>
-              )}
-              contentContainerStyle={styles.modalList}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal para seleccionar proveedor */}
-      <Modal
-        visible={showSupplierModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowSupplierModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Proveedor</Text>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowSupplierModal(false)}>
-                <Feather name="x" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <FlatList
-              data={suppliers}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => {
-                    setSupplier(item.name)
-                    setShowSupplierModal(false)
-                  }}
-                >
-                  <Text style={styles.modalItemText}>{item.name}</Text>
-                  {supplier === item.name && <Feather name="check" size={20} color="#1a73e8" />}
-                </TouchableOpacity>
-              )}
-              contentContainerStyle={styles.modalList}
-            />
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  )
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  keyboardAvoidingContainer: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  placeholder: {
-    width: 40,
-  },
-  content: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  formSection: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 16,
-  },
-  fieldContainer: {
-    marginBottom: 16,
-  },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
-    marginBottom: 8,
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "#f9f9f9",
-  },
-  inputIcon: {
-    padding: 12,
-  },
-  input: {
-    flex: 1,
-    height: 48,
-    fontSize: 16,
-  },
-  selectorContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "#f9f9f9",
-    height: 48,
-  },
-  selectorText: {
-    flex: 1,
-    fontSize: 16,
-    color: "#333",
-  },
-  placeholderText: {
-    color: "#999",
-  },
-  textAreaContainer: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "#f9f9f9",
-  },
-  textArea: {
-    height: 100,
-    fontSize: 16,
-    padding: 12,
-  },
-  footer: {
-    flexDirection: "row",
-    padding: 16,
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#eee",
-    justifyContent: "space-between",
-  },
-  cancelButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#1a73e8",
-    borderRadius: 8,
-    paddingVertical: 12,
-    marginRight: 8,
-    alignItems: "center",
-  },
-  cancelButtonText: {
-    color: "#1a73e8",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  saveButton: {
-    flex: 1,
-    backgroundColor: "#1a73e8",
-    borderRadius: 8,
-    paddingVertical: 12,
-    marginLeft: 8,
-    alignItems: "center",
-  },
-  saveButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    width: "90%",
-    maxHeight: "80%",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  modalList: {
-    padding: 16,
-  },
-  modalItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  modalItemText: {
-    fontSize: 16,
-    color: "#333",
-  },
+"use client"  
+  
+import { useState, useCallback, useEffect } from "react"  
+import {  
+  View,  
+  Text,  
+  TextInput,  
+  TouchableOpacity,  
+  StyleSheet,  
+  ScrollView,  
+  Alert,  
+  ActivityIndicator,  
+  Modal,  
+  FlatList,  
+} from "react-native"  
+import { Feather } from "@expo/vector-icons"  
+import { useAuth } from "../context/auth-context"  
+import INVENTARIO_SERVICES, { InventarioType, CategoriaMaterialType, ProveedorType } from "../services/INVETARIO.SERVICE"  
+import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
+import USER_SERVICE from "../services/USER_SERVICES.SERVICE"  
+  
+export default function NewInventoryItemScreen({ navigation }) {  
+  const { user } = useAuth()  
+  const [loading, setLoading] = useState(false)  
+  const [categories, setCategories] = useState<CategoriaMaterialType[]>([])  
+  const [suppliers, setSuppliers] = useState<ProveedorType[]>([])  
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false)  
+  const [supplierModalVisible, setSupplierModalVisible] = useState(false)  
+    
+  const [formData, setFormData] = useState<Partial<InventarioType>>({  
+    codigo: "",  
+    nombre: "",  
+    descripcion: "",  
+    categoria_id: "",  
+    estado: "Activo",  
+    precio_compra: 0,  
+    precio_venta: 0,  
+    stock_actual: 0,  
+    stock_minimo: 0,  
+    proveedor_id: "",  
+    ubicacion_almacen: "",  
+    fecha_ingreso: new Date().toISOString().split('T')[0],  
+  })  
+  
+  const [errors, setErrors] = useState<Record<string, string>>({})  
+  
+  useEffect(() => {  
+    loadInitialData()  
+  }, [])  
+  
+  const loadInitialData = async () => {  
+    try {  
+      if (!user?.id) return  
+  
+      // Validar permisos del usuario  
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+  
+      if (userPermissions?.rol === 'client') {  
+        Alert.alert("Error", "No tienes permisos para agregar artículos al inventario")  
+        navigation.goBack()  
+        return  
+      }  
+  
+      // Cargar categorías y proveedores  
+      const [categoriesData, suppliersData] = await Promise.all([  
+        INVENTARIO_SERVICES.GET_CATEGORIA_MATERIALES(),  
+        INVENTARIO_SERVICES.GET_PROVEEDORES()  
+      ])  
+  
+      setCategories(categoriesData)  
+      setSuppliers(suppliersData)  
+  
+    } catch (error) {  
+      console.error("Error loading initial data:", error)  
+      Alert.alert("Error", "No se pudieron cargar los datos necesarios")  
+    }  
+  }  
+  
+  const validateForm = () => {  
+    const newErrors: Record<string, string> = {}  
+  
+    if (!formData.codigo?.trim()) {  
+      newErrors.codigo = "El código es requerido"  
+    }  
+  
+    if (!formData.nombre?.trim()) {  
+      newErrors.nombre = "El nombre es requerido"  
+    }  
+  
+    if (!formData.categoria_id) {  
+      newErrors.categoria_id = "La categoría es requerida"  
+    }  
+  
+    if (!formData.precio_compra || formData.precio_compra <= 0) {  
+      newErrors.precio_compra = "El precio de compra debe ser mayor a 0"  
+    }  
+  
+    if (!formData.precio_venta || formData.precio_venta <= 0) {  
+      newErrors.precio_venta = "El precio de venta debe ser mayor a 0"  
+    }  
+  
+    if (formData.precio_venta && formData.precio_compra && formData.precio_venta <= formData.precio_compra) {  
+      newErrors.precio_venta = "El precio de venta debe ser mayor al precio de compra"  
+    }  
+  
+    if (formData.stock_actual === undefined || formData.stock_actual < 0) {  
+      newErrors.stock_actual = "El stock actual no puede ser negativo"  
+    }  
+  
+    if (!formData.stock_minimo || formData.stock_minimo < 0) {  
+      newErrors.stock_minimo = "El stock mínimo debe ser mayor o igual a 0"  
+    }  
+  
+    if (!formData.ubicacion_almacen?.trim()) {  
+      newErrors.ubicacion_almacen = "La ubicación en almacén es requerida"  
+    }  
+  
+    setErrors(newErrors)  
+    return Object.keys(newErrors).length === 0  
+  }  
+  
+  const handleSave = async () => {  
+    if (!validateForm()) return  
+  
+    try {  
+      setLoading(true)  
+        
+      // Crear nuevo artículo de inventario  
+      const newItem = await INVENTARIO_SERVICES.INSERT_INVENTARIO(formData as InventarioType)  
+        
+      Alert.alert(  
+        "Éxito",  
+        "Artículo agregado al inventario correctamente",  
+        [  
+          {  
+            text: "OK",  
+            onPress: () => navigation.goBack()  
+          }  
+        ]  
+      )  
+    } catch (error) {  
+      console.error("Error creating inventory item:", error)  
+      Alert.alert("Error", "No se pudo agregar el artículo al inventario")  
+    } finally {  
+      setLoading(false)  
+    }  
+  }  
+  
+  const updateFormData = (field: keyof InventarioType, value: any) => {  
+    setFormData(prev => ({ ...prev, [field]: value }))  
+    if (errors[field]) {  
+      setErrors(prev => ({ ...prev, [field]: "" }))  
+    }  
+  }  
+  
+  const getSelectedCategoryName = () => {  
+    const category = categories.find(cat => cat.id === formData.categoria_id)  
+    return category?.nombre || "Seleccionar categoría"  
+  }  
+  
+  const getSelectedSupplierName = () => {  
+    const supplier = suppliers.find(sup => sup.id === formData.proveedor_id)  
+    return supplier?.name || "Seleccionar proveedor (opcional)"  
+  }  
+  
+  const renderCategoryModal = () => (  
+    <Modal  
+      visible={categoryModalVisible}  
+      animationType="slide"  
+      presentationStyle="pageSheet"  
+    >  
+      <View style={styles.modalContainer}>  
+        <View style={styles.modalHeader}>  
+          <Text style={styles.modalTitle}>Seleccionar Categoría</Text>  
+          <TouchableOpacity  
+            onPress={() => setCategoryModalVisible(false)}  
+            style={styles.closeButton}  
+          >  
+            <Feather name="x" size={24} color="#666" />  
+          </TouchableOpacity>  
+        </View>  
+  
+        <FlatList  
+          data={categories}  
+          keyExtractor={(item) => item.id}  
+          renderItem={({ item }) => (  
+            <TouchableOpacity  
+              style={[  
+                styles.modalOption,  
+                formData.categoria_id === item.id && styles.modalOptionSelected  
+              ]}  
+              onPress={() => {  
+                updateFormData('categoria_id', item.id)  
+                setCategoryModalVisible(false)  
+              }}  
+            >  
+              <Text style={[  
+                styles.modalOptionText,  
+                formData.categoria_id === item.id && styles.modalOptionTextSelected  
+              ]}>  
+                {item.nombre}  
+              </Text>  
+              {item.descripcion && (  
+                <Text style={styles.modalOptionDescription}>{item.descripcion}</Text>  
+              )}  
+              {formData.categoria_id === item.id && (  
+                <Feather name="check" size={20} color="#1a73e8" />  
+              )}  
+            </TouchableOpacity>  
+          )}  
+          style={styles.modalContent}  
+        />  
+      </View>  
+    </Modal>  
+  )  
+  
+  const renderSupplierModal = () => (  
+    <Modal  
+      visible={supplierModalVisible}  
+      animationType="slide"  
+      presentationStyle="pageSheet"  
+    >  
+      <View style={styles.modalContainer}>  
+        <View style={styles.modalHeader}>  
+          <Text style={styles.modalTitle}>Seleccionar Proveedor</Text>  
+          <TouchableOpacity  
+            onPress={() => setSupplierModalVisible(false)}  
+            style={styles.closeButton}  
+          >  
+            <Feather name="x" size={24} color="#666" />  
+          </TouchableOpacity>  
+        </View>  
+  
+        <FlatList  
+          data={suppliers}  
+          keyExtractor={(item) => item.id}  
+          renderItem={({ item }) => (  
+            <TouchableOpacity  
+              style={[  
+                styles.modalOption,  
+                formData.proveedor_id === item.id && styles.modalOptionSelected  
+              ]}  
+              onPress={() => {  
+                updateFormData('proveedor_id', item.id)  
+                setSupplierModalVisible(false)  
+              }}  
+            >  
+              <Text style={[  
+                styles.modalOptionText,  
+                formData.proveedor_id === item.id && styles.modalOptionTextSelected  
+              ]}>  
+                {item.name}  
+              </Text>  
+              <Text style={styles.modalOptionDescription}>  
+                {item.contact_name} • {item.phone}  
+              </Text>  
+              {formData.proveedor_id === item.id && (  
+                <Feather name="check" size={20} color="#1a73e8" />  
+              )}  
+            </TouchableOpacity>  
+          )}  
+          style={styles.modalContent}  
+        />  
+      </View>  
+    </Modal>  
+  )  
+  
+  return (  
+    <ScrollView style={styles.container}>  
+      <View style={styles.header}>  
+        <Text style={styles.title}>Nuevo Artículo</Text>  
+        <Text style={styles.subtitle}>Agregar artículo al inventario</Text>  
+      </View>  
+  
+      <View style={styles.form}>  
+        <View style={styles.section}>  
+          <Text style={styles.sectionTitle}>Información Básica</Text>  
+            
+          <View style={styles.inputGroup}>  
+            <Text style={styles.label}>Código *</Text>  
+            <TextInput  
+              style={[styles.input, errors.codigo && styles.inputError]}  
+              value={formData.codigo}  
+              onChangeText={(value) => updateFormData('codigo', value)}  
+              placeholder="Código único del artículo"  
+              autoCapitalize="characters"  
+            />  
+            {errors.codigo && <Text style={styles.errorText}>{errors.codigo}</Text>}  
+          </View>  
+  
+          <View style={styles.inputGroup}>  
+            <Text style={styles.label}>Nombre *</Text>  
+            <TextInput  
+              style={[styles.input, errors.nombre && styles.inputError]}  
+              value={formData.nombre}  
+              onChangeText={(value) => updateFormData('nombre', value)}  
+              placeholder="Nombre del artículo"  
+              autoCapitalize="words"  
+            />  
+            {errors.nombre && <Text style={styles.errorText}>{errors.nombre}</Text>}  
+          </View>  
+  
+          <View style={styles.inputGroup}>  
+            <Text style={styles.label}>Categoría *</Text>  
+            <TouchableOpacity  
+              style={[styles.selector, errors.categoria_id && styles.inputError]}  
+              onPress={() => setCategoryModalVisible(true)}  
+            >  
+              <Text style={[  
+                styles.selectorText,  
+                !formData.categoria_id && styles.placeholderText  
+              ]}>  
+                {getSelectedCategoryName()}  
+              </Text>  
+              <Feather name="chevron-down" size={20} color="#666" />  
+            </TouchableOpacity>  
+            {errors.categoria_id && <Text style={styles.errorText}>{errors.categoria_id}</Text>}  
+          </View>  
+  
+          <View style={styles.inputGroup}>  
+            <Text style={styles.label}>Descripción</Text>  
+            <TextInput  
+              style={[styles.input, styles.textArea]}  
+              value={formData.descripcion}  
+              onChangeText={(value) => updateFormData('descripcion', value)}  
+              placeholder="Descripción del artículo"  
+              multiline  
+              numberOfLines={3}  
+              textAlignVertical="top"  
+            />  
+          </View>  
+        </View>  
+  
+        <View style={styles.section}>  
+          <Text style={styles.sectionTitle}>Precios e Inventario</Text>  
+            
+          <View style={styles.inputGroup}>  
+            <Text style={styles.label}>Precio de Compra *</Text>  
+            <TextInput  
+              style={[styles.input, errors.precio_compra && styles.inputError]}  
+              value={formData.precio_compra?.toString()}  
+              onChangeText={(value) => updateFormData('precio_compra', parseFloat(value) || 0)}  
+              placeholder="0.00"  
+              keyboardType="decimal-pad"  
+            />  
+            {errors.precio_compra && <Text style={styles.errorText}>{errors.precio_compra}</Text>}  
+          </View>  
+  
+          <View style={styles.inputGroup}>  
+            <Text style={styles.label}>Precio de Venta *</Text>  
+            <TextInput  
+              style={[styles.input, errors.precio_venta && styles.inputError]}  
+              value={formData.precio_venta?.toString()}  
+              onChangeText={(value) => updateFormData('precio_venta', parseFloat(value) || 0)}  
+              placeholder="0.00"  
+              keyboardType="decimal-pad"  
+            />  
+            {errors.precio_venta && <Text style={styles.errorText}>{errors.precio_venta}</Text>}  
+          </View>  
+  
+          <View style={styles.inputGroup}>  
+            <Text style={styles.label}>Stock Inicial *</Text>  
+            <TextInput  
+              style={[styles.input, errors.stock_actual && styles.inputError]}  
+              value={formData.stock_actual?.toString()}  
+              onChangeText={(value) => updateFormData('stock_actual', parseInt(value) || 0)}  
+              placeholder="0"  
+              keyboardType="number-pad"  
+            />  
+            {errors.stock_actual && <Text style={styles.errorText}>{errors.stock_actual}</Text>}  
+          </View>  
+  
+          <View style={styles.inputGroup}>  
+            <Text style={styles.label}>Stock Mínimo *</Text>  
+            <TextInput  
+              style={[styles.input, errors.stock_minimo && styles.inputError]}  
+              value={formData.stock_minimo?.toString()}  
+              onChangeText={(value) => updateFormData('stock_minimo', parseInt(value) || 0)}  
+              placeholder="0"  
+              keyboardType="number-pad"  
+            />  
+            {errors.stock_minimo && <Text style={styles.errorText}>{errors.stock_minimo}</Text>}  
+          </View>  
+  
+          <View style={styles.inputGroup}>  
+            <Text style={styles.label}>Ubicación en Almacén *</Text>  
+            <TextInput  
+              style={[styles.input, errors.ubicacion_almacen && styles.inputError]}  
+              value={formData.ubicacion_almacen}  
+              onChangeText={(value) => updateFormData('ubicacion_almacen', value)}  
+              placeholder="Ej: A-12, Estante 3"  
+              autoCapitalize="characters"  
+            />  
+            {errors.ubicacion_almacen && <Text style={styles.errorText}>{errors.ubicacion_almacen}</Text>}  
+          </View>  
+  
+          <View style={styles.inputGroup}>  
+            <Text style={styles.label}>Proveedor (Opcional)</Text>  
+            <TouchableOpacity  
+              style={styles.selector}  
+              onPress={() => setSupplierModalVisible(true)}  
+            >  
+              <Text style={[  
+                styles.selectorText,  
+                !formData.proveedor_id && styles.placeholderText  
+              ]}>  
+                {getSelectedSupplierName()}  
+              </Text>  
+              <Feather name="chevron-down" size={20} color="#666" />  
+            </TouchableOpacity>  
+          </View>  
+        </View>  
+      </View>  
+  
+      <View style={styles.footer}>  
+        <TouchableOpacity  
+          style={[styles.button, styles.cancelButton]}  
+          onPress={() => navigation.goBack()}  
+          disabled={loading}  
+        >  
+          <Text style={styles.cancelButtonText}>Cancelar</Text>  
+        </TouchableOpacity>  
+  
+        <TouchableOpacity  
+          style={[styles.button, styles.saveButton]}  
+          onPress={handleSave}  
+          disabled={loading}  
+        >  
+          {loading ? (  
+            <ActivityIndicator size="small" color="#fff" />  
+          ) : (  
+            <>  
+              <Feather name="save" size={20} color="#fff" />  
+              <Text style={styles.saveButtonText}>Guardar Artículo</Text>  
+            </>  
+          )}  
+        </TouchableOpacity>  
+      </View>  
+  
+      {renderCategoryModal()}  
+      {renderSupplierModal()}  
+    </ScrollView>  
+  )  
+}  
+  
+const styles = StyleSheet.create({  
+  container: {  
+    flex: 1,  
+    backgroundColor: "#f8f9fa",  
+  },  
+  header: {  
+    backgroundColor: "#fff",  
+    padding: 20,  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  title: {  
+    fontSize: 24,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 4,  
+  },  
+  subtitle: {  
+    fontSize: 16,  
+    color: "#666",  
+  },  
+  form: {  
+    padding: 16,  
+  },  
+  section: {  
+    backgroundColor: "#fff",  
+    borderRadius: 8,  
+    padding: 16,  
+    marginBottom: 16,  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 1 },  
+    shadowOpacity: 0.1,  
+    shadowRadius: 2,  
+    elevation: 2,  
+  },  
+  sectionTitle: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 16,  
+  },  
+  inputGroup: {  
+    marginBottom: 16,  
+  },  
+  label: {  
+    fontSize: 16,  
+    fontWeight: "500",  
+    color: "#333",  
+    marginBottom: 8,  
+  },  
+  input: {  
+    backgroundColor: "#f8f9fa",  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+    borderRadius: 8,  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    fontSize: 16,  
+    color: "#333",  
+  },  
+  inputError: {  
+    borderColor: "#e53935",  
+  },  
+  textArea: {  
+    height: 80,  
+    textAlignVertical: "top",  
+  },  
+  selector: {  
+    backgroundColor: "#f8f9fa",  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+    borderRadius: 8,  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+  },  
+  selectorText: {  
+    fontSize: 16,  
+    color: "#333",  
+  },  
+  placeholderText: {  
+    color: "#999",  
+  },  
+  errorText: {  
+    fontSize: 14,  
+    color: "#e53935",  
+    marginTop: 4,  
+  },  
+  footer: {  
+    flexDirection: "row",  
+    padding: 16,  
+    gap: 12,  
+    backgroundColor: "#fff",  
+    borderTopWidth: 1,  
+    borderTopColor: "#e1e4e8",  
+  },  
+  button: {  
+    flex: 1,  
+    flexDirection: "row",  
+    justifyContent: "center",  
+    alignItems: "center",  
+    paddingVertical: 12,  
+    borderRadius: 8,  
+    gap: 8,  
+  },  
+  cancelButton: {  
+    backgroundColor: "transparent",  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  cancelButtonText: {  
+    fontSize: 16,  
+    fontWeight: "500",  
+    color: "#666",  
+  },  
+  saveButton: {  
+    backgroundColor: "#1a73e8",  
+  },  
+  saveButtonText: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#fff",  
+  },  
+  modalContainer: {  
+    flex: 1,  
+    backgroundColor: "#fff",  
+  },  
+  modalHeader: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+    padding: 16,  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  modalTitle: {  
+    fontSize: 20,  
+    fontWeight: "bold",  
+    color: "#333",  
+  },  
+  closeButton: {  
+    padding: 8,  
+  },  
+  modalContent: {  
+    flex: 1,  
+    padding: 16,  
+  },  
+  modalOption: {  
+    paddingVertical: 16,  
+    paddingHorizontal: 16,  
+    borderRadius: 8,  
+    marginBottom: 8,  
+    backgroundColor: "#f8f9fa",  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+  },  
+  modalOptionSelected: {  
+    backgroundColor: "#e8f0fe",  
+  },  
+  modalOptionText: {  
+    fontSize: 16,  
+    color: "#333",  
+    flex: 1,  
+  },  
+  modalOptionTextSelected: {  
+    color: "#1a73e8",  
+    fontWeight: "500",  
+  },  
+  modalOptionDescription: {  
+    fontSize: 14,  
+    color: "#666",  
+    marginTop: 4,  
+  },  
 })
-

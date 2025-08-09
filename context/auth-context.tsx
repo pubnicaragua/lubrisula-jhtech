@@ -4,6 +4,7 @@ import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { Alert } from "react-native"
+import { supabase } from "../lib/supabase"
 
 // Definir tipos
 type UserRole = "client" | "technician" | "manager" | "admin"
@@ -14,7 +15,8 @@ type User = {
   name: string
   role: UserRole
   permissions: string[]
-  profilePic?: any
+  profilePic?: string
+  phone?: string
 }
 
 type AuthContextType = {
@@ -29,77 +31,117 @@ type AuthContextType = {
 // Crear contexto
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// Usuarios de prueba
-const MOCK_USERS = [
-  {
-    id: "1",
-    email: "cliente1@gmail.com",
-    password: "123456",
-    name: "Carlos Rodríguez",
-    role: "client",
-    permissions: ["view_own_orders", "view_own_vehicles", "create_comments"],
-    profilePic: require("../assets/profile-pic.png"),
-  },
-  {
-    id: "2",
-    email: "tecnico1@gmail.com",
-    password: "123456",
-    name: "Juan Pérez",
-    role: "technician",
-    permissions: ["view_orders", "update_order_details", "view_inventory", "upload_images", "create_comments"],
-    profilePic: require("../assets/profile-pic.png"),
-  },
-  {
-    id: "3",
-    email: "jefe@gmail.com",
-    password: "123456",
-    name: "Ana Martínez",
-    role: "manager",
-    permissions: [
-      "view_orders",
-      "update_order_details",
-      "update_order_status",
-      "view_inventory",
-      "update_inventory",
-      "create_orders",
-      "view_reports",
-      "manage_users",
-      "create_comments",
-    ],
-    profilePic: require("../assets/profile-pic.png"),
-  },
-  {
-    id: "4",
-    email: "admin@autoflowx.com",
-    password: "123456",
-    name: "Admin Sistema",
-    role: "admin",
-    permissions: ["*"], // Todos los permisos
-    profilePic: require("../assets/profile-pic.png"),
-  },
-]
+// Mapeo de roles a permisos
+const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
+  admin: ["*"], // Admin tiene todos los permisos
+  manager: [
+    "view_orders",
+    "create_orders",
+    "update_orders",
+    "delete_orders",
+    "view_inventory",
+    "manage_inventory",
+    "view_clients",
+    "manage_clients",
+    "view_reports"
+  ],
+  technician: [
+    "view_orders",
+    "update_orders",
+    "view_inventory",
+    "view_clients"
+  ],
+  client: [
+    "view_own_orders",
+    "create_orders"
+  ]
+}
 
 // Proveedor de autenticación
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Verificar si hay un usuario guardado al iniciar
+  // Cargar sesión al iniciar
   useEffect(() => {
-    const loadUser = async () => {
+    // Verificar sesión activa
+    const checkSession = async () => {
       try {
-        const storedUser = await AsyncStorage.getItem("user")
-        if (storedUser) {
-          setUser(JSON.parse(storedUser))
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (session?.user) {
+          // Obtener perfil del usuario
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+          
+          if (error) throw error
+          
+          // Crear objeto de usuario con permisos
+          const userData: User = {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: profile.full_name || 'Usuario',
+            role: (profile.role as UserRole) || 'client',
+            permissions: ROLE_PERMISSIONS[profile.role as UserRole] || [],
+            phone: profile.phone,
+            profilePic: profile.avatar_url
+          }
+          
+          setUser(userData)
+          await AsyncStorage.setItem("user", JSON.stringify(userData))
         }
       } catch (error) {
-        console.error("Error al cargar usuario:", error)
+        console.error("Error al verificar sesión:", error)
+        await supabase.auth.signOut()
+        await AsyncStorage.removeItem("user")
+        setUser(null)
       } finally {
         setIsLoading(false)
       }
     }
 
-    loadUser()
+    checkSession()
+
+    // Escuchar cambios en la autenticación
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        // Obtener perfil del usuario
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+        
+        if (error) {
+          console.error("Error al cargar perfil:", error)
+          return
+        }
+        
+        // Crear objeto de usuario con permisos
+        const userData: User = {
+          id: session.user.id,
+          email: session.user.email || '',
+          name: profile.full_name || 'Usuario',
+          role: (profile.role as UserRole) || 'client',
+          permissions: ROLE_PERMISSIONS[profile.role as UserRole] || [],
+          phone: profile.phone,
+          profilePic: profile.avatar_url
+        }
+        
+        setUser(userData)
+        await AsyncStorage.setItem("user", JSON.stringify(userData))
+      } else if (event === 'SIGNED_OUT') {
+        await AsyncStorage.removeItem("user")
+        setUser(null)
+      }
+    })
+
+    return () => {
+      subscription?.unsubscribe()
+    }
   }, [])
 
   // Función para verificar permisos
@@ -116,24 +158,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Función de inicio de sesión
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      // Simular verificación con usuarios de prueba
-      const foundUser = MOCK_USERS.find((u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password)
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-      if (foundUser) {
-        // Omitir la contraseña del objeto de usuario
-        const { password, ...userWithoutPassword } = foundUser
-
-        // Guardar usuario en estado y AsyncStorage
-        setUser(userWithoutPassword as User)
-        await AsyncStorage.setItem("user", JSON.stringify(userWithoutPassword))
-        return true
-      } else {
-        Alert.alert("Error", "Credenciales incorrectas")
-        return false
+      if (error) {
+        throw error
       }
-    } catch (error) {
+
+      if (data?.user) {
+        // El resto de la lógica se manejará en el listener de onAuthStateChange
+        return true
+      }
+
+      return false
+    } catch (error: any) {
       console.error("Error al iniciar sesión:", error)
-      Alert.alert("Error", "No se pudo iniciar sesión")
+      Alert.alert("Error", error.message || "No se pudo iniciar sesión")
       return false
     }
   }
@@ -141,34 +183,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Función de cierre de sesión
   const logout = async (): Promise<void> => {
     try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+      
       await AsyncStorage.removeItem("user")
       setUser(null)
     } catch (error) {
       console.error("Error al cerrar sesión:", error)
+      throw error
     }
   }
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        login,
-        logout,
-        isAuthenticated: !!user,
-        hasPermission,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  )
+  // Valor del contexto
+  const value = {
+    user,
+    isLoading,
+    login,
+    logout,
+    isAuthenticated: !!user,
+    hasPermission,
+  }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 // Hook personalizado para usar el contexto
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext)
   if (context === undefined) {
-    throw new Error("useAuth debe ser usado dentro de un AuthProvider")
+    throw new Error("useAuth debe usarse dentro de un AuthProvider")
   }
   return context
 }

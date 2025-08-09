@@ -1,618 +1,579 @@
-"use client"
-
-import { useState, useCallback, useRef } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  Alert,
-  Animated,
-  Dimensions,
-} from "react-native"
-import { useFocusEffect } from "@react-navigation/native"
-import { Feather, MaterialIcons } from "@expo/vector-icons"
-import DraggableFlatList from "react-native-draggable-flatlist"
-import { useAuth } from "../context/auth-context"
-import notificationService from "../services/notification-service"
-import { formatDate, formatCurrency } from "../utils/helpers"
-import { theme } from "../styles/theme"
-
-// Definir estados de órdenes
-const ORDER_STATUSES = [
-  { id: "reception", label: "Recepción", color: "#1a73e8", icon: "clipboard" },
-  { id: "diagnosis", label: "Diagnóstico", color: "#f5a623", icon: "search" },
-  { id: "waiting_parts", label: "Esperando Repuestos", color: "#9c27b0", icon: "package" },
-  { id: "in_progress", label: "En Proceso", color: "#f5a623", icon: "tool" },
-  { id: "quality_check", label: "Control de Calidad", color: "#4caf50", icon: "check-circle" },
-  { id: "completed", label: "Completada", color: "#4caf50", icon: "check-square" },
-  { id: "delivered", label: "Entregada", color: "#607d8b", icon: "truck" },
-  { id: "cancelled", label: "Cancelada", color: "#e53935", icon: "x-circle" },
-]
-
-export default function OrderStatusScreen({ navigation }) {
-  const { user, hasPermission } = useAuth()
-  const [orders, setOrders] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [activeTab, setActiveTab] = useState(0)
-  const scrollX = useRef(new Animated.Value(0)).current
-  const windowWidth = Dimensions.get("window").width
-
-  // Verificar si el usuario puede cambiar el estado de las órdenes
-  const canChangeOrderStatus = hasPermission("update_order_status")
-
-  // Cargar órdenes cuando la pantalla obtiene el foco
-  useFocusEffect(
-    useCallback(() => {
-      loadOrders()
-    }, []),
-  )
-
-  const loadOrders = async () => {
-    try {
-      setLoading(true)
-      console.log("Cargando órdenes para el tablero Kanban")
-
-      // Importar servicios dinámicamente
-      const orderService = await import("../services/order-service")
-      const vehicleService = await import("../services/vehicle-service")
-      const clientService = await import("../services/client-service")
-
-      // Obtener todas las órdenes
-      const allOrders = await orderService.getAllOrders()
-      console.log(`Se encontraron ${allOrders.length} órdenes en total`)
-
-      // Agrupar órdenes por estado
-      const groupedOrders = {}
-      ORDER_STATUSES.forEach((status) => {
-        groupedOrders[status.id] = []
-      })
-
-      // Enriquecer órdenes con información adicional
-      for (const order of allOrders) {
-        try {
-          const vehicle = await vehicleService.getVehicleById(order.vehicleId)
-          const client = await clientService.getClientById(order.clientId)
-
-          const enrichedOrder = {
-            ...order,
-            vehicleInfo: vehicle ? `${vehicle.make} ${vehicle.model} (${vehicle.year})` : "Vehículo no encontrado",
-            clientName: client ? client.name : "Cliente no encontrado",
-            formattedDates: {
-              created: formatDate(order.dates.created),
-              promised: order.dates.promised ? formatDate(order.dates.promised) : "No definida",
-            },
-            formattedTotal: formatCurrency(order.total, order.currency),
-          }
-
-          if (groupedOrders[order.status]) {
-            groupedOrders[order.status].push(enrichedOrder)
-          }
-        } catch (error) {
-          console.error(`Error al procesar la orden ${order.id}:`, error)
-        }
-      }
-
-      // Ordenar órdenes por fecha (más reciente primero)
-      Object.keys(groupedOrders).forEach((status) => {
-        groupedOrders[status].sort((a, b) => new Date(b.dates.created).getTime() - new Date(a.dates.created).getTime())
-      })
-
-      setOrders(groupedOrders)
-    } catch (error) {
-      console.error("Error al cargar órdenes:", error)
-      Alert.alert("Error", "No se pudieron cargar las órdenes. Por favor, intente de nuevo.")
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }
-
-  const onRefresh = () => {
-    setRefreshing(true)
-    loadOrders()
-  }
-
-  const handleOrderPress = (order) => {
-    navigation.navigate("OrderDetail", { orderId: order.id })
-  }
-
-  const handleStatusChange = async (order, newStatus) => {
-    if (!canChangeOrderStatus) {
-      Alert.alert(
-        "Permiso Denegado",
-        "No tienes permisos para cambiar el estado de las órdenes. Solo el jefe de taller puede realizar esta acción.",
-      )
-      return
-    }
-
-    try {
-      // Importar servicio de órdenes dinámicamente
-      const orderService = await import("../services/order-service")
-
-      // Confirmar cambio de estado
-      Alert.alert(
-        "Cambiar Estado",
-        `¿Estás seguro de cambiar el estado de la orden #${order.number} a "${
-          ORDER_STATUSES.find((s) => s.id === newStatus)?.label
-        }"?`,
-        [
-          { text: "Cancelar", style: "cancel" },
-          {
-            text: "Cambiar",
-            onPress: async () => {
-              // Actualizar estado de la orden
-              const updatedOrder = await orderService.updateOrder(order.id, { status: newStatus })
-
-              if (updatedOrder) {
-                // Actualizar estado local
-                const updatedOrders = { ...orders }
-                updatedOrders[order.status] = updatedOrders[order.status].filter((o) => o.id !== order.id)
-                updatedOrders[newStatus] = [...updatedOrders[newStatus], { ...order, status: newStatus }]
-                setOrders(updatedOrders)
-
-                // Enviar notificación
-                await notificationService.sendOrderStatusNotification(
-                  order.id,
-                  order.number,
-                  ORDER_STATUSES.find((s) => s.id === newStatus)?.label || newStatus,
-                )
-
-                // Mostrar mensaje de éxito
-                Alert.alert("Éxito", `Estado de la orden #${order.number} actualizado correctamente.`)
-              }
-            },
-          },
-        ],
-      )
-    } catch (error) {
-      console.error("Error al cambiar estado de la orden:", error)
-      Alert.alert("Error", "No se pudo cambiar el estado de la orden. Por favor, intente de nuevo.")
-    }
-  }
-
-  const renderOrderItem = ({ item, drag, isActive }) => {
-    const statusInfo = ORDER_STATUSES.find((s) => s.id === item.status)
-
-    return (
-      <TouchableOpacity
-        style={[
-          styles.orderCard,
-          isActive && styles.orderCardActive,
-          { borderLeftColor: statusInfo?.color || theme.colors.primary },
-        ]}
-        onPress={() => handleOrderPress(item)}
-        onLongPress={canChangeOrderStatus ? drag : undefined}
-        delayLongPress={200}
-        activeOpacity={0.7}
-      >
-        <View style={styles.orderHeader}>
-          <Text style={styles.orderNumber}>#{item.number}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: statusInfo?.color || theme.colors.primary }]}>
-            <Feather name={statusInfo?.icon || "circle"} size={12} color="#fff" style={styles.statusIcon} />
-            <Text style={styles.statusText}>{statusInfo?.label || item.status}</Text>
-          </View>
-        </View>
-
-        <View style={styles.orderContent}>
-          <Text style={styles.vehicleInfo}>{item.vehicleInfo}</Text>
-          <Text style={styles.clientName}>{item.clientName}</Text>
-          <Text style={styles.orderDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
-        </View>
-
-        <View style={styles.orderFooter}>
-          <View style={styles.orderDates}>
-            <Text style={styles.dateLabel}>Creada: {item.formattedDates.created}</Text>
-            <Text style={styles.dateLabel}>Entrega: {item.formattedDates.promised}</Text>
-          </View>
-          <Text style={styles.orderTotal}>{item.formattedTotal}</Text>
-        </View>
-
-        {canChangeOrderStatus && (
-          <View style={styles.actionButtons}>
-            {item.status !== "reception" && (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: "#f5a623" }]}
-                onPress={() => {
-                  const currentIndex = ORDER_STATUSES.findIndex((s) => s.id === item.status)
-                  if (currentIndex > 0) {
-                    handleStatusChange(item, ORDER_STATUSES[currentIndex - 1].id)
-                  }
-                }}
-              >
-                <Feather name="arrow-left" size={16} color="#fff" />
-              </TouchableOpacity>
-            )}
-
-            {item.status !== "delivered" && item.status !== "cancelled" && (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: "#4caf50" }]}
-                onPress={() => {
-                  const currentIndex = ORDER_STATUSES.findIndex((s) => s.id === item.status)
-                  if (currentIndex < ORDER_STATUSES.length - 2) {
-                    // -2 para excluir "cancelled"
-                    handleStatusChange(item, ORDER_STATUSES[currentIndex + 1].id)
-                  }
-                }}
-              >
-                <Feather name="arrow-right" size={16} color="#fff" />
-              </TouchableOpacity>
-            )}
-
-            {item.status !== "cancelled" && (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: "#e53935" }]}
-                onPress={() => handleStatusChange(item, "cancelled")}
-              >
-                <Feather name="x" size={16} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </TouchableOpacity>
-    )
-  }
-
-  const renderStatusColumn = (status, index) => {
-    const statusOrders = orders[status.id] || []
-
-    return (
-      <View style={styles.columnContainer} key={status.id}>
-        <View style={[styles.columnHeader, { backgroundColor: status.color }]}>
-          <Feather name={status.icon} size={18} color="#fff" style={styles.columnHeaderIcon} />
-          <Text style={styles.columnHeaderText}>{status.label}</Text>
-          <View style={styles.orderCount}>
-            <Text style={styles.orderCountText}>{statusOrders.length}</Text>
-          </View>
-        </View>
-
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={status.color} />
-          </View>
-        ) : (
-          <DraggableFlatList
-            data={statusOrders}
-            renderItem={renderOrderItem}
-            keyExtractor={(item) => item.id}
-            onDragEnd={({ data, from, to }) => {
-              if (canChangeOrderStatus && from.droppableId !== to.droppableId) {
-                // Si se arrastra a una columna diferente, cambiar el estado
-                const order = statusOrders[from.index]
-                handleStatusChange(order, to.droppableId)
-              }
-            }}
-            contentContainerStyle={styles.columnContent}
-            ListEmptyComponent={
-              <View style={styles.emptyColumn}>
-                <Feather name="inbox" size={24} color="#ccc" />
-                <Text style={styles.emptyText}>No hay órdenes</Text>
-              </View>
-            }
-          />
-        )}
-      </View>
-    )
-  }
-
-  const renderTabs = () => {
-    return (
-      <View style={styles.tabContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScrollContent}>
-          {ORDER_STATUSES.map((status, index) => (
-            <TouchableOpacity
-              key={status.id}
-              style={[styles.tab, activeTab === index && { backgroundColor: status.color }]}
-              onPress={() => {
-                setActiveTab(index)
-                scrollX.setValue(index * windowWidth)
-              }}
-            >
-              <Feather
-                name={status.icon}
-                size={16}
-                color={activeTab === index ? "#fff" : status.color}
-                style={styles.tabIcon}
-              />
-              <Text style={[styles.tabText, activeTab === index && { color: "#fff" }]}>{status.label}</Text>
-              {orders[status.id] && orders[status.id].length > 0 && (
-                <View style={[styles.tabBadge, { backgroundColor: activeTab === index ? "#fff" : status.color }]}>
-                  <Text style={[styles.tabBadgeText, { color: activeTab === index ? status.color : "#fff" }]}>
-                    {orders[status.id].length}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    )
-  }
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Tablero de Órdenes</Text>
-        <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
-          <Feather name="refresh-cw" size={20} color={theme.colors.primary} />
-        </TouchableOpacity>
-      </View>
-
-      {renderTabs()}
-
-      <Animated.ScrollView
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        scrollEventThrottle={16}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-          useNativeDriver: false,
-          listener: (event) => {
-            const newIndex = Math.round(event.nativeEvent.contentOffset.x / windowWidth)
-            if (newIndex !== activeTab) {
-              setActiveTab(newIndex)
-            }
-          },
-        })}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#1a73e8"]} />}
-      >
-        {ORDER_STATUSES.map((status, index) => (
-          <View key={status.id} style={[styles.page, { width: windowWidth }]}>
-            {renderStatusColumn(status, index)}
-          </View>
-        ))}
-      </Animated.ScrollView>
-
-      {canChangeOrderStatus ? (
-        <View style={styles.permissionInfo}>
-          <MaterialIcons name="drag-indicator" size={20} color={theme.colors.textLight} />
-          <Text style={styles.permissionText}>Mantén presionada una orden para arrastrarla y cambiar su estado</Text>
-        </View>
-      ) : (
-        <View style={styles.permissionInfo}>
-          <Feather name="lock" size={16} color={theme.colors.error} />
-          <Text style={styles.permissionText}>Solo el jefe de taller puede cambiar el estado de las órdenes</Text>
-        </View>
-      )}
-    </View>
-  )
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e1e4e8",
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: theme.colors.text,
-  },
-  refreshButton: {
-    padding: 8,
-  },
-  tabContainer: {
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e1e4e8",
-  },
-  tabScrollContent: {
-    paddingHorizontal: 8,
-  },
-  tab: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginHorizontal: 4,
-    borderRadius: 8,
-  },
-  tabIcon: {
-    marginRight: 6,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: theme.colors.text,
-  },
-  tabBadge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: 6,
-    paddingHorizontal: 4,
-  },
-  tabBadgeText: {
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  page: {
-    flex: 1,
-  },
-  columnContainer: {
-    flex: 1,
-    margin: 8,
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  columnHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-  },
-  columnHeaderIcon: {
-    marginRight: 8,
-  },
-  columnHeaderText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#fff",
-    flex: 1,
-  },
-  orderCount: {
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  orderCountText: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  columnContent: {
-    padding: 8,
-    paddingBottom: 100, // Espacio adicional al final
-  },
-  loadingContainer: {
-    padding: 20,
-    alignItems: "center",
-  },
-  emptyColumn: {
-    padding: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyText: {
-    marginTop: 8,
-    color: "#999",
-    fontSize: 14,
-  },
-  orderCard: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    marginBottom: 12,
-    padding: 12,
-    borderLeftWidth: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  orderCardActive: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
-    transform: [{ scale: 1.02 }],
-  },
-  orderHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  orderNumber: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: theme.colors.text,
-  },
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  statusIcon: {
-    marginRight: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  orderContent: {
-    marginBottom: 8,
-  },
-  vehicleInfo: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: theme.colors.text,
-    marginBottom: 2,
-  },
-  clientName: {
-    fontSize: 13,
-    color: theme.colors.textLight,
-    marginBottom: 4,
-  },
-  orderDescription: {
-    fontSize: 13,
-    color: theme.colors.text,
-  },
-  orderFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    paddingTop: 8,
-  },
-  orderDates: {
-    flex: 1,
-  },
-  dateLabel: {
-    fontSize: 12,
-    color: theme.colors.textLight,
-  },
-  orderTotal: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: theme.colors.success,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 8,
-  },
-  actionButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: 8,
-  },
-  permissionInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    padding: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#e1e4e8",
-  },
-  permissionText: {
-    fontSize: 12,
-    color: theme.colors.textLight,
-    marginLeft: 8,
-  },
+"use client"  
+  
+import { useState, useCallback, useEffect } from "react"  
+import {  
+  View,  
+  Text,  
+  FlatList,  
+  TouchableOpacity,  
+  StyleSheet,  
+  ActivityIndicator,  
+  RefreshControl,  
+  Alert,  
+  Modal,  
+  TextInput,  
+} from "react-native"  
+import { Feather, MaterialIcons } from "@expo/vector-icons"  
+import { useFocusEffect } from "@react-navigation/native"  
+import { useAuth } from "../context/auth-context"  
+import ORDENES_TRABAJO_SERVICES, { OrdenTrabajoType } from "../services/ORDENES.SERVICE"  
+import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
+import USER_SERVICE from "../services/USER_SERVICES.SERVICE"  
+  
+// Estados disponibles para las órdenes  
+const ORDER_STATUSES = [  
+  { id: "Pendiente", label: "Pendiente", color: "#1a73e8", icon: "clock" },  
+  { id: "En Diagnóstico", label: "En Diagnóstico", color: "#f5a623", icon: "search" },  
+  { id: "Esperando Repuestos", label: "Esperando Repuestos", color: "#9c27b0", icon: "package" },  
+  { id: "En Proceso", label: "En Proceso", color: "#ff9800", icon: "tool" },  
+  { id: "Control Calidad", label: "Control Calidad", color: "#607d8b", icon: "check-circle" },  
+  { id: "Completada", label: "Completada", color: "#4caf50", icon: "check-square" },  
+  { id: "Entregada", label: "Entregada", color: "#607d8b", icon: "truck" },  
+  { id: "Cancelada", label: "Cancelada", color: "#e53935", icon: "x-circle" },  
+]  
+  
+export default function OrderStatusScreen({ navigation }) {  
+  const { user } = useAuth()  
+  const [orders, setOrders] = useState<OrdenTrabajoType[]>([])  
+  const [loading, setLoading] = useState(true)  
+  const [refreshing, setRefreshing] = useState(false)  
+  const [error, setError] = useState<string | null>(null)  
+  const [userRole, setUserRole] = useState<string | null>(null)  
+  const [selectedOrder, setSelectedOrder] = useState<OrdenTrabajoType | null>(null)  
+  const [showStatusModal, setShowStatusModal] = useState(false)  
+  const [statusNote, setStatusNote] = useState("")  
+  const [filterStatus, setFilterStatus] = useState("all")  
+  
+  const loadOrders = useCallback(async () => {  
+    try {  
+      setLoading(true)  
+      setError(null)  
+  
+      if (!user?.id) return  
+  
+      // Validar permisos del usuario  
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      setUserRole(userPermissions?.rol || 'client')  
+  
+      // Cargar órdenes según el rol  
+      let allOrders = []  
+      if (userPermissions?.rol === 'client') {  
+        // Cliente solo ve sus órdenes  
+        const clientOrders = await ORDENES_TRABAJO_SERVICES.GET_ALL_ORDENES()  
+        allOrders = clientOrders.filter(order => order.client_id === user.id)  
+      } else {  
+        // Admin/técnico ve todas las órdenes  
+        allOrders = await ORDENES_TRABAJO_SERVICES.GET_ALL_ORDENES()  
+      }  
+  
+      setOrders(allOrders)  
+  
+    } catch (error) {  
+      console.error("Error loading orders:", error)  
+      setError("No se pudieron cargar las órdenes")  
+    } finally {  
+      setLoading(false)  
+      setRefreshing(false)  
+    }  
+  }, [user])  
+  
+  useFocusEffect(  
+    useCallback(() => {  
+      loadOrders()  
+    }, [loadOrders])  
+  )  
+  
+  const getStatusInfo = (status: string) => {  
+    return ORDER_STATUSES.find(s => s.id === status) || ORDER_STATUSES[0]  
+  }  
+  
+  const handleStatusChange = (order: OrdenTrabajoType, newStatus: string) => {  
+    if (userRole === 'client') {  
+      Alert.alert("Error", "No tienes permisos para cambiar el estado de las órdenes")  
+      return  
+    }  
+  
+    setSelectedOrder(order)  
+    setStatusNote("")  
+    setShowStatusModal(true)  
+  }  
+  
+  const confirmStatusChange = async (newStatus: string) => {  
+    if (!selectedOrder) return  
+  
+    try {  
+      await ORDENES_TRABAJO_SERVICES.UPDATE_ORDEN_STATUS(selectedOrder.id!, newStatus, statusNote)  
+        
+      // Actualizar orden local  
+      setOrders(prev =>   
+        prev.map(order =>   
+          order.id === selectedOrder.id   
+            ? { ...order, estado: newStatus }  
+            : order  
+        )  
+      )  
+  
+      setShowStatusModal(false)  
+      setSelectedOrder(null)  
+      setStatusNote("")  
+  
+      Alert.alert("Éxito", "Estado de la orden actualizado correctamente")  
+    } catch (error) {  
+      console.error("Error updating order status:", error)  
+      Alert.alert("Error", "No se pudo actualizar el estado de la orden")  
+    }  
+  }  
+  
+  const filteredOrders = orders.filter(order => {  
+    if (filterStatus === "all") return true  
+    return order.estado === filterStatus  
+  })  
+  
+  const renderOrderItem = ({ item }: { item: OrdenTrabajoType }) => {  
+    const statusInfo = getStatusInfo(item.estado)  
+  
+    return (  
+      <TouchableOpacity  
+        style={styles.orderCard}  
+        onPress={() => navigation.navigate("OrderDetail", { orderId: item.id })}  
+      >  
+        <View style={styles.orderHeader}>  
+          <Text style={styles.orderNumber}>Orden #{item.numero_orden}</Text>  
+          <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>  
+            <Feather name={statusInfo.icon} size={12} color="#fff" />  
+            <Text style={styles.statusText}>{statusInfo.label}</Text>  
+          </View>  
+        </View>  
+  
+        <Text style={styles.orderDescription} numberOfLines={2}>  
+          {item.descripcion}  
+        </Text>  
+  
+        <View style={styles.orderDetails}>  
+          <View style={styles.orderDetail}>  
+            <Feather name="user" size={16} color="#666" />  
+            <Text style={styles.orderDetailText}>{item.client_name || "Cliente"}</Text>  
+          </View>  
+          <View style={styles.orderDetail}>  
+            <Feather name="truck" size={16} color="#666" />  
+            <Text style={styles.orderDetailText}>{item.vehiculo_info || "Vehículo"}</Text>  
+          </View>  
+          <View style={styles.orderDetail}>  
+            <Feather name="calendar" size={16} color="#666" />  
+            <Text style={styles.orderDetailText}>  
+              {new Date(item.fecha_creacion).toLocaleDateString("es-ES")}  
+            </Text>  
+          </View>  
+        </View>  
+  
+        {userRole !== 'client' && (  
+          <View style={styles.statusActions}>  
+            {ORDER_STATUSES.map((status) => (  
+              <TouchableOpacity  
+                key={status.id}  
+                style={[  
+                  styles.statusButton,  
+                  { backgroundColor: status.color },  
+                  item.estado === status.id && styles.statusButtonActive  
+                ]}  
+                onPress={() => handleStatusChange(item, status.id)}  
+                disabled={item.estado === status.id}  
+              >  
+                <Feather name={status.icon} size={14} color="#fff" />  
+              </TouchableOpacity>  
+            ))}  
+          </View>  
+        )}  
+      </TouchableOpacity>  
+    )  
+  }  
+  
+  if (loading) {  
+    return (  
+      <View style={styles.loadingContainer}>  
+        <ActivityIndicator size="large" color="#1a73e8" />  
+        <Text style={styles.loadingText}>Cargando órdenes...</Text>  
+      </View>  
+    )  
+  }  
+  
+  return (  
+    <View style={styles.container}>  
+      <View style={styles.header}>  
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
+          <Feather name="arrow-left" size={24} color="#333" />  
+        </TouchableOpacity>  
+        <Text style={styles.headerTitle}>Estados de Órdenes</Text>  
+      </View>  
+  
+      <View style={styles.filterContainer}>  
+        <TouchableOpacity  
+          style={[styles.filterButton, filterStatus === "all" && styles.filterButtonActive]}  
+          onPress={() => setFilterStatus("all")}  
+        >  
+          <Text style={[styles.filterButtonText, filterStatus === "all" && styles.filterButtonTextActive]}>  
+            Todas  
+          </Text>  
+        </TouchableOpacity>  
+        {ORDER_STATUSES.slice(0, 4).map((status) => (  
+          <TouchableOpacity  
+            key={status.id}  
+            style={[styles.filterButton, filterStatus === status.id && styles.filterButtonActive]}  
+            onPress={() => setFilterStatus(status.id)}  
+          >  
+            <Text style={[styles.filterButtonText, filterStatus === status.id && styles.filterButtonTextActive]}>  
+              {status.label}  
+            </Text>  
+          </TouchableOpacity>  
+        ))}  
+      </View>  
+  
+      {error ? (  
+        <View style={styles.errorContainer}>  
+          <MaterialIcons name="error" size={64} color="#f44336" />  
+          <Text style={styles.errorText}>{error}</Text>  
+          <TouchableOpacity style={styles.retryButton} onPress={loadOrders}>  
+            <Text style={styles.retryButtonText}>Reintentar</Text>  
+          </TouchableOpacity>  
+        </View>  
+      ) : (  
+        <FlatList  
+          data={filteredOrders}  
+          keyExtractor={(item) => item.id!}  
+          renderItem={renderOrderItem}  
+          refreshControl={  
+            <RefreshControl refreshing={refreshing} onRefresh={loadOrders} colors={["#1a73e8"]} />  
+          }  
+          contentContainerStyle={styles.listContainer}  
+          showsVerticalScrollIndicator={false}  
+          ListEmptyComponent={  
+            <View style={styles.emptyContainer}>  
+              <Feather name="clipboard" size={64} color="#ccc" />  
+              <Text style={styles.emptyText}>No hay órdenes para mostrar</Text>  
+            </View>  
+          }  
+        />  
+      )}  
+  
+      {/* Modal para cambio de estado */}  
+      <Modal  
+        visible={showStatusModal}  
+        animationType="slide"  
+        transparent={true}  
+      >  
+        <View style={styles.modalOverlay}>  
+          <View style={styles.modalContainer}>  
+            <Text style={styles.modalTitle}>Cambiar Estado</Text>  
+              
+            {selectedOrder && (  
+              <>  
+                <Text style={styles.modalOrderInfo}>  
+                  Orden #{selectedOrder.numero_orden}  
+                </Text>  
+                  
+                <View style={styles.statusGrid}>  
+                  {ORDER_STATUSES.map((status) => (  
+                    <TouchableOpacity  
+                      key={status.id}  
+                      style={[  
+                        styles.statusOption,  
+                        { borderColor: status.color },  
+                        selectedOrder.estado === status.id && styles.statusOptionDisabled  
+                      ]}  
+                      onPress={() => confirmStatusChange(status.id)}  
+                      disabled={selectedOrder.estado === status.id}  
+                    >  
+                      <Feather name={status.icon} size={20} color={status.color} />  
+                      <Text style={[styles.statusOptionText, { color: status.color }]}>  
+                        {status.label}  
+                      </Text>  
+                      {selectedOrder.estado === status.id && (  
+                        <Text style={styles.currentStatusLabel}>Actual</Text>  
+                      )}  
+                    </TouchableOpacity>  
+                  ))}  
+                </View>  
+  
+                <View style={styles.noteContainer}>  
+                  <Text style={styles.noteLabel}>Nota (opcional):</Text>  
+                  <TextInput  
+                    style={styles.noteInput}  
+                    value={statusNote}  
+                    onChangeText={setStatusNote}  
+                    placeholder="Agregar una nota sobre el cambio de estado..."  
+                    multiline  
+                    numberOfLines={3}  
+                    textAlignVertical="top"  
+                  />  
+                </View>  
+              </>  
+            )}  
+  
+            <TouchableOpacity   
+              style={styles.modalCancelButton}  
+              onPress={() => setShowStatusModal(false)}  
+            >  
+              <Text style={styles.modalCancelText}>Cancelar</Text>  
+            </TouchableOpacity>  
+          </View>  
+        </View>  
+      </Modal>  
+    </View>  
+  )  
+}  
+  
+const styles = StyleSheet.create({  
+  container: {  
+    flex: 1,  
+    backgroundColor: "#f8f9fa",  
+  },  
+  loadingContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    backgroundColor: "#f8f9fa",  
+  },  
+  loadingText: {  
+    marginTop: 10,  
+    fontSize: 16,  
+    color: "#666",  
+  },  
+  header: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    backgroundColor: "#fff",  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  backButton: {  
+    padding: 8,  
+    marginRight: 8,  
+  },  
+  headerTitle: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+  },  
+  filterContainer: {  
+    flexDirection: "row",  
+    backgroundColor: "#fff",  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+    gap: 8,  
+  },  
+  filterButton: {  
+    paddingHorizontal: 12,  
+    paddingVertical: 6,  
+    borderRadius: 16,  
+    backgroundColor: "#f5f5f5",  
+  },  
+  filterButtonActive: {  
+    backgroundColor: "#1a73e8",  
+  },  
+  filterButtonText: {  
+    fontSize: 12,  
+    color: "#666",  
+  },  
+  filterButtonTextActive: {  
+    color: "#fff",  
+    fontWeight: "bold",  
+  },  
+  errorContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    padding: 20,  
+  },  
+  errorText: {  
+    fontSize: 16,  
+    color: "#f44336",  
+    textAlign: "center",  
+    marginTop: 16,  
+    marginBottom: 20,  
+  },  
+  retryButton: {  
+    backgroundColor: "#1a73e8",  
+    paddingHorizontal: 20,  
+    paddingVertical: 10,  
+    borderRadius: 8,  
+  },  
+  retryButtonText: {  
+    color: "#fff",  
+    fontWeight: "bold",  
+  },  
+  listContainer: {  
+    padding: 16,  
+  },  
+  emptyContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    padding: 40,  
+  },  
+  emptyText: {  
+    fontSize: 16,  
+    color: "#999",  
+    marginTop: 16,  
+    textAlign: "center",  
+  },  
+  orderCard: {  
+    backgroundColor: "#fff",  
+    borderRadius: 12,  
+    padding: 16,  
+    marginBottom: 12,  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 2 },  
+    shadowOpacity: 0.1,  
+    shadowRadius: 4,  
+    elevation: 3,  
+  },  
+  orderHeader: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+    marginBottom: 8,  
+  },  
+  orderNumber: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#333",  
+  },  
+  statusBadge: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    paddingHorizontal: 8,  
+    paddingVertical: 4,  
+    borderRadius: 12,  
+    gap: 4,  
+  },  
+  statusText: {  
+    color: "#fff",  
+    fontSize: 12,  
+    fontWeight: "bold",  
+  },  
+  orderDescription: {  
+    fontSize: 14,  
+    color: "#666",  
+    marginBottom: 12,  
+  },  
+  orderDetails: {  
+    gap: 8,  
+    marginBottom: 12,  
+  },  
+  orderDetail: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    gap: 8,  
+  },  
+  orderDetailText: {  
+    fontSize: 14,  
+    color: "#666",  
+  },  
+  statusActions: {  
+    flexDirection: "row",  
+    flexWrap: "wrap",  
+    gap: 8,  
+    marginTop: 8,  
+  },  
+  statusButton: {  
+    width: 32,  
+    height: 32,  
+    borderRadius: 16,  
+    justifyContent: "center",  
+    alignItems: "center",  
+  },  
+  statusButtonActive: {  
+    opacity: 0.5,  
+  },  
+  modalOverlay: {  
+    flex: 1,  
+    backgroundColor: "rgba(0, 0, 0, 0.5)",  
+    justifyContent: "center",  
+    alignItems: "center",  
+  },  
+  modalContainer: {  
+    backgroundColor: "#fff",  
+    borderRadius: 12,  
+    padding: 20,  
+    margin: 20,  
+    maxHeight: "80%",  
+    width: "90%",  
+  },  
+  modalTitle: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 16,  
+    textAlign: "center",  
+  },  
+  modalOrderInfo: {  
+    fontSize: 16,  
+    color: "#666",  
+    marginBottom: 20,  
+    textAlign: "center",  
+  },  
+  statusGrid: {  
+    flexDirection: "row",  
+    flexWrap: "wrap",  
+    gap: 12,  
+    marginBottom: 20,  
+  },  
+  statusOption: {  
+    flex: 1,  
+    minWidth: "45%",  
+    flexDirection: "row",  
+    alignItems: "center",  
+    padding: 12,  
+    borderRadius: 8,  
+    borderWidth: 1,  
+    gap: 8,  
+  },  
+  statusOptionDisabled: {  
+    opacity: 0.5,  
+  },  
+  statusOptionText: {  
+    fontSize: 14,  
+    fontWeight: "500",  
+  },  
+  currentStatusLabel: {  
+    fontSize: 12,  
+    color: "#1a73e8",  
+    fontWeight: "bold",  
+    marginLeft: "auto",  
+  },  
+  noteContainer: {  
+    marginBottom: 20,  
+  },  
+  noteLabel: {  
+    fontSize: 16,  
+    fontWeight: "500",  
+    color: "#333",  
+    marginBottom: 8,  
+  },  
+  noteInput: {  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+    borderRadius: 8,  
+    paddingHorizontal: 12,  
+    paddingVertical: 8,  
+    fontSize: 16,  
+    height: 80,  
+    textAlignVertical: "top",  
+  },  
+  modalCancelButton: {  
+    backgroundColor: "#e1e4e8",  
+    borderRadius: 8,  
+    paddingVertical: 12,  
+    alignItems: "center",  
+  },  
+  modalCancelText: {  
+    fontSize: 16,  
+    fontWeight: "500",  
+    color: "#666",  
+  },  
 })

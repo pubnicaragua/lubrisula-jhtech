@@ -1,619 +1,905 @@
-"use client"
-
-import { useState } from "react"
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, SafeAreaView, Image, FlatList } from "react-native"
-import { Feather } from "@expo/vector-icons"
-
-// Componente para sección de información
-const InfoSection = ({ title, children }) => (
-  <View style={styles.infoSection}>
-    <Text style={styles.sectionTitle}>{title}</Text>
-    <View style={styles.sectionContent}>{children}</View>
-  </View>
-)
-
-// Componente para elemento de información
-const InfoItem = ({ icon, label, value, color }) => (
-  <View style={styles.infoItem}>
-    <View style={[styles.infoIconContainer, { backgroundColor: color + "20" }]}>
-      <Feather name={icon} size={16} color={color} />
-    </View>
-    <View style={styles.infoTextContainer}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  </View>
-)
-
-// Componente para vehículo
-const VehicleItem = ({ vehicle, onPress }) => (
-  <TouchableOpacity style={styles.vehicleItem} onPress={onPress}>
-    <View style={styles.vehicleImageContainer}>
-      <Image
-        source={vehicle.image ? vehicle.image : require("../assets/car-placeholder.jpg")}
-        style={styles.vehicleImage}
-      />
-    </View>
-    <View style={styles.vehicleInfo}>
-      <Text style={styles.vehicleName}>
-        {vehicle.make} {vehicle.model}
-      </Text>
-      <Text style={styles.vehicleYear}>{vehicle.year}</Text>
-      <View style={styles.vehicleDetails}>
-        <View style={styles.vehicleDetail}>
-          <Feather name="hash" size={12} color="#666" />
-          <Text style={styles.vehicleDetailText}>{vehicle.plate}</Text>
-        </View>
-        <View style={styles.vehicleDetail}>
-          <Feather name="droplet" size={12} color="#666" />
-          <Text style={styles.vehicleDetailText}>{vehicle.color}</Text>
-        </View>
-      </View>
-    </View>
-    <Feather name="chevron-right" size={20} color="#ccc" />
-  </TouchableOpacity>
-)
-
-// Componente para orden
-const OrderItem = ({ order, onPress }) => (
-  <TouchableOpacity style={styles.orderItem} onPress={onPress}>
-    <View style={styles.orderHeader}>
-      <Text style={styles.orderNumber}>Orden #{order.number}</Text>
-      <View style={[styles.statusBadge, { backgroundColor: order.statusColor }]}>
-        <Text style={styles.statusText}>{order.status}</Text>
-      </View>
-    </View>
-    <View style={styles.orderDetails}>
-      <Text style={styles.orderVehicle}>{order.vehicle}</Text>
-      <Text style={styles.orderService}>{order.service}</Text>
-    </View>
-    <View style={styles.orderFooter}>
-      <Text style={styles.orderDate}>{order.date}</Text>
-      <Text style={styles.orderAmount}>L. {order.amount}</Text>
-    </View>
-  </TouchableOpacity>
-)
-
-export default function ClientDetailScreen({ route, navigation }) {
-  // Obtener cliente de los parámetros de navegación
-  const defaultClient = {
-    id: "1",
-    name: "Juan Pérez",
-    email: "juan.perez@ejemplo.com",
-    phone: "+504 9876-5432",
-    address: "Col. Palmira, Calle Principal, Casa #123",
-    city: "Tegucigalpa",
-    since: "10 Ene 2020",
-    vehicles: 2,
-    lastVisit: "10 Mar 2023",
-  }
-  const { client = defaultClient } = route.params || {}
-
-  // Datos de ejemplo para vehículos
-  const vehicles = [
-    {
-      id: "1",
-      make: "Toyota",
-      model: "Corolla",
-      year: "2020",
-      plate: "ABC-1234",
-      color: "Blanco",
-      vin: "1HGBH41JXMN109186",
-      image: require("../assets/car-photo-1.jpg"),
-    },
-    {
-      id: "2",
-      make: "Honda",
-      model: "Civic",
-      year: "2019",
-      plate: "XYZ-5678",
-      color: "Azul",
-      vin: "2FMDK3JC7CBA12345",
-      image: require("../assets/car-photo-2.jpg"),
-    },
-  ]
-
-  // Datos de ejemplo para órdenes
-  const orders = [
-    {
-      id: "1",
-      number: "1234",
-      status: "Completada",
-      statusColor: "#4caf50",
-      vehicle: "Toyota Corolla 2020",
-      service: "Cambio de aceite y filtro",
-      date: "10 Mar 2023",
-      amount: "1,250.00",
-    },
-    {
-      id: "2",
-      number: "1156",
-      status: "En Proceso",
-      statusColor: "#f5a623",
-      vehicle: "Honda Civic 2019",
-      service: "Revisión de frenos",
-      date: "15 Feb 2023",
-      amount: "2,500.00",
-    },
-    {
-      id: "3",
-      number: "1098",
-      status: "Completada",
-      statusColor: "#4caf50",
-      vehicle: "Toyota Corolla 2020",
-      service: "Alineación y balanceo",
-      date: "05 Ene 2023",
-      amount: "850.00",
-    },
-  ]
-
-  const [activeTab, setActiveTab] = useState("info")
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Detalle de Cliente</Text>
-        <TouchableOpacity style={styles.moreButton}>
-          <Feather name="more-vertical" size={24} color="#333" />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.clientHeader}>
-        <View style={styles.clientAvatar}>
-          <Text style={styles.clientInitials}>
-            {client.name
-              .split(" ")
-              .map((n) => n[0])
-              .join("")}
-          </Text>
-        </View>
-        <View style={styles.clientHeaderInfo}>
-          <Text style={styles.clientName}>{client.name}</Text>
-          <View style={styles.clientContact}>
-            <Feather name="phone" size={14} color="#666" style={styles.contactIcon} />
-            <Text style={styles.contactText}>{client.phone}</Text>
-          </View>
-          <View style={styles.clientContact}>
-            <Feather name="mail" size={14} color="#666" style={styles.contactIcon} />
-            <Text style={styles.contactText}>{client.email}</Text>
-          </View>
-        </View>
-        <TouchableOpacity style={styles.editButton} onPress={() => navigation.navigate("EditClient", { client })}>
-          <Feather name="edit-2" size={16} color="#1a73e8" />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === "info" && styles.activeTabButton]}
-          onPress={() => setActiveTab("info")}
-        >
-          <Text style={[styles.tabButtonText, activeTab === "info" && styles.activeTabButtonText]}>Información</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === "vehicles" && styles.activeTabButton]}
-          onPress={() => setActiveTab("vehicles")}
-        >
-          <Text style={[styles.tabButtonText, activeTab === "vehicles" && styles.activeTabButtonText]}>Vehículos</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === "orders" && styles.activeTabButton]}
-          onPress={() => setActiveTab("orders")}
-        >
-          <Text style={[styles.tabButtonText, activeTab === "orders" && styles.activeTabButtonText]}>Órdenes</Text>
-        </TouchableOpacity>
-      </View>
-
-      {activeTab === "info" && (
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <InfoSection title="Información Personal">
-            <InfoItem icon="map-pin" label="Dirección" value={client.address} color="#1a73e8" />
-            <InfoItem icon="home" label="Ciudad" value={client.city} color="#1a73e8" />
-            <InfoItem icon="calendar" label="Cliente desde" value={client.since} color="#1a73e8" />
-          </InfoSection>
-
-          <InfoSection title="Estadísticas">
-            <View style={styles.statsContainer}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{vehicles.length}</Text>
-                <Text style={styles.statLabel}>Vehículos</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{orders.length}</Text>
-                <Text style={styles.statLabel}>Órdenes</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{client.lastVisit}</Text>
-                <Text style={styles.statLabel}>Última Visita</Text>
-              </View>
-            </View>
-          </InfoSection>
-
-          <InfoSection title="Notas">
-            <Text style={styles.notesText}>
-              Cliente frecuente. Prefiere ser contactado por teléfono. Generalmente trae sus vehículos para
-              mantenimiento preventivo.
-            </Text>
-          </InfoSection>
-        </ScrollView>
-      )}
-
-      {activeTab === "vehicles" && (
-        <View style={styles.content}>
-          <FlatList
-            data={vehicles}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <VehicleItem vehicle={item} onPress={() => navigation.navigate("VehicleDetail", { vehicle: item })} />
-            )}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Feather name="truck" size={50} color="#ccc" />
-                <Text style={styles.emptyText}>No se encontraron vehículos</Text>
-              </View>
-            }
-          />
-          <TouchableOpacity
-            style={styles.floatingButton}
-            onPress={() => navigation.navigate("NewVehicle", { clientId: client.id })}
-          >
-            <Feather name="plus" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {activeTab === "orders" && (
-        <View style={styles.content}>
-          <FlatList
-            data={orders}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <OrderItem order={item} onPress={() => navigation.navigate("OrderDetail", { orderId: item.id })} />
-            )}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Feather name="file-text" size={50} color="#ccc" />
-                <Text style={styles.emptyText}>No se encontraron órdenes</Text>
-              </View>
-            }
-          />
-          <TouchableOpacity
-            style={styles.floatingButton}
-            onPress={() => navigation.navigate("NewOrder", { clientId: client.id })}
-          >
-            <Feather name="plus" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      )}
-    </SafeAreaView>
-  )
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  moreButton: {
-    padding: 8,
-  },
-  clientHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  clientAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#1a73e8",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 16,
-  },
-  clientInitials: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  clientHeaderInfo: {
-    flex: 1,
-  },
-  clientName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
-  },
-  clientContact: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 2,
-  },
-  contactIcon: {
-    marginRight: 6,
-  },
-  contactText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  editButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f0f0f0",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  tabBar: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  activeTabButton: {
-    borderBottomWidth: 2,
-    borderBottomColor: "#1a73e8",
-  },
-  tabButtonText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  activeTabButtonText: {
-    color: "#1a73e8",
-    fontWeight: "500",
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  infoSection: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 16,
-  },
-  sectionContent: {},
-  infoItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  infoIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  infoTextContainer: {
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 2,
-  },
-  infoValue: {
-    fontSize: 14,
-    color: "#333",
-  },
-  statsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  statItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#666",
-  },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: "#eee",
-  },
-  notesText: {
-    fontSize: 14,
-    color: "#666",
-    lineHeight: 20,
-  },
-  listContent: {
-    paddingBottom: 80, // Extra padding for floating button
-  },
-  vehicleItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  vehicleImageContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 8,
-    overflow: "hidden",
-    marginRight: 12,
-  },
-  vehicleImage: {
-    width: "100%",
-    height: "100%",
-  },
-  vehicleInfo: {
-    flex: 1,
-  },
-  vehicleName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
-  },
-  vehicleYear: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 8,
-  },
-  vehicleDetails: {
-    flexDirection: "row",
-  },
-  vehicleDetail: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  vehicleDetailText: {
-    fontSize: 12,
-    color: "#666",
-    marginLeft: 4,
-  },
-  orderItem: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  orderHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  orderNumber: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  statusBadge: {
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  statusText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  orderDetails: {
-    marginBottom: 8,
-  },
-  orderVehicle: {
-    fontSize: 14,
-    color: "#333",
-    marginBottom: 4,
-  },
-  orderService: {
-    fontSize: 14,
-    color: "#666",
-  },
-  orderFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#eee",
-    paddingTop: 8,
-  },
-  orderDate: {
-    fontSize: 12,
-    color: "#666",
-  },
-  orderAmount: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 40,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: "#666",
-    marginTop: 12,
-  },
-  floatingButton: {
-    position: "absolute",
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#1a73e8",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-})
-
+"use client"  
+  
+import { useState, useCallback, useEffect } from "react"  
+import {  
+  View,  
+  Text,  
+  ScrollView,  
+  TouchableOpacity,  
+  StyleSheet,  
+  ActivityIndicator,  
+  Alert,  
+  Modal,  
+  TextInput,  
+} from "react-native"  
+import { Feather, MaterialIcons } from "@expo/vector-icons"  
+import { useFocusEffect } from "@react-navigation/native"  
+import { useAuth } from "../context/auth-context"  
+import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
+import VEHICULO_SERVICES, { VehiculoType } from "../services/VEHICULOS.SERVICE"  
+import ORDENES_TRABAJO_SERVICES, { OrdenTrabajoType } from "../services/ORDENES.SERVICE"  
+import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
+import USER_SERVICE from "../services/USER_SERVICES.SERVICE"  
+  
+export default function ClientDetailScreen({ route, navigation }) {  
+  const { clientId } = route.params  
+  const { user } = useAuth()  
+  const [client, setClient] = useState<ClienteType | null>(null)  
+  const [vehicles, setVehicles] = useState<VehiculoType[]>([])  
+  const [orders, setOrders] = useState<OrdenTrabajoType[]>([])  
+  const [loading, setLoading] = useState(true)  
+  const [updating, setUpdating] = useState(false)  
+  const [error, setError] = useState<string | null>(null)  
+  const [userRole, setUserRole] = useState<string | null>(null)  
+  const [editModalVisible, setEditModalVisible] = useState(false)  
+    
+  const [editFormData, setEditFormData] = useState({  
+    name: "",  
+    email: "",  
+    phone: "",  
+    company: "",  
+    client_type: "individual",  
+  })  
+  
+  const loadClientData = useCallback(async () => {  
+    try {  
+      setLoading(true)  
+      setError(null)  
+  
+      if (!user?.id) return  
+  
+      // Validar permisos del usuario  
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      setUserRole(userPermissions?.rol || 'client')  
+  
+      // Obtener datos del cliente  
+      const clientData = await CLIENTS_SERVICES.GET_CLIENTS_BY_ID(clientId)  
+        
+      if (!clientData) {  
+        setError("Cliente no encontrado")  
+        return  
+      }  
+  
+      // Verificar permisos de acceso  
+      if (userPermissions?.rol === 'client' && clientId !== user.id) {  
+        setError("No tienes permisos para ver este cliente")  
+        return  
+      }  
+  
+      setClient(clientData)  
+      setEditFormData({  
+        name: clientData.name || "",  
+        email: clientData.email || "",  
+        phone: clientData.phone || "",  
+        company: clientData.company || "",  
+        client_type: clientData.client_type || "individual",  
+      })  
+  
+      // Cargar vehículos y órdenes del cliente  
+      const [clientVehicles, allOrders] = await Promise.all([  
+        VEHICULO_SERVICES.GET_ALL_VEHICULOS_BY_CLIENT(clientId),  
+        ORDENES_TRABAJO_SERVICES.GET_ALL_ORDENES()  
+      ])  
+  
+      setVehicles(clientVehicles)  
+        
+      // Filtrar órdenes del cliente  
+      const clientOrders = allOrders.filter(order => order.client_id === clientId)  
+      setOrders(clientOrders)  
+  
+    } catch (error) {  
+      console.error("Error loading client data:", error)  
+      setError("No se pudo cargar la información del cliente")  
+    } finally {  
+      setLoading(false)  
+    }  
+  }, [clientId, user])  
+  
+  useFocusEffect(  
+    useCallback(() => {  
+      loadClientData()  
+    }, [loadClientData])  
+  )  
+  
+  const handleUpdateClient = async () => {  
+    try {  
+      setUpdating(true)  
+  
+      const updatedClient = {  
+        ...client,  
+        ...editFormData,  
+        updated_at: new Date().toISOString()  
+      }  
+  
+      await CLIENTS_SERVICES.UPDATE_CLIENTE(clientId, updatedClient)  
+      setClient(updatedClient)  
+      setEditModalVisible(false)  
+  
+      Alert.alert("Éxito", "Cliente actualizado correctamente")  
+    } catch (error) {  
+      console.error("Error updating client:", error)  
+      Alert.alert("Error", "No se pudo actualizar el cliente")  
+    } finally {  
+      setUpdating(false)  
+    }  
+  }  
+  
+  const handleDeleteClient = () => {  
+    Alert.alert(  
+      "Eliminar Cliente",  
+      "¿Estás seguro de que quieres eliminar este cliente? Esta acción no se puede deshacer.",  
+      [  
+        { text: "Cancelar", style: "cancel" },  
+        {  
+          text: "Eliminar",  
+          style: "destructive",  
+          onPress: async () => {  
+            try {  
+              await CLIENTS_SERVICES.DELETE_CLIENTE(clientId)  
+              Alert.alert("Éxito", "Cliente eliminado correctamente")  
+              navigation.goBack()  
+            } catch (error) {  
+              console.error("Error deleting client:", error)  
+              Alert.alert("Error", "No se pudo eliminar el cliente")  
+            }  
+          }  
+        }  
+      ]  
+    )  
+  }  
+  
+  const formatCurrency = (amount: number) => {  
+    return amount.toLocaleString("es-ES", {  
+      style: "currency",  
+      currency: "USD",  
+      minimumFractionDigits: 2,  
+    })  
+  }  
+  
+  const getStatusColor = (status: string) => {  
+    switch (status) {  
+      case "Pendiente": return "#1a73e8"  
+      case "En Proceso": return "#f5a623"  
+      case "Completada": return "#4caf50"  
+      case "Entregada": return "#607d8b"  
+      case "Cancelada": return "#e53935"  
+      default: return "#666"  
+    }  
+  }  
+  
+  const renderEditModal = () => (  
+    <Modal  
+      visible={editModalVisible}  
+      animationType="slide"
+      presentationStyle="pageSheet"  
+      >  
+        <View style={styles.modalContainer}>  
+          <View style={styles.modalHeader}>  
+            <Text style={styles.modalTitle}>Editar Cliente</Text>  
+            <TouchableOpacity  
+              onPress={() => setEditModalVisible(false)}  
+              style={styles.closeButton}  
+            >  
+              <Feather name="x" size={24} color="#666" />  
+            </TouchableOpacity>  
+          </View>  
+    
+          <ScrollView style={styles.modalContent}>  
+            <View style={styles.inputGroup}>  
+              <Text style={styles.inputLabel}>Nombre</Text>  
+              <TextInput  
+                style={styles.input}  
+                value={editFormData.name}  
+                onChangeText={(value) =>  
+                  setEditFormData(prev => ({ ...prev, name: value }))  
+                }  
+                placeholder="Nombre completo"  
+                autoCapitalize="words"  
+              />  
+            </View>  
+    
+            <View style={styles.inputGroup}>  
+              <Text style={styles.inputLabel}>Email</Text>  
+              <TextInput  
+                style={styles.input}  
+                value={editFormData.email}  
+                onChangeText={(value) =>  
+                  setEditFormData(prev => ({ ...prev, email: value }))  
+                }  
+                placeholder="correo@ejemplo.com"  
+                keyboardType="email-address"  
+                autoCapitalize="none"  
+              />  
+            </View>  
+    
+            <View style={styles.inputGroup}>  
+              <Text style={styles.inputLabel}>Teléfono</Text>  
+              <TextInput  
+                style={styles.input}  
+                value={editFormData.phone}  
+                onChangeText={(value) =>  
+                  setEditFormData(prev => ({ ...prev, phone: value }))  
+                }  
+                placeholder="+505 8888-8888"  
+                keyboardType="phone-pad"  
+              />  
+            </View>  
+    
+            <View style={styles.inputGroup}>  
+              <Text style={styles.inputLabel}>Empresa</Text>  
+              <TextInput  
+                style={styles.input}  
+                value={editFormData.company}  
+                onChangeText={(value) =>  
+                  setEditFormData(prev => ({ ...prev, company: value }))  
+                }  
+                placeholder="Nombre de la empresa"  
+                autoCapitalize="words"  
+              />  
+            </View>  
+    
+            <View style={styles.inputGroup}>  
+              <Text style={styles.inputLabel}>Tipo de Cliente</Text>  
+              <View style={styles.radioGroup}>  
+                <TouchableOpacity  
+                  style={[  
+                    styles.radioOption,  
+                    editFormData.client_type === "individual" && styles.radioOptionSelected  
+                  ]}  
+                  onPress={() => setEditFormData(prev => ({ ...prev, client_type: "individual" }))}  
+                >  
+                  <View style={[  
+                    styles.radioCircle,  
+                    editFormData.client_type === "individual" && styles.radioCircleSelected  
+                  ]} />  
+                  <Text style={styles.radioText}>Individual</Text>  
+                </TouchableOpacity>  
+    
+                <TouchableOpacity  
+                  style={[  
+                    styles.radioOption,  
+                    editFormData.client_type === "empresa" && styles.radioOptionSelected  
+                  ]}  
+                  onPress={() => setEditFormData(prev => ({ ...prev, client_type: "empresa" }))}  
+                >  
+                  <View style={[  
+                    styles.radioCircle,  
+                    editFormData.client_type === "empresa" && styles.radioCircleSelected  
+                  ]} />  
+                  <Text style={styles.radioText}>Empresa</Text>  
+                </TouchableOpacity>  
+              </View>  
+            </View>  
+          </ScrollView>  
+    
+          <View style={styles.modalFooter}>  
+            <TouchableOpacity  
+              style={[styles.modalButton, styles.cancelButton]}  
+              onPress={() => setEditModalVisible(false)}  
+              disabled={updating}  
+            >  
+              <Text style={styles.cancelButtonText}>Cancelar</Text>  
+            </TouchableOpacity>  
+    
+            <TouchableOpacity  
+              style={[styles.modalButton, styles.saveButton]}  
+              onPress={handleUpdateClient}  
+              disabled={updating}  
+            >  
+              {updating ? (  
+                <ActivityIndicator size="small" color="#fff" />  
+              ) : (  
+                <>  
+                  <Feather name="save" size={20} color="#fff" />  
+                  <Text style={styles.saveButtonText}>Guardar</Text>  
+                </>  
+              )}  
+            </TouchableOpacity>  
+          </View>  
+        </View>  
+      </Modal>  
+    )  
+    
+    if (loading) {  
+      return (  
+        <View style={styles.loadingContainer}>  
+          <ActivityIndicator size="large" color="#1a73e8" />  
+          <Text style={styles.loadingText}>Cargando cliente...</Text>  
+        </View>  
+      )  
+    }  
+    
+    if (error) {  
+      return (  
+        <View style={styles.errorContainer}>  
+          <MaterialIcons name="error" size={64} color="#f44336" />  
+          <Text style={styles.errorText}>{error}</Text>  
+          <TouchableOpacity style={styles.retryButton} onPress={loadClientData}>  
+            <Text style={styles.retryButtonText}>Reintentar</Text>  
+          </TouchableOpacity>  
+        </View>  
+      )  
+    }  
+    
+    if (!client) return null  
+    
+    return (  
+      <View style={styles.container}>  
+        <View style={styles.header}>  
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
+            <Feather name="arrow-left" size={24} color="#333" />  
+          </TouchableOpacity>  
+          <Text style={styles.headerTitle}>Detalle de Cliente</Text>  
+          {userRole !== 'client' && (  
+            <TouchableOpacity style={styles.moreButton} onPress={handleDeleteClient}>  
+              <Feather name="trash-2" size={24} color="#e53935" />  
+            </TouchableOpacity>  
+          )}  
+        </View>  
+    
+        <View style={styles.clientHeader}>  
+          <View style={styles.clientAvatar}>  
+            <Text style={styles.clientInitials}>  
+              {client.name  
+                ?.split(" ")  
+                .map((n) => n[0])  
+                .join("") || "?"}  
+            </Text>  
+          </View>  
+          <View style={styles.clientHeaderInfo}>  
+            <Text style={styles.clientName}>{client.name}</Text>  
+            <View style={styles.clientContact}>  
+              <Feather name="phone" size={14} color="#666" style={styles.contactIcon} />  
+              <Text style={styles.contactText}>{client.phone}</Text>  
+            </View>  
+            <View style={styles.clientContact}>  
+              <Feather name="mail" size={14} color="#666" style={styles.contactIcon} />  
+              <Text style={styles.contactText}>{client.email}</Text>  
+            </View>  
+          </View>  
+          {userRole !== 'client' && (  
+            <TouchableOpacity style={styles.editButton} onPress={() => setEditModalVisible(true)}>  
+              <Feather name="edit-2" size={16} color="#1a73e8" />  
+            </TouchableOpacity>  
+          )}  
+        </View>  
+    
+        <ScrollView style={styles.content}>  
+          <View style={styles.section}>  
+            <Text style={styles.sectionTitle}>Información Personal</Text>  
+            <View style={styles.infoGrid}>  
+              <View style={styles.infoItem}>  
+                <Feather name="briefcase" size={16} color="#1a73e8" />  
+                <Text style={styles.infoLabel}>Empresa:</Text>  
+                <Text style={styles.infoValue}>{client.company || "No especificada"}</Text>  
+              </View>  
+              <View style={styles.infoItem}>  
+                <Feather name="user" size={16} color="#1a73e8" />  
+                <Text style={styles.infoLabel}>Tipo:</Text>  
+                <Text style={styles.infoValue}>{client.client_type === "empresa" ? "Empresa" : "Individual"}</Text>  
+              </View>  
+              <View style={styles.infoItem}>  
+                <Feather name="calendar" size={16} color="#1a73e8" />  
+                <Text style={styles.infoLabel}>Cliente desde:</Text>  
+                <Text style={styles.infoValue}>  
+                  {client.created_at ? new Date(client.created_at).toLocaleDateString("es-ES") : "No disponible"}  
+                </Text>  
+              </View>  
+            </View>  
+          </View>  
+    
+          <View style={styles.section}>  
+            <Text style={styles.sectionTitle}>Estadísticas</Text>  
+            <View style={styles.statsContainer}>  
+              <View style={styles.statItem}>  
+                <Text style={styles.statValue}>{vehicles.length}</Text>  
+                <Text style={styles.statLabel}>Vehículos</Text>  
+              </View>  
+              <View style={styles.statDivider} />  
+              <View style={styles.statItem}>  
+                <Text style={styles.statValue}>{orders.length}</Text>  
+                <Text style={styles.statLabel}>Órdenes</Text>  
+              </View>  
+              <View style={styles.statDivider} />  
+              <View style={styles.statItem}>  
+                <Text style={styles.statValue}>  
+                  {formatCurrency(orders.reduce((sum, order) => sum + (order.costo || 0), 0))}  
+                </Text>  
+                <Text style={styles.statLabel}>Total Gastado</Text>  
+              </View>  
+            </View>  
+          </View>  
+    
+          <View style={styles.section}>  
+            <View style={styles.sectionHeader}>  
+              <Text style={styles.sectionTitle}>Vehículos ({vehicles.length})</Text>  
+              {userRole !== 'client' && (  
+                <TouchableOpacity   
+                  style={styles.addButton}  
+                  onPress={() => navigation.navigate("NewVehicle", { clientId: client.id })}  
+                >  
+                  <Feather name="plus" size={16} color="#1a73e8" />  
+                </TouchableOpacity>  
+              )}  
+            </View>  
+            {vehicles.length > 0 ? (  
+              vehicles.map((vehicle) => (  
+                <TouchableOpacity  
+                  key={vehicle.id}  
+                  style={styles.vehicleCard}  
+                  onPress={() => navigation.navigate("VehicleDetail", { vehicleId: vehicle.id })}  
+                >  
+                  <View style={styles.vehicleIcon}>  
+                    <Feather name="truck" size={20} color="#1a73e8" />  
+                  </View>  
+                  <View style={styles.vehicleInfo}>  
+                    <Text style={styles.vehicleName}>  
+                      {vehicle.marca} {vehicle.modelo}  
+                    </Text>  
+                    <Text style={styles.vehicleDetails}>  
+                      {vehicle.ano} • {vehicle.placa}  
+                    </Text>  
+                  </View>  
+                  <Feather name="chevron-right" size={20} color="#ccc" />  
+                </TouchableOpacity>  
+              ))  
+            ) : (  
+              <View style={styles.emptyState}>  
+                <Feather name="truck" size={32} color="#ccc" />  
+                <Text style={styles.emptyText}>No hay vehículos registrados</Text>  
+              </View>  
+            )}  
+          </View>  
+    
+          <View style={styles.section}>  
+            <View style={styles.sectionHeader}>  
+              <Text style={styles.sectionTitle}>Órdenes Recientes ({orders.length})</Text>  
+              {userRole !== 'client' && (  
+                <TouchableOpacity   
+                  style={styles.addButton}  
+                  onPress={() => navigation.navigate("NewOrder", { clientId: client.id })}  
+                >  
+                  <Feather name="plus" size={16} color="#1a73e8" />  
+                </TouchableOpacity>  
+              )}  
+            </View>  
+            {orders.length > 0 ? (  
+              orders.slice(0, 5).map((order) => (  
+                <TouchableOpacity  
+                  key={order.id}  
+                  style={styles.orderCard}  
+                  onPress={() => navigation.navigate("OrderDetail", { orderId: order.id })}  
+                >  
+                  <View style={styles.orderHeader}>  
+                    <Text style={styles.orderNumber}>Orden #{order.numero_orden}</Text>  
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.estado) }]}>  
+                      <Text style={styles.statusText}>{order.estado}</Text>  
+                    </View>  
+                  </View>  
+                  <Text style={styles.orderDescription} numberOfLines={2}>  
+                    {order.descripcion}  
+                  </Text>  
+                  <View style={styles.orderFooter}>  
+                    <Text style={styles.orderDate}>  
+                      {new Date(order.fecha_creacion).toLocaleDateString("es-ES")}  
+                    </Text>  
+                    <Text style={styles.orderAmount}>{formatCurrency(order.costo)}</Text>  
+                  </View>  
+                </TouchableOpacity>  
+              ))  
+            ) : (  
+              <View style={styles.emptyState}>  
+                <Feather name="file-text" size={32} color="#ccc" />  
+                <Text style={styles.emptyText}>No hay órdenes registradas</Text>  
+              </View>  
+            )}  
+              
+            {orders.length > 5 && (  
+              <TouchableOpacity   
+                style={styles.viewAllButton}  
+                onPress={() => navigation.navigate("ClientOrders", { clientId: client.id })}  
+              >  
+                <Text style={styles.viewAllText}>Ver todas las órdenes</Text>  
+                <Feather name="arrow-right" size={16} color="#1a73e8" />  
+              </TouchableOpacity>  
+            )}  
+          </View>  
+        </ScrollView>  
+    
+        {renderEditModal()}  
+      </View>  
+    )  
+  }  
+    
+  const styles = StyleSheet.create({  
+    container: {  
+      flex: 1,  
+      backgroundColor: "#f8f9fa",  
+    },  
+    loadingContainer: {  
+      flex: 1,  
+      justifyContent: "center",  
+      alignItems: "center",  
+      backgroundColor: "#f8f9fa",  
+    },  
+    loadingText: {  
+      marginTop: 10,  
+      fontSize: 16,  
+      color: "#666",  
+    },  
+    errorContainer: {  
+      flex: 1,  
+      justifyContent: "center",  
+      alignItems: "center",  
+      padding: 20,  
+    },  
+    errorText: {  
+      fontSize: 16,  
+      color: "#f44336",  
+      textAlign: "center",  
+      marginTop: 16,  
+      marginBottom: 20,  
+    },  
+    retryButton: {  
+      backgroundColor: "#1a73e8",  
+      paddingHorizontal: 20,  
+      paddingVertical: 10,  
+      borderRadius: 8,  
+    },  
+    retryButtonText: {  
+      color: "#fff",  
+      fontWeight: "bold",  
+    },  
+    header: {  
+      flexDirection: "row",  
+      alignItems: "center",  
+      justifyContent: "space-between",  
+      paddingHorizontal: 16,  
+      paddingVertical: 12,  
+      backgroundColor: "#fff",  
+      borderBottomWidth: 1,  
+      borderBottomColor: "#e1e4e8",  
+    },  
+    backButton: {  
+      padding: 8,  
+    },  
+    headerTitle: {  
+      fontSize: 18,  
+      fontWeight: "bold",  
+      color: "#333",  
+    },  
+    moreButton: {  
+      padding: 8,  
+    },  
+    clientHeader: {  
+      flexDirection: "row",  
+      alignItems: "center",  
+      padding: 16,  
+      backgroundColor: "#fff",  
+      borderBottomWidth: 1,  
+      borderBottomColor: "#e1e4e8",  
+    },  
+    clientAvatar: {  
+      width: 60,  
+      height: 60,  
+      borderRadius: 30,  
+      backgroundColor: "#1a73e8",  
+      justifyContent: "center",  
+      alignItems: "center",  
+      marginRight: 16,  
+    },  
+    clientInitials: {  
+      fontSize: 24,  
+      fontWeight: "bold",  
+      color: "#fff",  
+    },  
+    clientHeaderInfo: {  
+      flex: 1,  
+    },  
+    clientName: {  
+      fontSize: 18,  
+      fontWeight: "bold",  
+      color: "#333",  
+      marginBottom: 4,  
+    },  
+    clientContact: {  
+      flexDirection: "row",  
+      alignItems: "center",  
+      marginBottom: 2,  
+    },  
+    contactIcon: {  
+      marginRight: 6,  
+    },  
+    contactText: {  
+      fontSize: 14,  
+      color: "#666",  
+    },  
+    editButton: {  
+      width: 40,  
+      height: 40,  
+      borderRadius: 20,  
+      backgroundColor: "#f0f0f0",  
+      justifyContent: "center",  
+      alignItems: "center",  
+    },  
+    content: {  
+      flex: 1,  
+      padding: 16,  
+    },  
+    section: {  
+      backgroundColor: "#fff",  
+      borderRadius: 8,  
+      padding: 16,  
+      marginBottom: 16,  
+      shadowColor: "#000",  
+      shadowOffset: { width: 0, height: 1 },  
+      shadowOpacity: 0.1,  
+      shadowRadius: 2,  
+      elevation: 2,  
+    },  
+    sectionTitle: {  
+      fontSize: 18,  
+      fontWeight: "bold",  
+      color: "#333",  
+      marginBottom: 16,  
+    },  
+    sectionHeader: {  
+      flexDirection: "row",  
+      justifyContent: "space-between",  
+      alignItems: "center",  
+      marginBottom: 16,  
+    },  
+    addButton: {  
+      width: 32,  
+      height: 32,  
+      borderRadius: 16,  
+      backgroundColor: "#e8f0fe",  
+      justifyContent: "center",  
+      alignItems: "center",  
+    },  
+    infoGrid: {  
+      gap: 12,  
+    },  
+    infoItem: {  
+      flexDirection: "row",  
+      alignItems: "center",  
+      gap: 8,  
+    },  
+    infoLabel: {  
+      fontSize: 14,  
+      color: "#666",  
+      fontWeight: "500",  
+    },  
+    infoValue: {  
+      fontSize: 14,  
+      color: "#333",  
+      flex: 1,  
+    },  
+    statsContainer: {  
+      flexDirection: "row",  
+      justifyContent: "space-between",  
+      alignItems: "center",  
+    },  
+    statItem: {  
+      flex: 1,  
+      alignItems: "center",  
+    },  
+    statValue: {  
+      fontSize: 20,  
+      fontWeight: "bold",  
+      color: "#333",  
+      marginBottom: 4,  
+    },  
+    statLabel: {  
+      fontSize: 12,  
+      color: "#666",  
+    },  
+    statDivider: {  
+      width: 1,  
+      height: 30,  
+      backgroundColor: "#e1e4e8",  
+    },  
+    vehicleCard: {  
+      flexDirection: "row",  
+      alignItems: "center",  
+      paddingVertical: 12,  
+      borderBottomWidth: 1,  
+      borderBottomColor: "#f0f0f0",  
+    },  
+    vehicleIcon: {  
+      width: 40,  
+      height: 40,  
+      borderRadius: 20,  
+      backgroundColor: "#e8f0fe",  
+      justifyContent: "center",  
+      alignItems: "center",  
+      marginRight: 12,  
+    },  
+    vehicleInfo: {  
+      flex: 1,  
+    },  
+    vehicleName: {  
+      fontSize: 16,  
+      fontWeight: "bold",  
+      color: "#333",  
+      marginBottom: 2,  
+    },  
+    vehicleDetails: {  
+      fontSize: 14,  
+      color: "#666",  
+    },  
+    orderCard: {  
+      paddingVertical: 12,  
+      borderBottomWidth: 1,  
+      borderBottomColor: "#f0f0f0",  
+    },  
+    orderHeader: {  
+      flexDirection: "row",  
+      justifyContent: "space-between",  
+      alignItems: "center",  
+      marginBottom: 8,  
+    },  
+    orderNumber: {  
+      fontSize: 16,  
+      fontWeight: "bold",  
+      color: "#333",  
+    },  
+    statusBadge: {  
+      paddingHorizontal: 8,  
+      paddingVertical: 4,  
+      borderRadius: 12,  
+    },  
+    statusText: {  
+      color: "#fff",  
+      fontSize: 12,  
+      fontWeight: "bold",  
+    },  
+    orderDescription: {  
+      fontSize: 14,  
+      color: "#666",  
+      marginBottom: 8,  
+    },  
+    orderFooter: {  
+      flexDirection: "row",  
+      justifyContent: "space-between",  
+      alignItems: "center",  
+    },  
+    orderDate: {  
+      fontSize: 12,  
+      color: "#999",  
+    },  
+    orderAmount: {  
+      fontSize: 16,  
+      fontWeight: "bold",  
+      color: "#4caf50",  
+    },  
+    emptyState: {  
+      alignItems: "center",  
+      justifyContent: "center",  
+      padding: 20,  
+    },  
+    emptyText: {  
+      fontSize: 14,  
+      color: "#999",  
+      marginTop: 8,  
+    },  
+    viewAllButton: {  
+      flexDirection: "row",  
+      alignItems: "center",  
+      justifyContent: "center",  
+      paddingVertical: 12,  
+      marginTop: 8,  
+    },  
+    viewAllText: {  
+      fontSize: 14,  
+      color: "#1a73e8",  
+      fontWeight: "500",  
+      marginRight: 4,  
+    },  
+    modalContainer: {  
+      flex: 1,  
+      backgroundColor: "#fff",  
+    },  
+    modalHeader: {  
+      flexDirection: "row",  
+      justifyContent: "space-between",  
+      alignItems: "center",  
+      padding: 16,  
+      borderBottomWidth: 1,  
+      borderBottomColor: "#e1e4e8",  
+    },  
+    modalTitle: {  
+      fontSize: 20,  
+      fontWeight: "bold",  
+      color: "#333",  
+    },  
+    closeButton: {  
+      padding: 8,  
+    },  
+    modalContent: {  
+      flex: 1,  
+      padding: 16,  
+    },  
+    inputGroup: {  
+      marginBottom: 16,  
+    },  
+    inputLabel: {  
+      fontSize: 16,  
+      fontWeight: "500",  
+      color: "#333",  
+      marginBottom: 8,  
+    },  
+    input: {  
+      backgroundColor: "#f8f9fa",  
+      borderWidth: 1,  
+      borderColor: "#e1e4e8",  
+      borderRadius: 8,  
+      paddingHorizontal: 16,  
+      paddingVertical: 12,  
+      fontSize: 16,  
+      color: "#333",  
+    },  
+    radioGroup: {  
+      flexDirection: "row",  
+      gap: 16,  
+    },  
+    radioOption: {  
+      flexDirection: "row",  
+      alignItems: "center",  
+      paddingVertical: 8,  
+    },  
+    radioOptionSelected: {  
+      // No additional styling needed  
+    },  
+    radioCircle: {  
+      width: 20,  
+      height: 20,  
+      borderRadius: 10,  
+      borderWidth: 2,  
+      borderColor: "#e1e4e8",  
+      marginRight: 8,  
+    },  
+    radioCircleSelected: {  
+      borderColor: "#1a73e8",  
+      backgroundColor: "#1a73e8",  
+    },  
+    radioText: {  
+      fontSize: 16,  
+      color: "#333",  
+    },  
+    modalFooter: {  
+      flexDirection: "row",  
+      padding: 16,  
+      borderTopWidth: 1,  
+      borderTopColor: "#e1e4e8",  
+    },  
+    modalButton: {  
+      flex: 1,  
+      flexDirection: "row",  
+      justifyContent: "center",  
+      alignItems: "center",  
+      paddingVertical: 12,  
+      borderRadius: 8,  
+      marginHorizontal: 8,  
+      gap: 8,  
+    },  
+    cancelButton: {  
+      backgroundColor: "transparent",  
+      borderWidth: 1,  
+      borderColor: "#e1e4e8",  
+    },  
+    cancelButtonText: {  
+      fontSize: 16,  
+      fontWeight: "500",  
+      color: "#666",  
+    },  
+    saveButton: {  
+      backgroundColor: "#1a73e8",  
+    },  
+    saveButtonText: {  
+      fontSize: 16,  
+      fontWeight: "bold",  
+      color: "#fff",  
+    },  
+  })

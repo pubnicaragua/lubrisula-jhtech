@@ -1,653 +1,850 @@
-"use client"
-
-import { useState } from "react"
-import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  Modal,
-  FlatList,
-} from "react-native"
-import { Feather } from "@expo/vector-icons"
-
-// Componente para repuesto en la orden
-const OrderPartItem = ({ part, onRemove, onChangeQuantity }) => (
-  <View style={styles.partItem}>
-    <View style={styles.partInfo}>
-      <Text style={styles.partName}>{part.name}</Text>
-      <Text style={styles.partType}>{part.type}</Text>
-      <Text style={styles.partPrice}>L. {part.price.toFixed(2)} c/u</Text>
-    </View>
-    <View style={styles.quantityContainer}>
-      <TouchableOpacity
-        style={styles.quantityButton}
-        onPress={() => onChangeQuantity(part.id, Math.max(1, part.quantity - 1))}
-      >
-        <Feather name="minus" size={16} color="#666" />
-      </TouchableOpacity>
-      <Text style={styles.quantityText}>{part.quantity}</Text>
-      <TouchableOpacity style={styles.quantityButton} onPress={() => onChangeQuantity(part.id, part.quantity + 1)}>
-        <Feather name="plus" size={16} color="#666" />
-      </TouchableOpacity>
-    </View>
-    <TouchableOpacity style={styles.removeButton} onPress={() => onRemove(part.id)}>
-      <Feather name="x" size={20} color="#f44336" />
-    </TouchableOpacity>
-  </View>
-)
-
-// Componente para repuesto disponible
-const AvailablePartItem = ({ part, onAdd }) => (
-  <TouchableOpacity style={styles.availablePartItem} onPress={() => onAdd(part)}>
-    <View style={styles.availablePartInfo}>
-      <Text style={styles.availablePartName}>{part.name}</Text>
-      <View style={styles.availablePartDetails}>
-        <Text style={styles.availablePartType}>{part.type}</Text>
-        <Text style={styles.availablePartPrice}>L. {part.price.toFixed(2)}</Text>
-      </View>
-    </View>
-    <Feather name="plus" size={20} color="#1a73e8" />
-  </TouchableOpacity>
-)
-
-export default function OrderPartsScreen({ route, navigation }) {
-  // Obtener repuestos iniciales de los parámetros de navegación (si existen)
-  const { initialItems } = route.params || { initialItems: [] }
-
-  // Estados
-  const [searchQuery, setSearchQuery] = useState("")
-  const [showPartsModal, setShowPartsModal] = useState(false)
-  const [orderParts, setOrderParts] = useState(initialItems.map((item) => ({ ...item, quantity: 1 })))
-  const [supplier, setSupplier] = useState("")
-  const [notes, setNotes] = useState("")
-  const [showSupplierModal, setShowSupplierModal] = useState(false)
-
-  // Datos de ejemplo
-  const availableParts = [
-    { id: "1", name: "Filtro de aceite", type: "Original", price: 250.0, stock: 15 },
-    { id: "2", name: "Aceite de motor 5W-30", type: "Original", price: 180.0, stock: 28 },
-    { id: "3", name: "Pastillas de freno delanteras", type: "Original", price: 1200.0, stock: 8 },
-    { id: "4", name: "Bujías", type: "Genérico", price: 85.0, stock: 32 },
-    { id: "5", name: "Filtro de aire", type: "Genérico", price: 180.0, stock: 20 },
-    { id: "6", name: "Amortiguador trasero", type: "Original", price: 1850.0, stock: 6 },
-    { id: "7", name: "Líquido de frenos", type: "Original", price: 120.0, stock: 18 },
-  ]
-
-  const suppliers = [
-    { id: "1", name: "AutoPartes S.A." },
-    { id: "2", name: "Lubricantes Express" },
-    { id: "3", name: "Frenos Seguros" },
-    { id: "4", name: "ElectroAuto" },
-    { id: "5", name: "Suspensiones Pro" },
-  ]
-
-  // Función para agregar repuesto a la orden
-  const addPart = (part) => {
-    if (!orderParts.some((p) => p.id === part.id)) {
-      setOrderParts([...orderParts, { ...part, quantity: 1 }])
-    }
-    setShowPartsModal(false)
-  }
-
-  // Función para cambiar cantidad de repuesto
-  const changePartQuantity = (partId, quantity) => {
-    setOrderParts(orderParts.map((part) => (part.id === partId ? { ...part, quantity } : part)))
-  }
-
-  // Función para eliminar repuesto de la orden
-  const removePart = (partId) => {
-    setOrderParts(orderParts.filter((part) => part.id !== partId))
-  }
-
-  // Función para buscar repuestos
-  const searchParts = (text) => {
-    setSearchQuery(text)
-  }
-
-  // Filtrar repuestos disponibles según la búsqueda
-  const filteredParts = availableParts.filter(
-    (part) =>
-      part.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      part.type.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
-
-  // Calcular total de la orden
-  const orderTotal = orderParts.reduce((sum, part) => sum + part.price * part.quantity, 0)
-
-  // Función para validar el formulario
-  const validateForm = () => {
-    if (orderParts.length === 0) {
-      Alert.alert("Error", "Por favor agrega al menos un repuesto a la orden")
-      return false
-    }
-    if (!supplier) {
-      Alert.alert("Error", "Por favor selecciona un proveedor")
-      return false
-    }
-    return true
-  }
-
-  // Función para crear la orden
-  const createOrder = () => {
-    if (validateForm()) {
-      // Aquí iría la lógica para guardar la orden en la base de datos
-      Alert.alert("Éxito", "Orden de repuestos creada correctamente", [
-        {
-          text: "OK",
-          onPress: () => navigation.goBack(),
-        },
-      ])
-    }
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardAvoidingContainer}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Ordenar Repuestos</Text>
-          <View style={styles.placeholder} />
-        </View>
-
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.formSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Repuestos</Text>
-              <TouchableOpacity style={styles.addButton} onPress={() => setShowPartsModal(true)}>
-                <Feather name="plus" size={20} color="#1a73e8" />
-                <Text style={styles.addButtonText}>Agregar</Text>
-              </TouchableOpacity>
-            </View>
-
-            {orderParts.length === 0 ? (
-              <Text style={styles.emptyText}>No hay repuestos agregados</Text>
-            ) : (
-              orderParts.map((part) => (
-                <OrderPartItem key={part.id} part={part} onRemove={removePart} onChangeQuantity={changePartQuantity} />
-              ))
-            )}
-          </View>
-
-          <View style={styles.formSection}>
-            <Text style={styles.sectionTitle}>Información de la Orden</Text>
-
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Proveedor</Text>
-              <TouchableOpacity style={styles.selectorContainer} onPress={() => setShowSupplierModal(true)}>
-                <Feather name="truck" size={20} color="#666" style={styles.inputIcon} />
-                <Text style={[styles.selectorText, !supplier && styles.placeholderText]}>
-                  {supplier || "Seleccionar proveedor"}
-                </Text>
-                <Feather name="chevron-down" size={20} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Notas</Text>
-              <View style={styles.textAreaContainer}>
-                <TextInput
-                  style={styles.textArea}
-                  placeholder="Notas adicionales para la orden"
-                  value={notes}
-                  onChangeText={setNotes}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.formSection}>
-            <Text style={styles.sectionTitle}>Resumen</Text>
-
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Total de Repuestos:</Text>
-              <Text style={styles.summaryValue}>{orderParts.length}</Text>
-            </View>
-
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Total de Unidades:</Text>
-              <Text style={styles.summaryValue}>{orderParts.reduce((sum, part) => sum + part.quantity, 0)}</Text>
-            </View>
-
-            <View style={[styles.summaryItem, styles.totalItem]}>
-              <Text style={styles.totalLabel}>Total:</Text>
-              <Text style={styles.totalValue}>L. {orderTotal.toFixed(2)}</Text>
-            </View>
-          </View>
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.cancelButtonText}>Cancelar</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.saveButton} onPress={createOrder}>
-            <Text style={styles.saveButtonText}>Crear Orden</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-
-      {/* Modal para seleccionar repuestos */}
-      <Modal
-        visible={showPartsModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowPartsModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Repuestos</Text>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowPartsModal(false)}>
-                <Feather name="x" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.searchContainer}>
-              <Feather name="search" size={20} color="#666" style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Buscar repuesto..."
-                value={searchQuery}
-                onChangeText={searchParts}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity style={styles.clearButton} onPress={() => setSearchQuery("")}>
-                  <Feather name="x" size={20} color="#666" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <FlatList
-              data={filteredParts}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => <AvailablePartItem part={item} onAdd={addPart} />}
-              contentContainerStyle={styles.modalList}
-              ListEmptyComponent={<Text style={styles.emptyText}>No se encontraron repuestos</Text>}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal para seleccionar proveedor */}
-      <Modal
-        visible={showSupplierModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowSupplierModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Proveedor</Text>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowSupplierModal(false)}>
-                <Feather name="x" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <FlatList
-              data={suppliers}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => {
-                    setSupplier(item.name)
-                    setShowSupplierModal(false)
-                  }}
-                >
-                  <Text style={styles.modalItemText}>{item.name}</Text>
-                  {supplier === item.name && <Feather name="check" size={20} color="#1a73e8" />}
-                </TouchableOpacity>
-              )}
-              contentContainerStyle={styles.modalList}
-            />
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  )
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  keyboardAvoidingContainer: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  placeholder: {
-    width: 40,
-  },
-  content: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  formSection: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 16,
-  },
-  addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  addButtonText: {
-    color: "#1a73e8",
-    fontSize: 14,
-    fontWeight: "500",
-    marginLeft: 4,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#666",
-    fontStyle: "italic",
-    textAlign: "center",
-    marginVertical: 16,
-  },
-  partItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  partInfo: {
-    flex: 1,
-  },
-  partName: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
-    marginBottom: 2,
-  },
-  partType: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 2,
-  },
-  partPrice: {
-    fontSize: 12,
-    color: "#1a73e8",
-  },
-  quantityContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 8,
-  },
-  quantityButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#f0f0f0",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  quantityText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
-    width: 30,
-    textAlign: "center",
-  },
-  removeButton: {
-    padding: 8,
-  },
-  fieldContainer: {
-    marginBottom: 16,
-  },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
-    marginBottom: 8,
-  },
-  selectorContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "#f9f9f9",
-    height: 48,
-  },
-  inputIcon: {
-    padding: 12,
-  },
-  selectorText: {
-    flex: 1,
-    fontSize: 16,
-    color: "#333",
-  },
-  placeholderText: {
-    color: "#999",
-  },
-  textAreaContainer: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "#f9f9f9",
-  },
-  textArea: {
-    height: 100,
-    fontSize: 16,
-    padding: 12,
-  },
-  summaryItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: "#666",
-  },
-  summaryValue: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
-  },
-  totalItem: {
-    borderBottomWidth: 0,
-    marginTop: 8,
-    paddingTop: 8,
-  },
-  totalLabel: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  totalValue: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#1a73e8",
-  },
-  footer: {
-    flexDirection: "row",
-    padding: 16,
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#eee",
-    justifyContent: "space-between",
-  },
-  cancelButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#1a73e8",
-    borderRadius: 8,
-    paddingVertical: 12,
-    marginRight: 8,
-    alignItems: "center",
-  },
-  cancelButtonText: {
-    color: "#1a73e8",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  saveButton: {
-    flex: 1,
-    backgroundColor: "#1a73e8",
-    borderRadius: 8,
-    paddingVertical: 12,
-    marginLeft: 8,
-    alignItems: "center",
-  },
-  saveButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    width: "90%",
-    maxHeight: "80%",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f0f0f0",
-    borderRadius: 8,
-    margin: 16,
-    paddingHorizontal: 12,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: 40,
-    fontSize: 16,
-  },
-  clearButton: {
-    padding: 8,
-  },
-  modalList: {
-    padding: 16,
-    paddingTop: 0,
-  },
-  modalItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  modalItemText: {
-    fontSize: 16,
-    color: "#333",
-  },
-  availablePartItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  availablePartInfo: {
-    flex: 1,
-  },
-  availablePartName: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
-    marginBottom: 4,
-  },
-  availablePartDetails: {
-    flexDirection: "row",
-  },
-  availablePartType: {
-    fontSize: 12,
-    color: "#666",
-    marginRight: 8,
-  },
-  availablePartPrice: {
-    fontSize: 12,
-    color: "#1a73e8",
-  },
+"use client"  
+  
+import { useState, useCallback, useEffect } from "react"  
+import {  
+  StyleSheet,  
+  View,  
+  Text,  
+  TouchableOpacity,  
+  ScrollView,  
+  ActivityIndicator,  
+  Alert,  
+  Modal,  
+  FlatList,  
+  TextInput,  
+  SafeAreaView,  
+  RefreshControl,  
+} from "react-native"  
+import { Feather } from "@expo/vector-icons"  
+import { useFocusEffect } from "@react-navigation/native"  
+import { useAuth } from "../context/auth-context"  
+// Usar los servicios que realmente existen  
+import * as orderService from "../services/order-service"  
+import * as inventoryService from "../services/inventory-service"  
+  
+// Tipos TypeScript para resolver errores  
+interface OrderPartsScreenProps {  
+  route: any  
+  navigation: any  
+}  
+  
+interface OrderType {  
+  id: string  
+  number: string  
+  description: string  
+  status: string  
+  clientId: string  
+  vehicleId: string  
+  total?: number  
+  dates: {  
+    created: string  
+    updated?: string  
+  }  
+}  
+  
+interface OrderPartType {  
+  id: string  
+  orderId: string  
+  inventoryItemId: string  
+  name: string  
+  sku: string  
+  quantity: number  
+  unitPrice: number  
+  total: number  
+}  
+  
+interface InventoryItemType {  
+  id: string  
+  name: string  
+  sku: string  
+  description?: string  
+  stock: number  
+  priceUSD?: number  
+  category?: string  
+}  
+  
+export default function OrderPartsScreen({ route, navigation }: OrderPartsScreenProps) {  
+  const { orderId } = route.params  
+  const { user } = useAuth()  
+    
+  const [order, setOrder] = useState<OrderType | null>(null)  
+  const [orderParts, setOrderParts] = useState<OrderPartType[]>([])  
+  const [inventory, setInventory] = useState<InventoryItemType[]>([])  
+  const [loading, setLoading] = useState(true)  
+  const [saving, setSaving] = useState(false)  
+  const [refreshing, setRefreshing] = useState(false)  
+  const [error, setError] = useState<string | null>(null)  
+  
+  // Estados del modal  
+  const [showAddPartModal, setShowAddPartModal] = useState(false)  
+  const [searchQuery, setSearchQuery] = useState("")  
+  const [filteredInventory, setFilteredInventory] = useState<InventoryItemType[]>([])  
+  
+  // Cargar datos de la orden y repuestos  
+  const loadOrderData = useCallback(async () => {  
+    try {  
+      setLoading(true)  
+      setRefreshing(true)  
+      setError(null)  
+  
+      if (!user?.id) return  
+  
+      // Verificar permisos básicos  
+      if (user.role === 'client') {  
+        setError("No tienes permisos para gestionar repuestos de órdenes")  
+        return  
+      }  
+  
+      // Cargar datos de la orden usando el servicio existente  
+      const orderData = await orderService.getOrderById(orderId)  
+      if (!orderData) {  
+        setError("Orden no encontrada")  
+        return  
+      }  
+      setOrder(orderData)  
+  
+      // Cargar repuestos de la orden  
+      const parts = await orderService.getOrderParts(orderId)  
+      setOrderParts(parts)  
+  
+      // Cargar inventario disponible usando el servicio existente  
+      const inventoryItems = await inventoryService.getInventoryItems()  
+      const availableItems = inventoryItems.filter((item: InventoryItemType) => item.stock > 0)  
+      setInventory(availableItems)  
+      setFilteredInventory(availableItems)  
+  
+    } catch (error) {  
+      console.error("Error loading order data:", error)  
+      setError("No se pudieron cargar los datos de la orden")  
+    } finally {  
+      setLoading(false)  
+      setRefreshing(false)  
+    }  
+  }, [orderId, user])  
+  
+  useFocusEffect(  
+    useCallback(() => {  
+      loadOrderData()  
+    }, [loadOrderData])  
+  )  
+  
+  // Filtrar inventario  
+  const filterInventory = (query: string) => {  
+    setSearchQuery(query)  
+    if (!query.trim()) {  
+      setFilteredInventory(inventory)  
+    } else {  
+      const filtered = inventory.filter((item: InventoryItemType) =>  
+        item.name.toLowerCase().includes(query.toLowerCase()) ||  
+        item.sku.toLowerCase().includes(query.toLowerCase()) ||  
+        (item.category && item.category.toLowerCase().includes(query.toLowerCase()))  
+      )  
+      setFilteredInventory(filtered)  
+    }  
+  }  
+  
+  // Agregar repuesto a la orden  
+  const addPartToOrder = async (inventoryItem: InventoryItemType) => {  
+    try {  
+      setSaving(true)  
+        
+      const quantity = 1  
+      const unitPrice = inventoryItem.priceUSD || 0  
+        
+      // Verificar stock disponible  
+      if (quantity > inventoryItem.stock) {  
+        Alert.alert("Error", "No hay suficiente stock disponible")  
+        return  
+      }  
+  
+      // Agregar repuesto a la orden  
+      await orderService.addPartToOrder(orderId, {  
+        inventoryItemId: inventoryItem.id,  
+        quantity: quantity,  
+        unitPrice: unitPrice,  
+      })  
+  
+      // Actualizar inventario  
+      await inventoryService.updateInventoryItem(inventoryItem.id, {  
+        stock: inventoryItem.stock - quantity,  
+      })  
+  
+      // Recargar datos  
+      loadOrderData()  
+      setShowAddPartModal(false)  
+        
+      Alert.alert("Éxito", "Repuesto agregado correctamente")  
+  
+    } catch (error) {  
+      console.error("Error adding part to order:", error)  
+      Alert.alert("Error", "No se pudo agregar el repuesto")  
+    } finally {  
+      setSaving(false)  
+    }  
+  }  
+  
+  // Actualizar cantidad de repuesto  
+  const updatePartQuantity = async (partId: string, newQuantity: number) => {  
+    if (newQuantity < 1) return  
+  
+    try {  
+      setSaving(true)  
+  
+      const part = orderParts.find(p => p.id === partId)  
+      if (!part) return  
+  
+      const quantityDiff = newQuantity - part.quantity  
+        
+      // Verificar stock disponible si se aumenta la cantidad  
+      if (quantityDiff > 0) {  
+        const inventoryItem = inventory.find(item => item.id === part.inventoryItemId)  
+        if (!inventoryItem || quantityDiff > inventoryItem.stock) {  
+          Alert.alert("Error", "No hay suficiente stock disponible")  
+          return  
+        }  
+      }  
+  
+      // Actualizar repuesto en la orden  
+      await orderService.updateOrderPart(partId, {  
+        quantity: newQuantity,  
+        total: newQuantity * part.unitPrice,  
+      })  
+  
+      // Actualizar inventario si hay cambio en cantidad  
+      if (quantityDiff !== 0) {  
+        const inventoryItem = inventory.find(item => item.id === part.inventoryItemId)  
+        if (inventoryItem) {  
+          await inventoryService.updateInventoryItem(inventoryItem.id, {  
+            stock: inventoryItem.stock - quantityDiff,  
+          })  
+        }  
+      }  
+  
+      // Recargar datos  
+      loadOrderData()  
+  
+    } catch (error) {  
+      console.error("Error updating part quantity:", error)  
+      Alert.alert("Error", "No se pudo actualizar la cantidad")  
+    } finally {  
+      setSaving(false)  
+    }  
+  }  
+  
+  // Remover repuesto de la orden  
+  const removePartFromOrder = async (partId: string) => {  
+    Alert.alert(  
+      "Confirmar",  
+      "¿Estás seguro de que quieres remover este repuesto?",  
+      [  
+        { text: "Cancelar", style: "cancel" },  
+        {  
+          text: "Remover",  
+          style: "destructive",  
+          onPress: async () => {  
+            try {  
+              setSaving(true)  
+  
+              const part = orderParts.find(p => p.id === partId)  
+              if (!part) return  
+  
+              // Remover repuesto de la orden  
+              await orderService.removePartFromOrder(partId)  
+  
+              // Devolver stock al inventario  
+              const inventoryItem = inventory.find(item => item.id === part.inventoryItemId)  
+              if (inventoryItem) {  
+                await inventoryService.updateInventoryItem(inventoryItem.id, {  
+                  stock: inventoryItem.stock + part.quantity,  
+                })  
+              }  
+  
+              // Recargar datos  
+              loadOrderData()  
+                
+              Alert.alert("Éxito", "Repuesto removido correctamente")  
+  
+            } catch (error) {  
+              console.error("Error removing part from order:", error)  
+              Alert.alert("Error", "No se pudo remover el repuesto")  
+            } finally {  
+              setSaving(false)  
+            }  
+          },  
+        },  
+      ]  
+    )  
+  }  
+  
+  // Calcular total  
+  const calculateTotal = () => {  
+    return orderParts.reduce((sum, part) => sum + part.total, 0)  
+  }  
+  
+  // Renderizar item de repuesto en la orden  
+  const renderOrderPartItem = ({ item }: { item: OrderPartType }) => (  
+    <View style={styles.partCard}>  
+      <View style={styles.partHeader}>  
+        <View style={styles.partInfo}>  
+          <Text style={styles.partName}>{item.name}</Text>  
+          <Text style={styles.partCode}>Código: {item.sku}</Text>  
+        </View>  
+        <TouchableOpacity  
+          style={styles.removeButton}  
+          onPress={() => removePartFromOrder(item.id)}  
+          disabled={saving}  
+        >  
+          <Feather name="trash-2" size={20} color="#e53935" />  
+        </TouchableOpacity>  
+      </View>  
+  
+      <View style={styles.partDetails}>  
+        <View style={styles.quantityContainer}>  
+          <Text style={styles.quantityLabel}>Cantidad:</Text>  
+          <View style={styles.quantityControls}>  
+            <TouchableOpacity  
+              style={styles.quantityButton}  
+              onPress={() => updatePartQuantity(item.id, item.quantity - 1)}  
+              disabled={saving || item.quantity <= 1}  
+            >  
+              <Feather name="minus" size={16} color="#666" />  
+            </TouchableOpacity>  
+              
+            <Text style={styles.quantityText}>{item.quantity}</Text>  
+              
+            <TouchableOpacity  
+              style={styles.quantityButton}  
+              onPress={() => updatePartQuantity(item.id, item.quantity + 1)}  
+              disabled={saving}  
+            >  
+              <Feather name="plus" size={16} color="#666" />  
+            </TouchableOpacity>  
+          </View>  
+        </View>  
+  
+        <View style={styles.priceContainer}>  
+          <Text style={styles.priceLabel}>Precio unitario:</Text>  
+          <Text style={styles.priceValue}>${item.unitPrice.toFixed(2)}</Text>  
+        </View>  
+  
+        <View style={styles.subtotalContainer}>  
+          <Text style={styles.subtotalLabel}>Subtotal:</Text>  
+          <Text style={styles.subtotalValue}>${item.total.toFixed(2)}</Text>  
+        </View>  
+      </View>  
+    </View>  
+  )  
+  
+  // Renderizar item de inventario disponible  
+  const renderInventoryItem = ({ item }: { item: InventoryItemType }) => (  
+    <TouchableOpacity  
+      style={styles.inventoryItem}  
+      onPress={() => addPartToOrder(item)}  
+    >  
+      <View style={styles.inventoryItemInfo}>  
+        <Text style={styles.inventoryItemName}>{item.name}</Text>  
+        <Text style={styles.inventoryItemCode}>Código: {item.sku}</Text>  
+        <View style={styles.inventoryItemDetails}>  
+          <Text style={styles.inventoryItemCategory}>{item.category}</Text>  
+          <Text style={styles.inventoryItemStock}>  
+            Stock: <Text style={item.stock <= 5 ? styles.lowStock : styles.normalStock}>  
+              {item.stock}  
+            </Text>  
+          </Text>  
+        </View>  
+      </View>  
+      <View style={styles.inventoryItemPrice}>  
+        <Text style={styles.priceText}>${(item.priceUSD || 0).toFixed(2)}</Text>  
+        <Feather name="plus-circle" size={20} color="#1a73e8" />  
+      </View>  
+    </TouchableOpacity>  
+  )  
+  
+  // Renderizar modal de agregar repuesto  
+  const renderAddPartModal = () => (  
+    <Modal  
+      visible={showAddPartModal}  
+      animationType="slide"  
+      transparent={true}  
+      onRequestClose={() => setShowAddPartModal(false)}  
+    >  
+      <View style={styles.modalOverlay}>  
+        <View style={styles.modalContainer}>  
+          <View style={styles.modalHeader}>  
+            <Text style={styles.modalTitle}>Agregar Repuesto</Text>  
+            <TouchableOpacity onPress={() => setShowAddPartModal(false)}>  
+              <Feather name="x" size={24} color="#333" />  
+            </TouchableOpacity>  
+          </View>  
+  
+          <View style={styles.searchContainer}>  
+            <Feather name="search" size={20} color="#666" />  
+            <TextInput  
+              style={styles.searchInput}  
+              placeholder="Buscar repuesto..."  
+              value={searchQuery}  
+              onChangeText={filterInventory}  
+            />  
+          </View>  
+  
+          <FlatList  
+            data={filteredInventory}  
+            keyExtractor={(item) => item.id}  
+            renderItem={renderInventoryItem}  
+            ListEmptyComponent={  
+              <View style={styles.emptyList}>  
+                <Text style={styles.emptyListText}>No se encontraron repuestos</Text>  
+              </View>  
+            }  
+            style={styles.inventoryList}  
+          />  
+        </View>  
+      </View>  
+    </Modal>  
+  )  
+  
+  if (loading) {  
+    return (  
+      <View style={styles.loadingContainer}>  
+        <ActivityIndicator size="large" color="#1a73e8" />  
+        <Text style={styles.loadingText}>Cargando repuestos...</Text>  
+      </View>  
+    )  
+  }  
+  
+  if (error) {  
+    return (  
+      <View style={styles.errorContainer}>  
+        <Feather name="alert-circle" size={64} color="#f44336" />  
+        <Text style={styles.errorText}>{error}</Text>  
+        <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>  
+          <Text style={styles.retryButtonText}>Reintentar</Text          <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>  
+          <Text style={styles.retryButtonText}>Reintentar</Text>  
+        </TouchableOpacity>  
+      </View>  
+    )  
+  }  
+  
+  return (  
+    <SafeAreaView style={styles.container}>  
+      <View style={styles.header}>  
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
+          <Feather name="arrow-left" size={24} color="#333" />  
+        </TouchableOpacity>  
+        <Text style={styles.headerTitle}>Repuestos de la Orden</Text>  
+        <TouchableOpacity   
+          style={styles.addButton}  
+          onPress={() => setShowAddPartModal(true)}  
+        >  
+          <Feather name="plus" size={24} color="#1a73e8" />  
+        </TouchableOpacity>  
+      </View>  
+  
+      {order && (  
+        <View style={styles.orderInfo}>  
+          <Text style={styles.orderNumber}>Orden #{order.number}</Text>  
+          <Text style={styles.orderDescription}>{order.description}</Text>  
+        </View>  
+      )}  
+  
+      <ScrollView   
+        style={styles.content}  
+        refreshControl={  
+          <RefreshControl refreshing={refreshing} onRefresh={loadOrderData} />  
+        }  
+      >  
+        {/* Lista de repuestos en la orden */}  
+        <View style={styles.section}>  
+          <Text style={styles.sectionTitle}>Repuestos en la Orden</Text>  
+            
+          {orderParts.length > 0 ? (  
+            <FlatList  
+              data={orderParts}  
+              keyExtractor={(item) => item.id}  
+              renderItem={renderOrderPartItem}  
+              scrollEnabled={false}  
+            />  
+          ) : (  
+            <View style={styles.emptyState}>  
+              <Feather name="package" size={48} color="#ccc" />  
+              <Text style={styles.emptyStateText}>No hay repuestos agregados</Text>  
+            </View>  
+          )}  
+        </View>  
+  
+        {/* Resumen de totales */}  
+        <View style={styles.totalsSection}>  
+          <Text style={styles.sectionTitle}>Resumen</Text>  
+            
+          <View style={styles.totalRow}>  
+            <Text style={styles.totalLabel}>Total de repuestos:</Text>  
+            <Text style={styles.totalValue}>{orderParts.length}</Text>  
+          </View>  
+            
+          <View style={styles.totalRow}>  
+            <Text style={styles.totalLabel}>Cantidad total:</Text>  
+            <Text style={styles.totalValue}>  
+              {orderParts.reduce((sum, part) => sum + part.quantity, 0)} unidades  
+            </Text>  
+          </View>  
+            
+          <View style={[styles.totalRow, styles.grandTotalRow]}>  
+            <Text style={styles.grandTotalLabel}>TOTAL:</Text>  
+            <Text style={styles.grandTotalValue}>${calculateTotal().toFixed(2)}</Text>  
+          </View>  
+        </View>  
+      </ScrollView>  
+  
+      {renderAddPartModal()}  
+    </SafeAreaView>  
+  )  
+}  
+  
+const styles = StyleSheet.create({  
+  container: {  
+    flex: 1,  
+    backgroundColor: "#f8f9fa",  
+  },  
+  loadingContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    backgroundColor: "#f8f9fa",  
+  },  
+  loadingText: {  
+    marginTop: 10,  
+    fontSize: 16,  
+    color: "#666",  
+  },  
+  errorContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    padding: 20,  
+  },  
+  errorText: {  
+    fontSize: 16,  
+    color: "#f44336",  
+    textAlign: "center",  
+    marginTop: 16,  
+    marginBottom: 20,  
+  },  
+  retryButton: {  
+    backgroundColor: "#1a73e8",  
+    paddingHorizontal: 20,  
+    paddingVertical: 10,  
+    borderRadius: 8,  
+  },  
+  retryButtonText: {  
+    color: "#fff",  
+    fontWeight: "bold",  
+  },  
+  header: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    justifyContent: "space-between",  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    backgroundColor: "#fff",  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  backButton: {  
+    padding: 8,  
+  },  
+  headerTitle: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+    flex: 1,  
+    textAlign: "center",  
+  },  
+  addButton: {  
+    padding: 8,  
+  },  
+  orderInfo: {  
+    backgroundColor: "#fff",  
+    padding: 16,  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  orderNumber: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 4,  
+  },  
+  orderDescription: {  
+    fontSize: 14,  
+    color: "#666",  
+  },  
+  content: {  
+    flex: 1,  
+    padding: 16,  
+  },  
+  section: {  
+    backgroundColor: "#fff",  
+    borderRadius: 8,  
+    padding: 16,  
+    marginBottom: 16,  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 1 },  
+    shadowOpacity: 0.1,  
+    shadowRadius: 2,  
+    elevation: 2,  
+  },  
+  sectionTitle: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 16,  
+  },  
+  partCard: {  
+    backgroundColor: "#f8f9fa",  
+    borderRadius: 8,  
+    padding: 12,  
+    marginBottom: 8,  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  partHeader: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+    marginBottom: 8,  
+  },  
+  partInfo: {  
+    flex: 1,  
+  },  
+  partName: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 2,  
+  },  
+  partCode: {  
+    fontSize: 12,  
+    color: "#666",  
+  },  
+  removeButton: {  
+    padding: 4,  
+  },  
+  partDetails: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+  },  
+  quantityContainer: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+  },  
+  quantityLabel: {  
+    fontSize: 14,  
+    color: "#666",  
+    marginRight: 8,  
+  },  
+  quantityControls: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+  },  
+  quantityButton: {  
+    width: 32,  
+    height: 32,  
+    borderRadius: 16,  
+    backgroundColor: "#fff",  
+    justifyContent: "center",  
+    alignItems: "center",  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  quantityText: {  
+    fontSize: 16,  
+    fontWeight: "500",  
+    color: "#333",  
+    marginHorizontal: 12,  
+    minWidth: 20,  
+    textAlign: "center",  
+  },  
+  priceContainer: {  
+    alignItems: "flex-end",  
+  },  
+  priceLabel: {  
+    fontSize: 12,  
+    color: "#666",  
+  },  
+  priceValue: {  
+    fontSize: 14,  
+    fontWeight: "bold",  
+    color: "#333",  
+  },  
+  subtotalContainer: {  
+    alignItems: "flex-end",  
+  },  
+  subtotalLabel: {  
+    fontSize: 12,  
+    color: "#666",  
+  },  
+  subtotalValue: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#1a73e8",  
+  },  
+  emptyState: {  
+    alignItems: "center",  
+    paddingVertical: 40,  
+  },  
+  emptyStateText: {  
+    fontSize: 16,  
+    color: "#999",  
+    marginTop: 12,  
+  },  
+  totalsSection: {  
+    backgroundColor: "#fff",  
+    borderRadius: 8,  
+    padding: 16,  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 1 },  
+    shadowOpacity: 0.1,  
+    shadowRadius: 2,  
+    elevation: 2,  
+  },  
+  totalRow: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+    paddingVertical: 8,  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#f0f0f0",  
+  },  
+  totalLabel: {  
+    fontSize: 14,  
+    color: "#666",  
+  },  
+  totalValue: {  
+    fontSize: 14,  
+    fontWeight: "500",  
+    color: "#333",  
+  },  
+  grandTotalRow: {  
+    borderBottomWidth: 0,  
+    borderTopWidth: 1,  
+    borderTopColor: "#e1e4e8",  
+    paddingTop: 12,  
+    marginTop: 8,  
+  },  
+  grandTotalLabel: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#333",  
+  },  
+  grandTotalValue: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#1a73e8",  
+  },  
+  modalOverlay: {  
+    flex: 1,  
+    backgroundColor: "rgba(0, 0, 0, 0.5)",  
+    justifyContent: "center",  
+    alignItems: "center",  
+  },  
+  modalContainer: {  
+    backgroundColor: "#fff",  
+    borderRadius: 12,  
+    padding: 20,  
+    margin: 20,  
+    maxHeight: "80%",  
+    width: "90%",  
+  },  
+  modalHeader: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+    marginBottom: 16,  
+  },  
+  modalTitle: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+  },  
+  searchContainer: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    backgroundColor: "#f8f9fa",  
+    borderRadius: 8,  
+    paddingHorizontal: 12,  
+    marginBottom: 16,  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  searchInput: {  
+    flex: 1,  
+    paddingVertical: 12,  
+    fontSize: 16,  
+    color: "#333",  
+    marginLeft: 8,  
+  },  
+  inventoryList: {  
+    maxHeight: 400,  
+  },  
+  inventoryItem: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    paddingVertical: 12,  
+    paddingHorizontal: 16,  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#f0f0f0",  
+  },  
+  inventoryItemInfo: {  
+    flex: 1,  
+  },  
+  inventoryItemName: {  
+    fontSize: 16,  
+    fontWeight: "500",  
+    color: "#333",  
+    marginBottom: 4,  
+  },  
+  inventoryItemCode: {  
+    fontSize: 12,  
+    color: "#666",  
+    marginBottom: 4,  
+  },  
+  inventoryItemDetails: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+  },  
+  inventoryItemCategory: {  
+    fontSize: 12,  
+    color: "#999",  
+  },  
+  inventoryItemStock: {  
+    fontSize: 12,  
+    color: "#4caf50",  
+  },  
+  lowStock: {  
+    color: "#e53935",  
+  },  
+  normalStock: {  
+    color: "#4caf50",  
+  },  
+  inventoryItemPrice: {  
+    alignItems: "flex-end",  
+    marginLeft: 12,  
+  },  
+  priceText: {  
+    fontSize: 14,  
+    fontWeight: "bold",  
+    color: "#1a73e8",  
+    marginBottom: 4,  
+  },  
+  emptyList: {  
+    padding: 40,  
+    alignItems: "center",  
+  },  
+  emptyListText: {  
+    fontSize: 16,  
+    color: "#999",  
+    textAlign: "center",  
+  },  
 })
-

@@ -1,324 +1,318 @@
-"use client"
-
-import { useState } from "react"
-import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-} from "react-native"
-import { Feather } from "@expo/vector-icons"
-
-// Componente para campo de formulario
-const FormField = ({
-  label,
-  icon,
-  placeholder,
-  value,
-  onChangeText,
-  keyboardType = "default",
-  secureTextEntry = false,
-}) => (
-  <View style={styles.fieldContainer}>
-    <Text style={styles.fieldLabel}>{label}</Text>
-    <View style={styles.inputContainer}>
-      <Feather name={icon} size={20} color="#666" style={styles.inputIcon} />
-      <TextInput
-        style={styles.input}
-        placeholder={placeholder}
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType}
-        secureTextEntry={secureTextEntry}
-      />
-    </View>
-  </View>
-)
-
-export default function NewClientScreen({ navigation }) {
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
-  const [phone, setPhone] = useState("")
-  const [address, setAddress] = useState("")
-  const [city, setCity] = useState("")
-  const [notes, setNotes] = useState("")
-
-  // Función para validar el formulario
-  const validateForm = () => {
-    if (!name.trim()) {
-      Alert.alert("Error", "Por favor ingresa el nombre del cliente")
-      return false
-    }
-    if (!phone.trim()) {
-      Alert.alert("Error", "Por favor ingresa el teléfono del cliente")
-      return false
-    }
-    return true
-  }
-
-  // Función para guardar el cliente
-  const saveClient = () => {
-    if (validateForm()) {
-      const saveClientAsync = async () => {
-        try {
-          // Importar servicio de cliente
-          const clientService = await import("../services/client-service");
-          
-          // Crear nuevo cliente
-          const newClient = await clientService.createClient({
-            name,
-            email,
-            phone,
-            address,
-            city,
-            notes,
-          });
-          
-          if (newClient) {
-            Alert.alert("Éxito", "Cliente guardado correctamente", [
-              {
-                text: "OK",
-                onPress: () => navigation.goBack(),
-              },
-            ]);
-          } else {
-            Alert.alert("Error", "No se pudo guardar el cliente");
-          }
-        } catch (error) {
-          console.error("Error al guardar cliente:", error);
-          Alert.alert("Error", "No se pudo guardar el cliente");
-        }
-      };
-      
-      saveClientAsync();
-    }
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardAvoidingContainer}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Nuevo Cliente</Text>
-          <View style={styles.placeholder} />
-        </View>
-
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.formSection}>
-            <Text style={styles.sectionTitle}>Información Personal</Text>
-
-            <FormField
-              label="Nombre Completo"
-              icon="user"
-              placeholder="Nombre del cliente"
-              value={name}
-              onChangeText={setName}
-            />
-
-            <FormField
-              label="Correo Electrónico"
-              icon="mail"
-              placeholder="correo@ejemplo.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-            />
-
-            <FormField
-              label="Teléfono"
-              icon="phone"
-              placeholder="+504 9876-5432"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-            />
-          </View>
-
-          <View style={styles.formSection}>
-            <Text style={styles.sectionTitle}>Dirección</Text>
-
-            <FormField
-              label="Dirección"
-              icon="map-pin"
-              placeholder="Calle, número, colonia"
-              value={address}
-              onChangeText={setAddress}
-            />
-
-            <FormField label="Ciudad" icon="home" placeholder="Ciudad" value={city} onChangeText={setCity} />
-          </View>
-
-          <View style={styles.formSection}>
-            <Text style={styles.sectionTitle}>Notas Adicionales</Text>
-
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Notas</Text>
-              <View style={styles.textAreaContainer}>
-                <TextInput
-                  style={styles.textArea}
-                  placeholder="Información adicional sobre el cliente"
-                  value={notes}
-                  onChangeText={setNotes}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.cancelButtonText}>Cancelar</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.saveButton} onPress={saveClient}>
-            <Text style={styles.saveButtonText}>Guardar</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  )
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  keyboardAvoidingContainer: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  placeholder: {
-    width: 40,
-  },
-  content: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  formSection: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 16,
-  },
-  fieldContainer: {
-    marginBottom: 16,
-  },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
-    marginBottom: 8,
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "#f9f9f9",
-  },
-  inputIcon: {
-    padding: 12,
-  },
-  input: {
-    flex: 1,
-    height: 48,
-    fontSize: 16,
-  },
-  textAreaContainer: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "#f9f9f9",
-  },
-  textArea: {
-    height: 100,
-    fontSize: 16,
-    padding: 12,
-  },
-  footer: {
-    flexDirection: "row",
-    padding: 16,
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#eee",
-    justifyContent: "space-between",
-  },
-  cancelButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#1a73e8",
-    borderRadius: 8,
-    paddingVertical: 12,
-    marginRight: 8,
-    alignItems: "center",
-  },
-  cancelButtonText: {
-    color: "#1a73e8",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  saveButton: {
-    flex: 1,
-    backgroundColor: "#1a73e8",
-    borderRadius: 8,
-    paddingVertical: 12,
-    marginLeft: 8,
-    alignItems: "center",
-  },
-  saveButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
+"use client"  
+  
+import { useState } from "react"  
+import {  
+  View,  
+  Text,  
+  TextInput,  
+  TouchableOpacity,  
+  StyleSheet,  
+  ScrollView,  
+  Alert,  
+  ActivityIndicator,  
+} from "react-native"  
+import { Feather } from "@expo/vector-icons"  
+import { useAuth } from "../context/auth-context"  
+import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
+  
+export default function NewClientScreen({ navigation }) {  
+  const { user } = useAuth()  
+  const [loading, setLoading] = useState(false)  
+  const [formData, setFormData] = useState<Partial<ClienteType>>({  
+    name: "",  
+    email: "",  
+    phone: "",  
+    company: "",  
+    client_type: "individual",  
+    status: "Activo",  
+  })  
+  
+  const [errors, setErrors] = useState<Record<string, string>>({})  
+  
+  const validateForm = () => {  
+    const newErrors: Record<string, string> = {}  
+  
+    if (!formData.name?.trim()) {  
+      newErrors.name = "El nombre es requerido"  
+    }  
+  
+    if (!formData.email?.trim()) {  
+      newErrors.email = "El email es requerido"  
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {  
+      newErrors.email = "El email no es válido"  
+    }  
+  
+    if (!formData.phone?.trim()) {  
+      newErrors.phone = "El teléfono es requerido"  
+    }  
+  
+    setErrors(newErrors)  
+    return Object.keys(newErrors).length === 0  
+  }  
+  
+  const handleSave = async () => {  
+    if (!validateForm()) return  
+  
+    try {  
+      setLoading(true)  
+        
+      const newClient = await CLIENTS_SERVICES.ADD_NEW_CLIENTE(formData as ClienteType)  
+        
+      Alert.alert(  
+        "Éxito",  
+        "Cliente creado correctamente",  
+        [  
+          {  
+            text: "OK",  
+            onPress: () => navigation.goBack()  
+          }  
+        ]  
+      )  
+    } catch (error) {  
+      console.error("Error creating client:", error)  
+      Alert.alert("Error", "No se pudo crear el cliente")  
+    } finally {  
+      setLoading(false)  
+    }  
+  }  
+  
+  const updateFormData = (field: keyof ClienteType, value: string) => {  
+    setFormData(prev => ({ ...prev, [field]: value }))  
+    if (errors[field]) {  
+      setErrors(prev => ({ ...prev, [field]: "" }))  
+    }  
+  }  
+  
+  return (  
+    <ScrollView style={styles.container}>  
+      <View style={styles.header}>  
+        <Text style={styles.title}>Nuevo Cliente</Text>  
+        <Text style={styles.subtitle}>Ingresa la información del cliente</Text>  
+      </View>  
+  
+      <View style={styles.form}>  
+        <View style={styles.inputGroup}>  
+          <Text style={styles.label}>Nombre *</Text>  
+          <TextInput  
+            style={[styles.input, errors.name && styles.inputError]}  
+            value={formData.name}  
+            onChangeText={(value) => updateFormData('name', value)}  
+            placeholder="Nombre completo del cliente"  
+            autoCapitalize="words"  
+          />  
+          {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}  
+        </View>  
+  
+        <View style={styles.inputGroup}>  
+          <Text style={styles.label}>Email *</Text>  
+          <TextInput  
+            style={[styles.input, errors.email && styles.inputError]}  
+            value={formData.email}  
+            onChangeText={(value) => updateFormData('email', value)}  
+            placeholder="correo@ejemplo.com"  
+            keyboardType="email-address"  
+            autoCapitalize="none"  
+          />  
+          {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}  
+        </View>  
+  
+        <View style={styles.inputGroup}>  
+          <Text style={styles.label}>Teléfono *</Text>  
+          <TextInput  
+            style={[styles.input, errors.phone && styles.inputError]}  
+            value={formData.phone}  
+            onChangeText={(value) => updateFormData('phone', value)}  
+            placeholder="+505 8888-8888"  
+            keyboardType="phone-pad"  
+          />  
+          {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}  
+        </View>  
+  
+        <View style={styles.inputGroup}>  
+          <Text style={styles.label}>Empresa (Opcional)</Text> 
+          <TextInput  
+            style={styles.input}  
+            value={formData.company}  
+            onChangeText={(value) => updateFormData('company', value)}  
+            placeholder="Nombre de la empresa"  
+            autoCapitalize="words"  
+          />  
+        </View>  
+  
+        <View style={styles.inputGroup}>  
+          <Text style={styles.label}>Tipo de Cliente</Text>  
+          <View style={styles.radioGroup}>  
+            <TouchableOpacity  
+              style={[  
+                styles.radioOption,  
+                formData.client_type === "individual" && styles.radioOptionSelected  
+              ]}  
+              onPress={() => updateFormData('client_type', 'individual')}  
+            >  
+              <View style={[  
+                styles.radioCircle,  
+                formData.client_type === "individual" && styles.radioCircleSelected  
+              ]} />  
+              <Text style={styles.radioText}>Individual</Text>  
+            </TouchableOpacity>  
+  
+            <TouchableOpacity  
+              style={[  
+                styles.radioOption,  
+                formData.client_type === "empresa" && styles.radioOptionSelected  
+              ]}  
+              onPress={() => updateFormData('client_type', 'empresa')}  
+            >  
+              <View style={[  
+                styles.radioCircle,  
+                formData.client_type === "empresa" && styles.radioCircleSelected  
+              ]} />  
+              <Text style={styles.radioText}>Empresa</Text>  
+            </TouchableOpacity>  
+          </View>  
+        </View>  
+      </View>  
+  
+      <View style={styles.footer}>  
+        <TouchableOpacity  
+          style={[styles.button, styles.cancelButton]}  
+          onPress={() => navigation.goBack()}  
+          disabled={loading}  
+        >  
+          <Text style={styles.cancelButtonText}>Cancelar</Text>  
+        </TouchableOpacity>  
+  
+        <TouchableOpacity  
+          style={[styles.button, styles.saveButton]}  
+          onPress={handleSave}  
+          disabled={loading}  
+        >  
+          {loading ? (  
+            <ActivityIndicator size="small" color="#fff" />  
+          ) : (  
+            <>  
+              <Feather name="save" size={20} color="#fff" />  
+              <Text style={styles.saveButtonText}>Guardar Cliente</Text>  
+            </>  
+          )}  
+        </TouchableOpacity>  
+      </View>  
+    </ScrollView>  
+  )  
+}  
+  
+const styles = StyleSheet.create({  
+  container: {  
+    flex: 1,  
+    backgroundColor: "#f8f9fa",  
+  },  
+  header: {  
+    backgroundColor: "#fff",  
+    padding: 20,  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  title: {  
+    fontSize: 24,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 4,  
+  },  
+  subtitle: {  
+    fontSize: 16,  
+    color: "#666",  
+  },  
+  form: {  
+    padding: 16,  
+  },  
+  inputGroup: {  
+    marginBottom: 20,  
+  },  
+  label: {  
+    fontSize: 16,  
+    fontWeight: "500",  
+    color: "#333",  
+    marginBottom: 8,  
+  },  
+  input: {  
+    backgroundColor: "#fff",  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+    borderRadius: 8,  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    fontSize: 16,  
+    color: "#333",  
+  },  
+  inputError: {  
+    borderColor: "#e53935",  
+  },  
+  errorText: {  
+    fontSize: 14,  
+    color: "#e53935",  
+    marginTop: 4,  
+  },  
+  radioGroup: {  
+    flexDirection: "row",  
+    gap: 16,  
+  },  
+  radioOption: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    paddingVertical: 8,  
+  },  
+  radioOptionSelected: {  
+    // No additional styling needed  
+  },  
+  radioCircle: {  
+    width: 20,  
+    height: 20,  
+    borderRadius: 10,  
+    borderWidth: 2,  
+    borderColor: "#e1e4e8",  
+    marginRight: 8,  
+  },  
+  radioCircleSelected: {  
+    borderColor: "#1a73e8",  
+    backgroundColor: "#1a73e8",  
+  },  
+  radioText: {  
+    fontSize: 16,  
+    color: "#333",  
+  },  
+  footer: {  
+    flexDirection: "row",  
+    padding: 16,  
+    gap: 12,  
+    backgroundColor: "#fff",  
+    borderTopWidth: 1,  
+    borderTopColor: "#e1e4e8",  
+  },  
+  button: {  
+    flex: 1,  
+    flexDirection: "row",  
+    justifyContent: "center",  
+    alignItems: "center",  
+    paddingVertical: 12,  
+    borderRadius: 8,  
+    gap: 8,  
+  },  
+  cancelButton: {  
+    backgroundColor: "transparent",  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  cancelButtonText: {  
+    fontSize: 16,  
+    fontWeight: "500",  
+    color: "#666",  
+  },  
+  saveButton: {  
+    backgroundColor: "#1a73e8",  
+  },  
+  saveButtonText: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#fff",  
+  },  
 })
-

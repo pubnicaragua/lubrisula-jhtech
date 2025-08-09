@@ -1,853 +1,879 @@
-"use client"
+"use client"  
+  
+import { useState, useCallback } from "react"  
+import {  
+  View,  
+  Text,  
+  StyleSheet,  
+  FlatList,  
+  TouchableOpacity,  
+  TextInput,  
+  ActivityIndicator,  
+  Alert,  
+  Modal,  
+  ScrollView,  
+} from "react-native"  
+import { Feather, MaterialIcons } from "@expo/vector-icons"  
+import { useFocusEffect } from "@react-navigation/native"  
+import { useAuth } from "../context/auth-context"  
+import INVENTARIO_SERVICES, { InventarioType } from "../services/INVETARIO.SERVICE"  
+import CATEGORIA_MATERIALES_SERVICES from "../services/CATEGORIA_MATERIALES.SERVICE"  
+import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
+import USER_SERVICE from "../services/USER_SERVICES.SERVICE"  
+  
+export default function PartSelectionScreen({ navigation, route }) {  
+  const { onPartSelect, selectedParts = [], multiSelect = true } = route.params || {}  
+  const { user } = useAuth()  
+  
+  const [inventoryItems, setInventoryItems] = useState<InventarioType[]>([])  
+  const [filteredItems, setFilteredItems] = useState<InventarioType[]>([])  
+  const [loading, setLoading] = useState(true)  
+  const [searchTerm, setSearchTerm] = useState("")  
+  const [selectedCategory, setSelectedCategory] = useState<string | undefined>(undefined)  
+  const [selectedItems, setSelectedItems] = useState<InventarioType[]>(selectedParts)  
+  const [itemDetailModalVisible, setItemDetailModalVisible] = useState(false)  
+  const [selectedItem, setSelectedItem] = useState<InventarioType | null>(null)  
+  const [quantities, setQuantities] = useState<Record<string, number>>({})  
+  const [categories, setCategories] = useState<string[]>([])  
+  const [error, setError] = useState<string | null>(null)  
+  const [userRole, setUserRole] = useState<string | null>(null)  
+  
+  // Cargar inventario cuando la pantalla obtiene el foco  
+  useFocusEffect(  
+    useCallback(() => {  
+      loadInventory()  
+    }, [])  
+  )  
+  
+  const loadInventory = async () => {  
+    try {  
+      setLoading(true)  
+      setError(null)  
+  
+      if (!user?.id) return  
+  
+      // Validar permisos del usuario  
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      setUserRole(userPermissions?.rol || 'client')  
+  
+      // Inicializar cantidades para partes ya seleccionadas  
+      const initialQuantities: Record<string, number> = {}  
+      selectedParts.forEach((part) => {  
+        initialQuantities[part.id] = part.cantidad || 1  
+      })  
+      setQuantities(initialQuantities)  
+  
+      // Cargar categorías desde Supabase  
+      const allCategories = await CATEGORIA_MATERIALES_SERVICES.GET_ALL_CATEGORIAS()  
+      const categoryNames = allCategories.map(cat => cat.nombre)  
+      setCategories(categoryNames)  
+  
+      // Cargar inventario desde Supabase (solo items con stock)  
+      const allItems = await INVENTARIO_SERVICES.GET_ALL_INVENTARIO()  
+      const inStockItems = allItems.filter(item => item.stock_actual > 0)  
+        
+      setInventoryItems(inStockItems)  
+      setFilteredItems(inStockItems)  
+    } catch (error) {  
+      console.error("Error al cargar inventario:", error)  
+      setError("No se pudieron cargar los repuestos")  
+      Alert.alert("Error", "No se pudieron cargar los repuestos")  
+    } finally {  
+      setLoading(false)  
+    }  
+  }  
+  
+  // Filtrar items basado en búsqueda y categoría  
+  const filterItems = useCallback(() => {  
+    let filtered = inventoryItems  
+  
+    // Filtrar por término de búsqueda  
+    if (searchTerm.trim()) {  
+      filtered = filtered.filter(item =>  
+        item.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||  
+        item.codigo.toLowerCase().includes(searchTerm.toLowerCase())  
+      )  
+    }  
+  
+    // Filtrar por categoría  
+    if (selectedCategory) {  
+      filtered = filtered.filter(item =>   
+        item.categoria_materiales?.nombre === selectedCategory  
+      )  
+    }  
+  
+    setFilteredItems(filtered)  
+  }, [inventoryItems, searchTerm, selectedCategory])  
+  
+  // Ejecutar filtrado cuando cambien los criterios  
+  useFocusEffect(  
+    useCallback(() => {  
+      filterItems()  
+    }, [filterItems])  
+  )  
+  
+  const handleSearch = (text: string) => {  
+    setSearchTerm(text)  
+  }  
+  
+  const handleCategorySelect = (category: string | undefined) => {  
+    setSelectedCategory(category)  
+  }  
+  
+  const handleItemPress = (item: InventarioType) => {  
+    if (multiSelect) {  
+      // Si es selección múltiple, mostrar detalles  
+      setSelectedItem(item)  
+      setItemDetailModalVisible(true)  
+    } else {  
+      // Si es selección única, seleccionar directamente  
+      onPartSelect && onPartSelect([{ ...item, cantidad: 1 }])  
+      navigation.goBack()  
+    }  
+  }  
+  
+  const toggleItemSelection = (item: InventarioType) => {  
+    const isSelected = selectedItems.some((selectedItem) => selectedItem.id === item.id)  
+  
+    if (isSelected) {  
+      // Deseleccionar  
+      setSelectedItems(selectedItems.filter((selectedItem) => selectedItem.id !== item.id))  
+      setQuantities((prev) => {  
+        const newQuantities = { ...prev }  
+        delete newQuantities[item.id!]  
+        return newQuantities  
+      })  
+    } else {  
+      // Seleccionar  
+      const quantity = 1 // Cantidad por defecto  
+      setSelectedItems([...selectedItems, item])  
+      setQuantities((prev) => ({ ...prev, [item.id!]: quantity }))  
+    }  
+  }  
+  
+  const updateQuantity = (itemId: string, quantity: number) => {  
+    if (quantity < 1) return // No permitir cantidades menores a 1  
+  
+    const item = inventoryItems.find((i) => i.id === itemId)  
+    if (item && quantity > item.stock_actual) {  
+      Alert.alert("Cantidad no disponible", `Solo hay ${item.stock_actual} unidades disponibles en inventario.`)  
+      return  
+    }  
+  
+    setQuantities((prev) => ({ ...prev, [itemId]: quantity }))  
+  }  
+  
+  const handleConfirmSelection = () => {  
+    // Preparar repuestos seleccionados con sus cantidades  
+    const partsWithQuantities = selectedItems.map((item) => ({  
+      ...item,  
+      cantidad: quantities[item.id!] || 1,  
+    }))  
+  
+    onPartSelect && onPartSelect(partsWithQuantities)  
+    navigation.goBack()  
+  }  
+  
+  const formatCurrency = (amount: number) => {  
+    return amount.toLocaleString("es-ES", {  
+      style: "currency",  
+      currency: "USD",  
+      minimumFractionDigits: 2,  
+    })  
+  }  
+  
+  const renderPartItem = ({ item }: { item: InventarioType }) => {  
+    const isSelected = selectedItems.some((selectedItem) => selectedItem.id === item.id)  
+    const formattedPrice = formatCurrency(item.precio_venta || 0)  
+  
+    const stockColor =  
+      item.stock_actual === 0  
+        ? "#e53935"  
+        : item.stock_actual <= (item.stock_minimo || 0)  
+          ? "#f5a623"  
+          : "#4caf50"  
+  
+    return (  
+      <TouchableOpacity  
+        style={[styles.partItem, isSelected && styles.selectedPartItem]}  
+        onPress={() => handleItemPress(item)}  
+      >  
+        <View style={styles.partContent}>  
+          <View style={styles.partHeader}>  
+            <Text style={styles.partName}>{item.nombre}</Text>  
+            {multiSelect && (  
+              <TouchableOpacity  
+                style={[styles.checkboxContainer, isSelected && styles.checkboxSelected]}  
+                onPress={() => toggleItemSelection(item)}  
+              >  
+                {isSelected && <Feather name="check" size={16} color="#fff" />}  
+              </TouchableOpacity>  
+            )}  
+          </View>  
+  
+          <Text style={styles.partSku}>Código: {item.codigo}</Text>  
+  
+          {item.descripcion && <Text style={styles.partDescription}>{item.descripcion}</Text>}  
+  
+          <View style={styles.partFooter}>  
+            <View style={styles.categoryBadge}>  
+              <Text style={styles.categoryText}>{item.categoria_materiales?.nombre || "Sin categoría"}</Text>  
+            </View>  
+  
+            <View style={styles.stockContainer}>  
+              <Feather name="box" size={14} color={stockColor} style={styles.stockIcon} />  
+              <Text style={[styles.stockText, { color: stockColor }]}>  
+                {item.stock_actual} unidades  
+              </Text>  
+            </View>  
+  
+            <Text style={styles.partPrice}>{formattedPrice}</Text>  
+          </View>  
+        </View>  
+      </TouchableOpacity>  
+    )  
+  }  
+  
+  const renderCategoryFilters = () => {  
+    return (  
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesContainer}>  
+        <TouchableOpacity  
+          style={[styles.categoryChip, selectedCategory === undefined && styles.categoryChipSelected]}  
+          onPress={() => handleCategorySelect(undefined)}  
+        >  
+          <Text style={[styles.categoryChipText, selectedCategory === undefined && styles.categoryChipTextSelected]}>  
+            Todos  
+          </Text>  
+        </TouchableOpacity>  
+  
+        {categories.map((category) => (  
+          <TouchableOpacity  
+            key={category}  
+            style={[styles.categoryChip, selectedCategory === category && styles.categoryChipSelected]}  
+            onPress={() => handleCategorySelect(category)}  
+          >  
+            <Text style={[styles.categoryChipText, selectedCategory === category && styles.categoryChipTextSelected]}>  
+              {category}  
+            </Text>  
+          </TouchableOpacity>  
+        ))}  
+      </ScrollView>  
+    )  
+  }  
+  
+  const renderItemDetailModal = () => {  
+    if (!selectedItem) return null  
+  
+    const isSelected = selectedItems.some((item) => item.id === selectedItem.id)  
+    const quantity = quantities[selectedItem.id!] || 1  
+    const formattedPrice = formatCurrency(selectedItem.precio_venta || 0)  
+    const totalPrice = formatCurrency((selectedItem.precio_venta || 0) * quantity)  
+  
+    return (  
+      <Modal  
+      visible={itemDetailModalVisible}  
+      transparent={true}  
+      animationType="slide"  
+      onRequestClose={() => setItemDetailModalVisible(false)}  
+    >  
+      <View style={styles.modalOverlay}>  
+        <View style={styles.modalContainer}>  
+          <View style={styles.modalHeader}>  
+            <Text style={styles.modalTitle}>Detalles del Repuesto</Text>  
+            <TouchableOpacity  
+              style={styles.modalCloseButton}  
+              onPress={() => setItemDetailModalVisible(false)}  
+            >  
+              <Feather name="x" size={24} color="#333" />  
+            </TouchableOpacity>  
+          </View>  
 
-import { useState, useCallback } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-  Modal,
-  ScrollView,
-} from "react-native"
-import { Feather, MaterialIcons } from "@expo/vector-icons"
-import { useFocusEffect } from "@react-navigation/native"
-import inventoryService from "../services/inventory-service"
-import currencyService from "../services/currency-service"
-import { type InventoryItem, Currency } from "../types/inventory"
-import { theme } from "../styles/theme"
+          <ScrollView style={styles.modalContent}>  
+            <Text style={styles.modalItemName}>{selectedItem.nombre}</Text>  
+            <Text style={styles.modalItemSku}>Código: {selectedItem.codigo}</Text>  
+              
+            {selectedItem.descripcion && (  
+              <Text style={styles.modalItemDescription}>{selectedItem.descripcion}</Text>  
+            )}  
 
-const PartSelectionScreen = ({ navigation, route }) => {
-  const { onPartSelect, selectedParts = [], currency = Currency.USD, multiSelect = true } = route.params || {}
+            <View style={styles.modalItemDetails}>  
+              <View style={styles.modalDetailRow}>  
+                <Text style={styles.modalDetailLabel}>Categoría:</Text>  
+                <Text style={styles.modalDetailValue}>  
+                  {selectedItem.categoria_materiales?.nombre || "Sin categoría"}  
+                </Text>  
+              </View>  
 
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
-  const [filteredItems, setFilteredItems] = useState<InventoryItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState<string | undefined>(undefined)
-  const [selectedItems, setSelectedItems] = useState<InventoryItem[]>(selectedParts)
-  const [itemDetailModalVisible, setItemDetailModalVisible] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
-  const [quantities, setQuantities] = useState<Record<string, number>>({})
-  const [categories, setCategories] = useState<string[]>([])
+              <View style={styles.modalDetailRow}>  
+                <Text style={styles.modalDetailLabel}>Stock disponible:</Text>  
+                <Text style={styles.modalDetailValue}>{selectedItem.stock_actual} unidades</Text>  
+              </View>  
 
-  // Cargar inventario cuando la pantalla obtiene el foco
-  useFocusEffect(
-    useCallback(() => {
-      loadInventory()
-    }, []),
-  )
+              <View style={styles.modalDetailRow}>  
+                <Text style={styles.modalDetailLabel}>Precio unitario:</Text>  
+                <Text style={styles.modalDetailValue}>{formattedPrice}</Text>  
+              </View>  
 
-  const loadInventory = async () => {
-    try {
-      setLoading(true)
+              <View style={styles.modalDetailRow}>  
+                <Text style={styles.modalDetailLabel}>Ubicación:</Text>  
+                <Text style={styles.modalDetailValue}>{selectedItem.ubicacion_almacen || "No especificada"}</Text>  
+              </View>  
+            </View>  
 
-      // Inicializar cantidades para partes ya seleccionadas
-      const initialQuantities: Record<string, number> = {}
-      selectedParts.forEach((part) => {
-        initialQuantities[part.id] = part.quantity || 1
-      })
-      setQuantities(initialQuantities)
+            {multiSelect && (  
+              <View style={styles.quantitySection}>  
+                <Text style={styles.quantityLabel}>Cantidad:</Text>  
+                <View style={styles.quantityControls}>  
+                  <TouchableOpacity  
+                    style={styles.quantityButton}  
+                    onPress={() => updateQuantity(selectedItem.id!, quantity - 1)}  
+                    disabled={quantity <= 1}  
+                  >  
+                    <Feather  
+                      name="minus"  
+                      size={20}  
+                      color={quantity <= 1 ? "#ccc" : "#1a73e8"}  
+                    />  
+                  </TouchableOpacity>  
 
-      // Cargar categorías
-      const allCategories = await inventoryService.getUniqueCategories()
-      setCategories(allCategories)
+                  <TextInput  
+                    style={styles.quantityInput}  
+                    value={quantity.toString()}  
+                    onChangeText={(text) => {  
+                      const newQuantity = parseInt(text)  
+                      if (!isNaN(newQuantity) && newQuantity >= 1) {  
+                        updateQuantity(selectedItem.id!, newQuantity)  
+                      }  
+                    }}  
+                    keyboardType="number-pad"  
+                  />  
 
-      // Cargar inventario
-      const allItems = await inventoryService.getInventoryItems({ inStock: true })
-      setInventoryItems(allItems)
-      setFilteredItems(allItems)
-    } catch (error) {
-      console.error("Error al cargar inventario:", error)
-      Alert.alert("Error", "No se pudieron cargar los repuestos")
-    } finally {
-      setLoading(false)
-    }
-  }
+                  <TouchableOpacity  
+                    style={styles.quantityButton}  
+                    onPress={() => updateQuantity(selectedItem.id!, quantity + 1)}  
+                    disabled={quantity >= selectedItem.stock_actual}  
+                  >  
+                    <Feather  
+                      name="plus"  
+                      size={20}  
+                      color={quantity >= selectedItem.stock_actual ? "#ccc" : "#1a73e8"}  
+                    />  
+                  </TouchableOpacity>  
+                </View>  
+              </View>  
+            )}  
 
-  const applyFilters = useCallback(() => {
-    let filtered = [...inventoryItems]
+            <View style={styles.totalSection}>  
+              <Text style={styles.totalLabel}>Total:</Text>  
+              <Text style={styles.totalValue}>{totalPrice}</Text>  
+            </View>  
+          </ScrollView>  
 
-    // Aplicar filtro de búsqueda
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase()
-      filtered = filtered.filter(
-        (item) =>
-          item.name.toLowerCase().includes(term) ||
-          item.sku.toLowerCase().includes(term) ||
-          (item.description && item.description.toLowerCase().includes(term)),
-      )
-    }
+          <View style={styles.modalFooter}>  
+            <TouchableOpacity  
+              style={[styles.button, styles.cancelButton]}  
+              onPress={() => setItemDetailModalVisible(false)}  
+            >  
+              <Text style={styles.buttonText}>Cancelar</Text>  
+            </TouchableOpacity>  
 
-    // Aplicar filtro de categoría
-    if (selectedCategory) {
-      filtered = filtered.filter((item) => item.category === selectedCategory)
-    }
+            <TouchableOpacity  
+              style={[styles.button, styles.addButton]}  
+              onPress={() => {  
+                toggleItemSelection(selectedItem)  
+                setItemDetailModalVisible(false)  
+              }}  
+            >  
+              <Text style={styles.buttonText}>{isSelected ? "Quitar" : "Agregar"}</Text>  
+            </TouchableOpacity>  
+          </View>  
+        </View>  
+      </View>  
+    </Modal>  
+  )  
+}  
 
-    setFilteredItems(filtered)
-  }, [inventoryItems, searchTerm, selectedCategory])
+if (loading) {  
+  return (  
+    <View style={styles.loadingContainer}>  
+      <ActivityIndicator size="large" color="#1a73e8" />  
+      <Text style={styles.loadingText}>Cargando repuestos...</Text>  
+    </View>  
+  )  
+}  
 
-  // Aplicar filtros cuando cambian los criterios
-  useFocusEffect(
-    useCallback(() => {
-      applyFilters()
-    }, [applyFilters]),
-  )
+if (error) {  
+  return (  
+    <View style={styles.errorContainer}>  
+      <MaterialIcons name="error" size={64} color="#f44336" />  
+      <Text style={styles.errorText}>{error}</Text>  
+      <TouchableOpacity style={styles.retryButton} onPress={loadInventory}>  
+        <Text style={styles.retryButtonText}>Reintentar</Text>  
+      </TouchableOpacity>  
+    </View>  
+  )  
+}  
 
-  const handleSearch = (text: string) => {
-    setSearchTerm(text)
-  }
+return (  
+  <View style={styles.container}>  
+    <View style={styles.header}>  
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
+        <Feather name="arrow-left" size={24} color="#333" />  
+      </TouchableOpacity>  
+      <Text style={styles.headerTitle}>Seleccionar Repuestos</Text>  
+    </View>  
 
-  const handleCategorySelect = (category: string | undefined) => {
-    setSelectedCategory(category)
-  }
+    <View style={styles.searchContainer}>  
+      <Feather name="search" size={20} color="#666" style={styles.searchIcon} />  
+      <TextInput  
+        style={styles.searchInput}  
+        placeholder="Buscar por nombre o código..."  
+        value={searchTerm}  
+        onChangeText={handleSearch}  
+      />  
+      {searchTerm.length > 0 && (  
+        <TouchableOpacity style={styles.clearButton} onPress={() => setSearchTerm("")}>  
+          <Feather name="x" size={20} color="#666" />  
+        </TouchableOpacity>  
+      )}  
+    </View>  
 
-  const handleItemPress = (item: InventoryItem) => {
-    if (multiSelect) {
-      // Si es selección múltiple, mostrar detalles
-      setSelectedItem(item)
-      setItemDetailModalVisible(true)
-    } else {
-      // Si es selección única, seleccionar directamente
-      onPartSelect && onPartSelect([{ ...item, quantity: 1 }])
-      navigation.goBack()
-    }
-  }
+    {renderCategoryFilters()}  
 
-  const toggleItemSelection = (item: InventoryItem) => {
-    const isSelected = selectedItems.some((selectedItem) => selectedItem.id === item.id)
+    <FlatList  
+      data={filteredItems}  
+      keyExtractor={(item) => item.id!}  
+      renderItem={renderPartItem}  
+      contentContainerStyle={styles.listContainer}  
+      showsVerticalScrollIndicator={false}  
+      ListEmptyComponent={  
+        <View style={styles.emptyContainer}>  
+          <Feather name="package" size={64} color="#ccc" />  
+          <Text style={styles.emptyText}>  
+            {searchTerm || selectedCategory ? "No se encontraron repuestos" : "No hay repuestos disponibles"}  
+          </Text>  
+          {(searchTerm || selectedCategory) && (  
+            <Text style={styles.emptySubtext}>  
+              Intenta ajustar los filtros de búsqueda  
+            </Text>  
+          )}  
+        </View>  
+      }  
+    />  
 
-    if (isSelected) {
-      // Deseleccionar
-      setSelectedItems(selectedItems.filter((selectedItem) => selectedItem.id !== item.id))
-      setQuantities((prev) => {
-        const newQuantities = { ...prev }
-        delete newQuantities[item.id]
-        return newQuantities
-      })
-    } else {
-      // Seleccionar
-      const quantity = 1 // Cantidad por defecto
-      setSelectedItems([...selectedItems, item])
-      setQuantities((prev) => ({ ...prev, [item.id]: quantity }))
-    }
-  }
+    {multiSelect && selectedItems.length > 0 && (  
+      <View style={styles.selectionBar}>  
+        <View style={styles.selectionInfo}>  
+          <Text style={styles.selectionCount}>  
+            {selectedItems.length} repuesto{selectedItems.length !== 1 ? "s" : ""} seleccionado{selectedItems.length !== 1 ? "s" : ""}  
+          </Text>  
+        </View>  
+        <TouchableOpacity style={styles.confirmButton} onPress={handleConfirmSelection}>  
+          <Text style={styles.confirmButtonText}>Confirmar</Text>  
+        </TouchableOpacity>  
+      </View>  
+    )}  
 
-  const updateQuantity = (itemId: string, quantity: number) => {
-    if (quantity < 1) return // No permitir cantidades menores a 1
+    {renderItemDetailModal()}  
+  </View>  
+)  
+}  
 
-    const item = inventoryItems.find((i) => i.id === itemId)
-    if (item && quantity > item.stock) {
-      Alert.alert("Cantidad no disponible", `Solo hay ${item.stock} unidades disponibles en inventario.`)
-      return
-    }
-
-    setQuantities((prev) => ({ ...prev, [itemId]: quantity }))
-  }
-
-  const handleConfirmSelection = () => {
-    // Preparar repuestos seleccionados con sus cantidades
-    const partsWithQuantities = selectedItems.map((item) => ({
-      ...item,
-      quantity: quantities[item.id] || 1,
-    }))
-
-    onPartSelect && onPartSelect(partsWithQuantities)
-    navigation.goBack()
-  }
-
-  const renderPartItem = ({ item }: { item: InventoryItem }) => {
-    const isSelected = selectedItems.some((selectedItem) => selectedItem.id === item.id)
-    const price = currency === Currency.USD ? item.priceUSD : item.priceHNL
-    const formattedPrice = currencyService.formatCurrency(price, currency)
-
-    const stockColor =
-      item.stock === 0
-        ? theme.colors.error
-        : item.stock <= (item.minStock || 0)
-          ? theme.colors.warning
-          : theme.colors.success
-
-    return (
-      <TouchableOpacity
-        style={[styles.partItem, isSelected && styles.selectedPartItem]}
-        onPress={() => handleItemPress(item)}
-      >
-        <View style={styles.partContent}>
-          <View style={styles.partHeader}>
-            <Text style={styles.partName}>{item.name}</Text>
-            {multiSelect && (
-              <TouchableOpacity
-                style={[styles.checkboxContainer, isSelected && styles.checkboxSelected]}
-                onPress={() => toggleItemSelection(item)}
-              >
-                {isSelected && <Feather name="check" size={16} color="#fff" />}
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <Text style={styles.partSku}>SKU: {item.sku}</Text>
-
-          {item.description && <Text style={styles.partDescription}>{item.description}</Text>}
-
-          <View style={styles.partFooter}>
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryText}>{item.category}</Text>
-            </View>
-
-            <View style={styles.stockContainer}>
-              <Feather name="box" size={14} color={stockColor} style={styles.stockIcon} />
-              <Text style={[styles.stockText, { color: stockColor }]}>
-                {item.stock} {item.unit || "unidades"}
-              </Text>
-            </View>
-
-            <Text style={styles.partPrice}>{formattedPrice}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    )
-  }
-
-  const renderCategoryFilters = () => {
-    return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesContainer}>
-        <TouchableOpacity
-          style={[styles.categoryChip, selectedCategory === undefined && styles.categoryChipSelected]}
-          onPress={() => handleCategorySelect(undefined)}
-        >
-          <Text style={[styles.categoryChipText, selectedCategory === undefined && styles.categoryChipTextSelected]}>
-            Todos
-          </Text>
-        </TouchableOpacity>
-
-        {categories.map((category) => (
-          <TouchableOpacity
-            key={category}
-            style={[styles.categoryChip, selectedCategory === category && styles.categoryChipSelected]}
-            onPress={() => handleCategorySelect(category)}
-          >
-            <Text style={[styles.categoryChipText, selectedCategory === category && styles.categoryChipTextSelected]}>
-              {category}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    )
-  }
-
-  const renderItemDetailModal = () => {
-    if (!selectedItem) return null
-
-    const isSelected = selectedItems.some((item) => item.id === selectedItem.id)
-    const quantity = quantities[selectedItem.id] || 1
-    const priceUSD = currencyService.formatCurrency(selectedItem.priceUSD, Currency.USD)
-    const priceHNL = currencyService.formatCurrency(selectedItem.priceHNL, Currency.HNL)
-    const totalPrice = currencyService.formatCurrency(
-      (currency === Currency.USD ? selectedItem.priceUSD : selectedItem.priceHNL) * quantity,
-      currency,
-    )
-
-    return (
-      <Modal
-        visible={itemDetailModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setItemDetailModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Detalle del Repuesto</Text>
-              <TouchableOpacity onPress={() => setItemDetailModalVisible(false)}>
-                <Feather name="x" size={24} color={theme.colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalContent}>
-              <Text style={styles.partDetailTitle}>{selectedItem.name}</Text>
-              <Text style={styles.partDetailSku}>SKU: {selectedItem.sku}</Text>
-
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>Información General</Text>
-
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Categoría:</Text>
-                  <Text style={styles.detailValue}>{selectedItem.category}</Text>
-                </View>
-
-                {selectedItem.subcategory && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Subcategoría:</Text>
-                    <Text style={styles.detailValue}>{selectedItem.subcategory}</Text>
-                  </View>
-                )}
-
-                {selectedItem.description && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Descripción:</Text>
-                    <Text style={styles.detailValue}>{selectedItem.description}</Text>
-                  </View>
-                )}
-
-                {selectedItem.supplier && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Proveedor:</Text>
-                    <Text style={styles.detailValue}>{selectedItem.supplier}</Text>
-                  </View>
-                )}
-
-                {selectedItem.location && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Ubicación:</Text>
-                    <Text style={styles.detailValue}>{selectedItem.location}</Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>Precios</Text>
-
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Precio (USD):</Text>
-                  <Text style={styles.detailValue}>{priceUSD}</Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Precio (HNL):</Text>
-                  <Text style={styles.detailValue}>{priceHNL}</Text>
-                </View>
-
-                {selectedItem.cost !== undefined && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Costo:</Text>
-                    <Text style={styles.detailValue}>
-                      {currencyService.formatCurrency(selectedItem.cost, Currency.USD)}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>Inventario</Text>
-
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Stock Actual:</Text>
-                  <Text
-                    style={[
-                      styles.detailValue,
-                      {
-                        color:
-                          selectedItem.stock === 0
-                            ? theme.colors.error
-                            : selectedItem.stock <= (selectedItem.minStock || 0)
-                              ? theme.colors.warning
-                              : theme.colors.success,
-                      },
-                    ]}
-                  >
-                    {selectedItem.stock} {selectedItem.unit || "unidades"}
-                  </Text>
-                </View>
-
-                {selectedItem.minStock !== undefined && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Stock Mínimo:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedItem.minStock} {selectedItem.unit || "unidades"}
-                    </Text>
-                  </View>
-                )}
-
-                {selectedItem.maxStock !== undefined && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Stock Máximo:</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedItem.maxStock} {selectedItem.unit || "unidades"}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.quantitySection}>
-                <Text style={styles.quantitySectionTitle}>Cantidad</Text>
-                <View style={styles.quantityControls}>
-                  <TouchableOpacity
-                    style={styles.quantityButton}
-                    onPress={() => updateQuantity(selectedItem.id, quantity - 1)}
-                    disabled={quantity <= 1}
-                  >
-                    <Feather name="minus" size={20} color={quantity <= 1 ? "#ccc" : theme.colors.primary} />
-                  </TouchableOpacity>
-
-                  <TextInput
-                    style={styles.quantityInput}
-                    value={quantity.toString()}
-                    onChangeText={(text) => {
-                      const newQuantity = Number.parseInt(text)
-                      if (!isNaN(newQuantity) && newQuantity >= 1) {
-                        updateQuantity(selectedItem.id, newQuantity)
-                      }
-                    }}
-                    keyboardType="number-pad"
-                  />
-
-                  <TouchableOpacity
-                    style={styles.quantityButton}
-                    onPress={() => updateQuantity(selectedItem.id, quantity + 1)}
-                    disabled={quantity >= selectedItem.stock}
-                  >
-                    <Feather
-                      name="plus"
-                      size={20}
-                      color={quantity >= selectedItem.stock ? "#ccc" : theme.colors.primary}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.totalSection}>
-                <Text style={styles.totalLabel}>Total:</Text>
-                <Text style={styles.totalValue}>{totalPrice}</Text>
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
-                onPress={() => setItemDetailModalVisible(false)}
-              >
-                <Text style={styles.buttonText}>Cancelar</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.button, styles.addButton]}
-                onPress={() => {
-                  toggleItemSelection(selectedItem)
-                  setItemDetailModalVisible(false)
-                }}
-              >
-                <Text style={styles.buttonText}>{isSelected ? "Quitar" : "Agregar"}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    )
-  }
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.searchContainer}>
-          <Feather name="search" size={20} color={theme.colors.textLight} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar repuestos por nombre o SKU"
-            value={searchTerm}
-            onChangeText={handleSearch}
-          />
-          {searchTerm.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchTerm("")} style={styles.clearButton}>
-              <Feather name="x-circle" size={18} color={theme.colors.textLight} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      {renderCategoryFilters()}
-
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={styles.loadingText}>Cargando repuestos...</Text>
-        </View>
-      ) : (
-        <>
-          {filteredItems.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <MaterialIcons name="inventory" size={64} color="#ccc" />
-              <Text style={styles.emptyText}>No se encontraron repuestos</Text>
-              <Text style={styles.emptySubtext}>Intenta con otra búsqueda o categoría</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={filteredItems}
-              renderItem={renderPartItem}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContent}
-            />
-          )}
-        </>
-      )}
-
-      {multiSelect && selectedItems.length > 0 && (
-        <View style={styles.selectionBar}>
-          <View style={styles.selectionInfo}>
-            <Text style={styles.selectionCount}>{selectedItems.length} repuestos seleccionados</Text>
-          </View>
-          <TouchableOpacity style={styles.confirmButton} onPress={handleConfirmSelection}>
-            <Text style={styles.confirmButtonText}>Confirmar</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {renderItemDetailModal()}
-    </View>
-  )
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  header: {
-    padding: 16,
-    backgroundColor: theme.colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: theme.colors.lightGray,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: 40,
-    fontSize: 16,
-  },
-  clearButton: {
-    padding: 4,
-  },
-  categoriesContainer: {
-    backgroundColor: theme.colors.white,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  categoryChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: theme.colors.lightGray,
-    marginRight: 8,
-  },
-  categoryChipSelected: {
-    backgroundColor: theme.colors.primary,
-  },
-  categoryChipText: {
-    fontSize: 14,
-    color: theme.colors.text,
-  },
-  categoryChipTextSelected: {
-    color: theme.colors.white,
-    fontWeight: "500",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: theme.colors.text,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: theme.colors.text,
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: theme.colors.textLight,
-    textAlign: "center",
-    marginTop: 8,
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 100, // Espacio para la barra de selección
-  },
-  partItem: {
-    backgroundColor: theme.colors.white,
-    borderRadius: 8,
-    marginBottom: 12,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  selectedPartItem: {
-    borderColor: theme.colors.primary,
-    borderWidth: 2,
-  },
-  partContent: {
-    padding: 16,
-  },
-  partHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  partName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: theme.colors.text,
-    flex: 1,
-  },
-  checkboxContainer: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: theme.colors.border,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  checkboxSelected: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
-  partSku: {
-    fontSize: 12,
-    color: theme.colors.textLight,
-    marginBottom: 8,
-  },
-  partDescription: {
-    fontSize: 14,
-    color: theme.colors.text,
-    marginBottom: 12,
-  },
-  partFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  categoryBadge: {
-    backgroundColor: theme.colors.lightGray,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  categoryText: {
-    fontSize: 12,
-    color: theme.colors.text,
-  },
-  stockContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  stockIcon: {
-    marginRight: 4,
-  },
-  stockText: {
-    fontSize: 12,
-  },
-  partPrice: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: theme.colors.primary,
-  },
-  selectionBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: theme.colors.white,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  selectionInfo: {
-    flex: 1,
-  },
-  selectionCount: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: theme.colors.text,
-  },
-  confirmButton: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  confirmButtonText: {
-    color: theme.colors.white,
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContainer: {
-    width: "90%",
-    maxHeight: "80%",
-    backgroundColor: theme.colors.white,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: theme.colors.text,
-  },
-  modalContent: {
-    padding: 16,
-  },
-  partDetailTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: theme.colors.text,
-    marginBottom: 4,
-  },
-  partDetailSku: {
-    fontSize: 14,
-    color: theme.colors.textLight,
-    marginBottom: 16,
-  },
-  detailSection: {
-    marginBottom: 16,
-  },
-  detailSectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: theme.colors.primary,
-    marginBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    paddingBottom: 4,
-  },
-  detailRow: {
-    flexDirection: "row",
-    marginBottom: 8,
-  },
-  detailLabel: {
-    flex: 1,
-    fontSize: 14,
-    color: theme.colors.textLight,
-  },
-  detailValue: {
-    flex: 2,
-    fontSize: 14,
-    color: theme.colors.text,
-  },
-  quantitySection: {
-    marginBottom: 16,
-  },
-  quantitySectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: theme.colors.primary,
-    marginBottom: 8,
-  },
-  quantityControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  quantityButton: {
-    width: 40,
-    height: 40,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  quantityInput: {
-    width: 60,
-    height: 40,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 4,
-    textAlign: "center",
-    fontSize: 16,
-    marginHorizontal: 8,
-  },
-  totalSection: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  totalLabel: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: theme.colors.text,
-  },
-  totalValue: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: theme.colors.primary,
-  },
-  modalFooter: {
-    flexDirection: "row",
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  button: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  cancelButton: {
-    backgroundColor: theme.colors.lightGray,
-    marginRight: 8,
-  },
-  addButton: {
-    backgroundColor: theme.colors.primary,
-    marginLeft: 8,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: theme.colors.white,
-  },
+const styles = StyleSheet.create({  
+container: {  
+  flex: 1,  
+  backgroundColor: "#f8f9fa",  
+},  
+loadingContainer: {  
+  flex: 1,  
+  justifyContent: "center",  
+  alignItems: "center",  
+  backgroundColor: "#f8f9fa",  
+},  
+loadingText: {  
+  marginTop: 10,  
+  fontSize: 16,  
+  color: "#666",  
+},  
+errorContainer: {  
+  flex: 1,  
+  justifyContent: "center",  
+  alignItems: "center",  
+  padding: 20,  
+},  
+errorText: {  
+  fontSize: 16,  
+  color: "#f44336",  
+  textAlign: "center",  
+  marginTop: 16,  
+  marginBottom: 20,  
+},  
+retryButton: {  
+  backgroundColor: "#1a73e8",  
+  paddingHorizontal: 20,  
+  paddingVertical: 10,  
+  borderRadius: 8,  
+},  
+retryButtonText: {  
+  color: "#fff",  
+  fontWeight: "bold",  
+},  
+header: {  
+  flexDirection: "row",  
+  alignItems: "center",  
+  paddingHorizontal: 16,  
+  paddingVertical: 12,  
+  backgroundColor: "#fff",  
+  borderBottomWidth: 1,  
+  borderBottomColor: "#e1e4e8",  
+},  
+backButton: {  
+  padding: 8,  
+  marginRight: 8,  
+},  
+headerTitle: {  
+  fontSize: 18,  
+  fontWeight: "bold",  
+  color: "#333",  
+},  
+searchContainer: {  
+  flexDirection: "row",  
+  alignItems: "center",  
+  backgroundColor: "#fff",  
+  marginHorizontal: 16,  
+  marginVertical: 8,  
+  borderRadius: 8,  
+  paddingHorizontal: 12,  
+  borderWidth: 1,  
+  borderColor: "#e1e4e8",  
+},  
+searchIcon: {  
+  marginRight: 8,  
+},  
+searchInput: {  
+  flex: 1,  
+  paddingVertical: 12,  
+  fontSize: 16,  
+  color: "#333",  
+},  
+clearButton: {  
+  padding: 4,  
+},  
+categoriesContainer: {  
+  backgroundColor: "#fff",  
+  paddingHorizontal: 16,  
+  paddingVertical: 8,  
+  borderBottomWidth: 1,  
+  borderBottomColor: "#e1e4e8",  
+},  
+categoryChip: {  
+  paddingHorizontal: 12,  
+  paddingVertical: 6,  
+  borderRadius: 16,  
+  backgroundColor: "#f5f5f5",  
+  marginRight: 8,  
+},  
+categoryChipSelected: {  
+  backgroundColor: "#1a73e8",  
+},  
+categoryChipText: {  
+  fontSize: 14,  
+  color: "#666",  
+},  
+categoryChipTextSelected: {  
+  color: "#fff",  
+  fontWeight: "bold",  
+},  
+listContainer: {  
+  padding: 16,  
+},  
+partItem: {  
+  backgroundColor: "#fff",  
+  borderRadius: 8,  
+  padding: 16,  
+  marginBottom: 12,  
+  shadowColor: "#000",  
+  shadowOffset: { width: 0, height: 1 },  
+  shadowOpacity: 0.1,  
+  shadowRadius: 2,  
+  elevation: 2,  
+},  
+selectedPartItem: {  
+  borderWidth: 2,  
+  borderColor: "#1a73e8",  
+},  
+partContent: {  
+  flex: 1,  
+},  
+partHeader: {  
+  flexDirection: "row",  
+  justifyContent: "space-between",  
+  alignItems: "center",  
+  marginBottom: 8,  
+},  
+partName: {  
+  fontSize: 16,  
+  fontWeight: "bold",  
+  color: "#333",  
+  flex: 1,  
+},  
+checkboxContainer: {  
+  width: 24,  
+  height: 24,  
+  borderRadius: 12,  
+  borderWidth: 2,  
+  borderColor: "#e1e4e8",  
+  justifyContent: "center",  
+  alignItems: "center",  
+},  
+checkboxSelected: {  
+  backgroundColor: "#1a73e8",  
+  borderColor: "#1a73e8",  
+},  
+partSku: {  
+  fontSize: 12,  
+  color: "#666",  
+  marginBottom: 8,  
+},  
+partDescription: {  
+  fontSize: 14,  
+  color: "#333",  
+  marginBottom: 12,  
+},  
+partFooter: {  
+  flexDirection: "row",  
+  alignItems: "center",  
+  justifyContent: "space-between",  
+  marginTop: 8,  
+},  
+categoryBadge: {  
+  backgroundColor: "#f5f5f5",  
+  paddingHorizontal: 8,  
+  paddingVertical: 4,  
+  borderRadius: 4,  
+},  
+categoryText: {  
+  fontSize: 12,  
+  color: "#333",  
+},  
+stockContainer: {  
+  flexDirection: "row",  
+  alignItems: "center",  
+},  
+stockIcon: {  
+  marginRight: 4,  
+},  
+stockText: {  
+  fontSize: 12,  
+},  
+partPrice: {  
+  fontSize: 16,  
+  fontWeight: "bold",  
+  color: "#1a73e8",  
+},  
+emptyContainer: {  
+  flex: 1,  
+  justifyContent: "center",  
+  alignItems: "center",  
+  padding: 40,  
+},  
+emptyText: {  
+  fontSize: 16,  
+  color: "#999",  
+  marginTop: 16,  
+  textAlign: "center",  
+},  
+emptySubtext: {  
+  fontSize: 14,  
+  color: "#ccc",  
+  marginTop: 8,  
+  textAlign: "center",  
+},  
+selectionBar: {  
+  position: "absolute",  
+  bottom: 0,  
+  left: 0,  
+  right: 0,  
+  backgroundColor: "#fff",  
+  flexDirection: "row",  
+  justifyContent: "space-between",  
+  alignItems: "center",  
+  padding: 16,  
+  borderTopWidth: 1,  
+  borderTopColor: "#e1e4e8",  
+  shadowColor: "#000",  
+  shadowOffset: { width: 0, height: -2 },  
+  shadowOpacity: 0.1,  
+  shadowRadius: 4,  
+  elevation: 4,  
+},  
+selectionInfo: {  
+  flex: 1,  
+},  
+selectionCount: {  
+  fontSize: 14,  
+  fontWeight: "500",  
+  color: "#333",  
+},  
+confirmButton: {  
+  backgroundColor: "#1a73e8",  
+  paddingHorizontal: 20,  
+  paddingVertical: 10,  
+  borderRadius: 8,  
+},  
+confirmButtonText: {  
+  color: "#fff",  
+  fontWeight: "bold",  
+  fontSize: 16,  
+},  
+modalOverlay: {  
+  flex: 1,  
+  backgroundColor: "rgba(0, 0, 0, 0.5)",  
+  justifyContent: "center",  
+  alignItems: "center",  
+},  
+modalContainer: {  
+  width: "90%",  
+  maxHeight: "80%",  
+  backgroundColor: "#fff",  
+  borderRadius: 12,  
+  overflow: "hidden",  
+},  
+modalHeader: {  
+  flexDirection: "row",  
+  justifyContent: "space-between",  
+  alignItems: "center",  
+  padding: 16,  
+  borderBottomWidth: 1,  
+  borderBottomColor: "#e1e4e8",  
+},  
+modalTitle: {  
+  fontSize: 18,  
+  fontWeight: "bold",  
+  color: "#333",  
+},  
+modalCloseButton: {  
+  padding: 8,  
+},  
+modalContent: {  
+  flex: 1,  
+  padding: 16,  
+},  
+modalItemName: {  
+  fontSize: 18,  
+  fontWeight: "bold",  
+  color: "#333",  
+  marginBottom: 4,  
+},  
+modalItemSku: {  
+  fontSize: 14,  
+  color: "#666",  
+  marginBottom: 16,  
+},  
+modalItemDescription: {  
+  fontSize: 14,  
+  color: "#333",  
+  marginBottom: 16,  
+  lineHeight: 20,  
+},  
+modalItemDetails: {  
+  backgroundColor: "#f8f9fa",  
+  borderRadius: 8,  
+  padding: 12,  
+  marginBottom: 16,  
+},  
+modalDetailRow: {  
+  flexDirection: "row",  
+  justifyContent: "space-between",  
+  marginBottom: 8,  
+},  
+modalDetailLabel: {  
+  fontSize: 14,  
+  color: "#666",  
+  fontWeight: "500",  
+},  
+modalDetailValue: {  
+  fontSize: 14,  
+  color: "#333",  
+  fontWeight: "500",  
+},  
+quantitySection: {  
+  marginBottom: 16,  
+},  
+quantityLabel: {  
+  fontSize: 16,  
+  fontWeight: "500",  
+  color: "#333",  
+  marginBottom: 8,  
+},  
+quantityControls: {  
+  flexDirection: "row",  
+  alignItems: "center",  
+  justifyContent: "center",  
+},  
+quantityButton: {  
+  width: 40,  
+  height: 40,  
+  borderRadius: 20,  
+  backgroundColor: "#f5f5f5",  
+  justifyContent: "center",  
+  alignItems: "center",  
+},  
+quantityInput: {  
+  width: 60,  
+  height: 40,  
+  borderWidth: 1,  
+  borderColor: "#e1e4e8",  
+  borderRadius: 8,  
+  textAlign: "center",  
+  fontSize: 16,  
+  marginHorizontal: 12,  
+},  
+totalSection: {  
+  flexDirection: "row",  
+  justifyContent: "space-between",  
+  alignItems: "center",  
+  backgroundColor: "#e8f0fe",  
+  borderRadius: 8,  
+  padding: 12,  
+  marginBottom: 16,  
+},  
+totalLabel: {  
+  fontSize: 16,  
+  fontWeight: "bold",  
+  color: "#333",  
+},  
+totalValue: {  
+  fontSize: 18,  
+  fontWeight: "bold",  
+  color: "#1a73e8",  
+},  
+modalFooter: {  
+  flexDirection: "row",  
+  padding: 16,  
+  borderTopWidth: 1,  
+  borderTopColor: "#e1e4e8",  
+  gap: 12,  
+},  
+button: {  
+  flex: 1,  
+  paddingVertical: 12,  
+  borderRadius: 8,  
+  justifyContent: "center",  
+  alignItems: "center",  
+},  
+cancelButton: {  
+  backgroundColor: "transparent",  
+  borderWidth: 1,  
+  borderColor: "#e1e4e8",  
+},  
+addButton: {  
+  backgroundColor: "#1a73e8",  
+},  
+buttonText: {  
+  fontSize: 16,  
+  fontWeight: "bold",  
+  color: "#fff",  
+},  
 })
-
-export default PartSelectionScreen

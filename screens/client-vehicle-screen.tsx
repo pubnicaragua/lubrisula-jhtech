@@ -1,379 +1,352 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  FlatList,
-  SafeAreaView,
-  ActivityIndicator,
-  Image,
-  RefreshControl,
-} from "react-native"
-import { Feather } from "@expo/vector-icons"
-import { useAuth } from "../context/auth-context"
-
-export default function ClientVehicleScreen({ navigation }) {
-  const { user } = useAuth()
-  const [vehicles, setVehicles] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-
-  // Cargar vehículos al montar el componente
-  useEffect(() => {
-    loadVehicles()
-  }, [user])
-
-  const loadVehicles = async () => {
-    try {
-      setIsLoading(true)
-      if (user?.id) {
-        // Importar servicios dinámicamente
-        const vehicleService = await import("../services/vehicle-service")
-        const orderService = await import("../services/order-service")
-
-        // Obtener vehículos del cliente
-        const clientVehicles = await vehicleService.getVehiclesByClientId(user.id)
-
-        // Enriquecer vehículos con información adicional
-        const enrichedVehicles = await Promise.all(
-          clientVehicles.map(async (vehicle) => {
-            // Obtener órdenes relacionadas con este vehículo
-            const vehicleOrders = await orderService.getOrdersByVehicleId(vehicle.id)
-
-            // Obtener la última orden
-            const lastOrder =
-              vehicleOrders.length > 0
-                ? vehicleOrders.sort((a, b) => new Date(b.dates.created) - new Date(a.dates.created))[0]
-                : null
-
-            // Calcular próximo servicio
-            const nextServiceDate = vehicle.nextServiceDate ? new Date(vehicle.nextServiceDate) : null
-
-            const daysToNextService = nextServiceDate
-              ? Math.ceil((nextServiceDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-              : null
-
-            return {
-              ...vehicle,
-              mainImage: vehicle.images.length > 0 ? vehicle.images[0].uri : null,
-              ordersCount: vehicleOrders.length,
-              lastOrderDate: lastOrder ? new Date(lastOrder.dates.created).toLocaleDateString("es-ES") : null,
-              lastOrderStatus: lastOrder ? lastOrder.status : null,
-              daysToNextService,
-              needsService: daysToNextService !== null && daysToNextService <= 14,
-            }
-          }),
-        )
-
-        setVehicles(enrichedVehicles)
-      }
-    } catch (error) {
-      console.error("Error al cargar vehículos:", error)
-    } finally {
-      setIsLoading(false)
-      setRefreshing(false)
-    }
-  }
-
-  // Navegar al detalle del vehículo
-  const handleVehiclePress = (vehicle) => {
-    navigation.navigate("VehicleDetail", { vehicleId: vehicle.id })
-  }
-
-  // Obtener color según estado de la última orden
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "reception":
-        return "#1a73e8"
-      case "diagnosis":
-        return "#f5a623"
-      case "waiting_parts":
-        return "#9c27b0"
-      case "in_progress":
-        return "#f5a623"
-      case "quality_check":
-        return "#4caf50"
-      case "completed":
-        return "#4caf50"
-      case "delivered":
-        return "#607d8b"
-      case "cancelled":
-        return "#e53935"
-      default:
-        return "#666"
-    }
-  }
-
-  // Obtener texto según estado de la última orden
-  const getStatusText = (status) => {
-    switch (status) {
-      case "reception":
-        return "Recepción"
-      case "diagnosis":
-        return "Diagnóstico"
-      case "waiting_parts":
-        return "Esperando Repuestos"
-      case "in_progress":
-        return "En Proceso"
-      case "quality_check":
-        return "Control de Calidad"
-      case "completed":
-        return "Completada"
-      case "delivered":
-        return "Entregada"
-      case "cancelled":
-        return "Cancelada"
-      default:
-        return "Sin órdenes"
-    }
-  }
-
-  // Componente para cada vehículo en la lista
-  const VehicleItem = ({ vehicle }) => (
-    <TouchableOpacity style={styles.vehicleItem} onPress={() => handleVehiclePress(vehicle)}>
-      <View style={styles.vehicleImageContainer}>
-        {vehicle.mainImage ? (
-          <Image source={{ uri: vehicle.mainImage }} style={styles.vehicleImage} />
-        ) : (
-          <View style={styles.noImageContainer}>
-            <Feather name="truck" size={40} color="#ccc" />
-          </View>
-        )}
-
-        {vehicle.needsService && (
-          <View style={styles.serviceAlertBadge}>
-            <Feather name="alert-triangle" size={14} color="#fff" />
-          </View>
-        )}
-      </View>
-
-      <View style={styles.vehicleInfo}>
-        <Text style={styles.vehicleName}>
-          {vehicle.make} {vehicle.model}
-        </Text>
-        <Text style={styles.vehicleDetails}>
-          {vehicle.year} • {vehicle.licensePlate}
-        </Text>
-
-        <View style={styles.vehicleStats}>
-          <View style={styles.statItem}>
-            <Feather name="calendar" size={14} color="#666" />
-            <Text style={styles.statText}>{vehicle.lastOrderDate || "Sin servicios"}</Text>
-          </View>
-
-          <View style={styles.statItem}>
-            <Feather name="tool" size={14} color="#666" />
-            <Text style={styles.statText}>
-              {vehicle.ordersCount} {vehicle.ordersCount === 1 ? "servicio" : "servicios"}
-            </Text>
-          </View>
-        </View>
-
-        {vehicle.lastOrderStatus && (
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(vehicle.lastOrderStatus) }]}>
-            <Text style={styles.statusText}>{getStatusText(vehicle.lastOrderStatus)}</Text>
-          </View>
-        )}
-
-        {vehicle.needsService && (
-          <View style={styles.serviceAlert}>
-            <Feather name="alert-triangle" size={14} color="#f5a623" />
-            <Text style={styles.serviceAlertText}>
-              {vehicle.daysToNextService <= 0 ? "¡Servicio vencido!" : `Servicio en ${vehicle.daysToNextService} días`}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      <Feather name="chevron-right" size={20} color="#999" />
-    </TouchableOpacity>
-  )
-
-  const onRefresh = () => {
-    setRefreshing(true)
-    loadVehicles()
-  }
-
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1a73e8" />
-        <Text style={styles.loadingText}>Cargando vehículos...</Text>
-      </View>
-    )
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Mis Vehículos</Text>
-        <Text style={styles.subtitle}>Consulta información y servicios de tus vehículos</Text>
-      </View>
-
-      {vehicles.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Feather name="truck" size={64} color="#ccc" />
-          <Text style={styles.emptyText}>No tienes vehículos registrados</Text>
-          <Text style={styles.emptySubtext}>Cuando registres un vehículo, aparecerá aquí</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={vehicles}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => <VehicleItem vehicle={item} />}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#1a73e8"]} />}
-        />
-      )}
-    </SafeAreaView>
-  )
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  header: {
-    padding: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e1e4e8",
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#1a73e8",
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#666",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: "#666",
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#666",
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#888",
-    textAlign: "center",
-    marginTop: 8,
-  },
-  listContent: {
-    padding: 16,
-  },
-  vehicleItem: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  vehicleImageContainer: {
-    position: "relative",
-    marginRight: 16,
-  },
-  vehicleImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-  },
-  noImageContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    backgroundColor: "#f5f5f5",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  serviceAlertBadge: {
-    position: "absolute",
-    top: -5,
-    right: -5,
-    backgroundColor: "#f5a623",
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  vehicleInfo: {
-    flex: 1,
-  },
-  vehicleName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 2,
-  },
-  vehicleDetails: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 8,
-  },
-  vehicleStats: {
-    flexDirection: "row",
-    marginBottom: 8,
-  },
-  statItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 16,
-  },
-  statText: {
-    fontSize: 12,
-    color: "#666",
-    marginLeft: 4,
-  },
-  statusBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  serviceAlert: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  serviceAlertText: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "#f5a623",
-    marginLeft: 4,
-  },
+"use client"  
+  
+import { useState, useCallback, useEffect } from "react"  
+import {  
+  View,  
+  Text,  
+  FlatList,  
+  TouchableOpacity,  
+  StyleSheet,  
+  ActivityIndicator,  
+  RefreshControl,  
+  Alert,  
+  Image,  
+} from "react-native"  
+import { Feather, MaterialIcons } from "@expo/vector-icons"  
+import { useFocusEffect } from "@react-navigation/native"  
+import { useAuth } from "../context/auth-context"  
+import VEHICULO_SERVICES, { VehiculoType } from "../services/VEHICULOS.SERVICE"  
+import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
+import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
+import USER_SERVICE from "../services/USER_SERVICES.SERVICE"  
+  
+export default function ClientVehicleScreen({ route, navigation }) {  
+  const { clientId } = route.params  
+  const { user } = useAuth()  
+  const [client, setClient] = useState<ClienteType | null>(null)  
+  const [vehicles, setVehicles] = useState<VehiculoType[]>([])  
+  const [loading, setLoading] = useState(true)  
+  const [refreshing, setRefreshing] = useState(false)  
+  const [error, setError] = useState<string | null>(null)  
+  const [userRole, setUserRole] = useState<string | null>(null)  
+  
+  const loadClientVehicles = useCallback(async () => {  
+    try {  
+      setLoading(true)  
+      setError(null)  
+  
+      if (!user?.id) return  
+  
+      // Validar permisos del usuario  
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      setUserRole(userPermissions?.rol || 'client')  
+  
+      // Verificar permisos de acceso  
+      if (userPermissions?.rol === 'client' && clientId !== user.id) {  
+        setError("No tienes permisos para ver los vehículos de este cliente")  
+        return  
+      }  
+  
+      // Obtener datos del cliente y sus vehículos  
+      const [clientData, clientVehicles] = await Promise.all([  
+        CLIENTS_SERVICES.GET_CLIENTS_BY_ID(clientId),  
+        VEHICULO_SERVICES.GET_ALL_VEHICULOS_BY_CLIENT(clientId)  
+      ])  
+  
+      if (!clientData) {  
+        setError("Cliente no encontrado")  
+        return  
+      }  
+  
+      setClient(clientData)  
+      setVehicles(clientVehicles)  
+  
+    } catch (error) {  
+      console.error("Error loading client vehicles:", error)  
+      setError("No se pudieron cargar los vehículos del cliente")  
+    } finally {  
+      setLoading(false)  
+      setRefreshing(false)  
+    }  
+  }, [clientId, user])  
+  
+  useFocusEffect(  
+    useCallback(() => {  
+      loadClientVehicles()  
+    }, [loadClientVehicles])  
+  )  
+  
+  const renderVehicleItem = ({ item }: { item: VehiculoType }) => (  
+    <TouchableOpacity  
+      style={styles.vehicleCard}  
+      onPress={() => navigation.navigate("VehicleDetail", { vehicleId: item.id })}  
+    >  
+      <View style={styles.vehicleImageContainer}>  
+        {item.imagen_url ? (  
+          <Image source={{ uri: item.imagen_url }} style={styles.vehicleImage} />  
+        ) : (  
+          <View style={styles.noImageContainer}>  
+            <Feather name="truck" size={32} color="#ccc" />  
+          </View>  
+        )}  
+      </View>  
+  
+      <View style={styles.vehicleInfo}>  
+        <Text style={styles.vehicleName}>  
+          {item.marca} {item.modelo}  
+        </Text>  
+        <Text style={styles.vehicleDetails}>  
+          {item.ano} • {item.placa}  
+        </Text>  
+        <Text style={styles.vehicleKm}>  
+          {item.kilometraje?.toLocaleString()} km  
+        </Text>  
+          
+        <View style={styles.vehicleStatus}>  
+          <View style={[  
+            styles.statusIndicator,  
+            { backgroundColor: item.estado === "Activo" ? "#4caf50" : "#f5a623" }  
+          ]} />  
+          <Text style={styles.statusText}>{item.estado}</Text>  
+        </View>  
+      </View>  
+  
+      <View style={styles.vehicleActions}>  
+        <Feather name="chevron-right" size={20} color="#ccc" />  
+      </View>  
+    </TouchableOpacity>  
+  )  
+  
+  if (loading) {  
+    return (  
+      <View style={styles.loadingContainer}>  
+        <ActivityIndicator size="large" color="#1a73e8" />  
+        <Text style={styles.loadingText}>Cargando vehículos...</Text>  
+      </View>  
+    )  
+  }  
+  
+  return (  
+    <View style={styles.container}>  
+      <View style={styles.header}>  
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
+          <Feather name="arrow-left" size={24} color="#333" />  
+        </TouchableOpacity>  
+        <Text style={styles.headerTitle}>Vehículos de {client?.name}</Text>  
+        {userRole !== 'client' && (  
+          <TouchableOpacity   
+            style={styles.addButton}  
+            onPress={() => navigation.navigate("NewVehicle", { clientId })}  
+          >  
+            <Feather name="plus" size={24} color="#1a73e8" />  
+          </TouchableOpacity>  
+        )}  
+      </View>  
+  
+      {error ? (  
+        <View style={styles.errorContainer}>  
+          <MaterialIcons name="error" size={64} color="#f44336" />  
+          <Text style={styles.errorText}>{error}</Text>  
+          <TouchableOpacity style={styles.retryButton} onPress={loadClientVehicles}>  
+            <Text style={styles.retryButtonText}>Reintentar</Text>  
+          </TouchableOpacity>  
+        </View>  
+      ) : (  
+        <>  
+          {vehicles.length === 0 ? (  
+            <View style={styles.emptyContainer}>  
+              <Feather name="truck" size={64} color="#ccc" />  
+              <Text style={styles.emptyText}>No hay vehículos registrados</Text>  
+              <Text style={styles.emptySubtext}>  
+                Este cliente no tiene vehículos asociados  
+              </Text>  
+              {userRole !== 'client' && (  
+                <TouchableOpacity   
+                  style={styles.emptyActionButton}  
+                  onPress={() => navigation.navigate("NewVehicle", { clientId })}  
+                >  
+                  <Text style={styles.emptyActionButtonText}>Agregar Vehículo</Text>  
+                </TouchableOpacity>  
+              )}  
+            </View>  
+          ) : (  
+            <FlatList  
+              data={vehicles}  
+              keyExtractor={(item) => item.id!}  
+              renderItem={renderVehicleItem}  
+              refreshControl={  
+                <RefreshControl refreshing={refreshing} onRefresh={loadClientVehicles} colors={["#1a73e8"]} />  
+              }  
+              contentContainerStyle={styles.listContainer}  
+              showsVerticalScrollIndicator={false}  
+            />  
+          )}  
+        </>  
+      )}  
+    </View>  
+  )  
+}  
+  
+const styles = StyleSheet.create({  
+  container: {  
+    flex: 1,  
+    backgroundColor: "#f8f9fa",  
+  },  
+  loadingContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    backgroundColor: "#f8f9fa",  
+  },  
+  loadingText: {  
+    marginTop: 10,  
+    fontSize: 16,  
+    color: "#666",  
+  },  
+  header: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    backgroundColor: "#fff",  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  backButton: {  
+    padding: 8,  
+    marginRight: 8,  
+  },  
+  headerTitle: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+    flex: 1,  
+  },  
+  addButton: {  
+    padding: 8,  
+  },  
+  errorContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    padding: 20,  
+  },  
+  errorText: {  
+    fontSize: 16,  
+    color: "#f44336",  
+    textAlign: "center",  
+    marginTop: 16,  
+    marginBottom: 20,  
+  },  
+  retryButton: {  
+    backgroundColor: "#1a73e8",  
+    paddingHorizontal: 20,  
+    paddingVertical: 10,  
+    borderRadius: 8,  
+  },  
+  retryButtonText: {  
+    color: "#fff",  
+    fontWeight: "bold",  
+  },  
+  emptyContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    padding: 40,  
+  },  
+  emptyText: {  
+    fontSize: 18,  
+    color: "#999",  
+    marginTop: 16,  
+    marginBottom: 8,  
+    textAlign: "center",  
+  },  
+  emptySubtext: {  
+    fontSize: 14,  
+    color: "#ccc",  
+    textAlign: "center",  
+    marginBottom: 20,  
+  },  
+  emptyActionButton: {  
+    backgroundColor: "#1a73e8",  
+    paddingHorizontal: 20,  
+    paddingVertical: 12,  
+    borderRadius: 8,  
+  },  
+  emptyActionButtonText: {  
+    color: "#fff",  
+    fontWeight: "bold",  
+    fontSize: 16,  
+  },  
+  listContainer: {  
+    padding: 16,  
+  },  
+  vehicleCard: {  
+    backgroundColor: "#fff",  
+    borderRadius: 12,  
+    padding: 16,  
+    marginBottom: 12,  
+    flexDirection: "row",  
+    alignItems: "center",  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 2 },  
+    shadowOpacity: 0.1,  
+    shadowRadius: 4,  
+    elevation: 3,  
+  },  
+  vehicleImageContainer: {  
+    width: 60,  
+    height: 60,  
+    borderRadius: 8,  
+    marginRight: 16,  
+    overflow: "hidden",  
+  },  
+  vehicleImage: {  
+    width: "100%",  
+    height: "100%",  
+  },  
+  noImageContainer: {  
+    width: "100%",  
+    height: "100%",  
+    backgroundColor: "#f5f5f5",  
+    justifyContent: "center",  
+    alignItems: "center",  
+  },  
+  vehicleInfo: {  
+    flex: 1,  
+  },  
+  vehicleName: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 4,  
+  },  
+  vehicleDetails: {  
+    fontSize: 14,  
+    color: "#666",  
+    marginBottom: 4,  
+  },  
+  vehicleKm: {  
+    fontSize: 14,  
+    color: "#999",  
+    marginBottom: 8,  
+  },  
+  vehicleStatus: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+  },  
+  statusIndicator: {  
+    width: 8,  
+    height: 8,  
+    borderRadius: 4,  
+    marginRight: 6,  
+  },  
+  statusText: {  
+    fontSize: 12,  
+    color: "#666",  
+  },  
+  vehicleActions: {  
+    paddingLeft: 16,  
+  },  
 })

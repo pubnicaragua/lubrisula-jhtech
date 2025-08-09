@@ -7,7 +7,7 @@ import { formatDate, formatCurrency } from "./helpers"
 export const generateVehicleReportPDF = async (vehicle, orders) => {
   try {
     // Obtener logo del taller
-    const companyService = await import("../services/company-service")
+    const companyService = await import("../services/supabase/company-service")
     const companySettings = await companyService.getCompanySettings()
 
     // Crear HTML para el PDF
@@ -334,11 +334,11 @@ export const generateVehicleReportPDF = async (vehicle, orders) => {
 export const generateInvoicePDF = async (order, client, vehicle, selectedCurrency = order.currency) => {
   try {
     // Obtener logo del taller
-    const companyService = await import("../services/company-service")
+    const companyService = await import("../services/supabase/company-service")
     const companySettings = await companyService.getCompanySettings()
     
     // Importar servicio de moneda
-    const currencyService = await import("../services/currency-service")
+    const currencyService = await import("../services/supabase/currency-service")
     
     // Convertir precios si es necesario
     const convertPrice = (amount, fromCurrency) => {
@@ -721,11 +721,11 @@ export const generateInvoicePDF = async (order, client, vehicle, selectedCurrenc
 export const generateQuotePDF = async (order, client, vehicle, selectedCurrency = order.currency) => {
   try {
     // Obtener logo del taller
-    const companyService = await import("../services/company-service")
+    const companyService = await import("../services/supabase/company-service")
     const companySettings = await companyService.getCompanySettings()
     
     // Importar servicio de moneda
-    const currencyService = await import("../services/currency-service")
+    const currencyService = await import("../services/supabase/currency-service")
     
     // Convertir precios si es necesario
     const convertPrice = (amount, fromCurrency) => {

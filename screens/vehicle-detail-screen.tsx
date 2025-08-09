@@ -1,816 +1,863 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import {
-  StyleSheet,
-  View,
-  Text,
-  ScrollView,
-  Image,
-  TouchableOpacity,
-  ActivityIndicator,
-  FlatList,
-  Alert,
-  Share,
-} from "react-native"
-import { Feather } from "@expo/vector-icons"
-import { useAuth } from "../context/auth-context"
-import * as ImagePicker from "expo-image-picker"
-import { formatDate, formatCurrency } from "../utils/helpers"
-import { generateVehicleReportPDF } from "../utils/pdf-generator"
-
-// Función para obtener texto según estado
-const getStatusText = (status: string): string => {
-  switch (status) {
-    case "reception":
-      return "Recepción"
-    case "diagnosis":
-      return "Diagnóstico"
-    case "waiting_parts":
-      return "Esperando Repuestos"
-    case "in_progress":
-      return "En Proceso"
-    case "quality_check":
-      return "Control de Calidad"
-    case "completed":
-      return "Completada"
-    case "delivered":
-      return "Entregada"
-    case "cancelled":
-      return "Cancelada"
-    default:
-      return "Desconocido"
-  }
-}
-
-// Función para obtener color según estado
-const getStatusColor = (status: string): string => {
-  switch (status) {
-    case "reception":
-      return "#1a73e8"
-    case "diagnosis":
-      return "#f5a623"
-    case "waiting_parts":
-      return "#9c27b0"
-    case "in_progress":
-      return "#f5a623"
-    case "quality_check":
-      return "#4caf50"
-    case "completed":
-      return "#4caf50"
-    case "delivered":
-      return "#607d8b"
-    case "cancelled":
-      return "#e53935"
-    default:
-      return "#666"
-  }
-}
-
-export default function VehicleDetailScreen({ route, navigation }) {
-  const { vehicleId } = route.params
-  const { user } = useAuth()
-  const [isLoading, setIsLoading] = useState(true)
-  const [vehicle, setVehicle] = useState(null)
-  const [orders, setOrders] = useState([])
-  const [activeTab, setActiveTab] = useState("details") // details, history, images, documents
-  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)
-
-  useEffect(() => {
-    loadVehicleData()
-  }, [vehicleId])
-
-  const loadVehicleData = async () => {
-    try {
-      setIsLoading(true)
-      // Importar servicios
-      const vehicleService = await import("../services/vehicle-service")
-      const orderService = await import("../services/order-service")
-
-      // Cargar vehículo
-      const vehicleData = await vehicleService.getVehicleById(vehicleId)
-      if (!vehicleData) {
-        Alert.alert("Error", "No se pudo encontrar el vehículo")
-        navigation.goBack()
-        return
-      }
-      setVehicle(vehicleData)
-
-      // Cargar órdenes relacionadas
-      const vehicleOrders = await orderService.getOrdersByVehicleId(vehicleId)
-
-      // Ordenar por fecha (más reciente primero)
-      vehicleOrders.sort((a, b) => new Date(b.dates.created) - new Date(a.dates.created))
-
-      // Enriquecer órdenes con información adicional
-      const enrichedOrders = vehicleOrders.map((order) => ({
-        ...order,
-        statusText: getStatusText(order.status),
-        statusColor: getStatusColor(order.status),
-        formattedDate: formatDate(order.dates.created),
-        formattedTotal: formatCurrency(order.total, order.currency),
-      }))
-
-      setOrders(enrichedOrders)
-    } catch (error) {
-      console.error("Error al cargar datos del vehículo:", error)
-      Alert.alert("Error", "No se pudieron cargar los datos del vehículo")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleAddImage = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync()
-
-      if (!permissionResult.granted) {
-        Alert.alert("Permiso denegado", "Necesitamos permiso para acceder a tu galería de fotos")
-        return
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      })
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        // Importar servicios
-        const imageService = await import("../services/image-service")
-        const vehicleService = await import("../services/vehicle-service")
-
-        // Guardar imagen
-        const savedImage = await imageService.saveImage(
-          result.assets[0].uri,
-          "vehicle",
-          vehicleId,
-          "Imagen del vehículo",
-        )
-
-        // Añadir imagen al vehículo
-        const updatedVehicle = await vehicleService.addVehicleImage(vehicleId, savedImage)
-
-        if (updatedVehicle) {
-          setVehicle(updatedVehicle)
-          Alert.alert("Éxito", "Imagen añadida correctamente")
-        }
-      }
-    } catch (error) {
-      console.error("Error al añadir imagen:", error)
-      Alert.alert("Error", "No se pudo añadir la imagen")
-    }
-  }
-
-  const handleGeneratePDF = async () => {
-    try {
-      setIsGeneratingPDF(true)
-
-      // Generar PDF
-      const pdfPath = await generateVehicleReportPDF(vehicle, orders)
-
-      // Compartir PDF
-      await Share.share({
-        url: pdfPath,
-        title: `Informe del vehículo ${vehicle.make} ${vehicle.model}`,
-        message: `Informe del vehículo ${vehicle.make} ${vehicle.model} (${vehicle.licensePlate})`,
-      })
-    } catch (error) {
-      console.error("Error al generar PDF:", error)
-      Alert.alert("Error", "No se pudo generar el informe PDF")
-    } finally {
-      setIsGeneratingPDF(false)
-    }
-  }
-
-  const renderDetailsTab = () => (
-    <View style={styles.tabContent}>
-      <View style={styles.infoCard}>
-        <Text style={styles.infoCardTitle}>Información General</Text>
-
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Marca:</Text>
-          <Text style={styles.infoValue}>{vehicle.make}</Text>
-        </View>
-
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Modelo:</Text>
-          <Text style={styles.infoValue}>{vehicle.model}</Text>
-        </View>
-
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Año:</Text>
-          <Text style={styles.infoValue}>{vehicle.year}</Text>
-        </View>
-
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Placa:</Text>
-          <Text style={styles.infoValue}>{vehicle.licensePlate}</Text>
-        </View>
-
-        {vehicle.vin && (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>VIN:</Text>
-            <Text style={styles.infoValue}>{vehicle.vin}</Text>
-          </View>
-        )}
-
-        {vehicle.color && (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Color:</Text>
-            <Text style={styles.infoValue}>{vehicle.color}</Text>
-          </View>
-        )}
-
-        {vehicle.mileage && (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Kilometraje:</Text>
-            <Text style={styles.infoValue}>{vehicle.mileage.toLocaleString()} km</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.infoCard}>
-        <Text style={styles.infoCardTitle}>Especificaciones Técnicas</Text>
-
-        {vehicle.fuelType && (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Combustible:</Text>
-            <Text style={styles.infoValue}>
-              {vehicle.fuelType === "gasoline"
-                ? "Gasolina"
-                : vehicle.fuelType === "diesel"
-                  ? "Diésel"
-                  : vehicle.fuelType === "electric"
-                    ? "Eléctrico"
-                    : vehicle.fuelType === "hybrid"
-                      ? "Híbrido"
-                      : "Otro"}
-            </Text>
-          </View>
-        )}
-
-        {vehicle.transmission && (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Transmisión:</Text>
-            <Text style={styles.infoValue}>
-              {vehicle.transmission === "manual"
-                ? "Manual"
-                : vehicle.transmission === "automatic"
-                  ? "Automática"
-                  : vehicle.transmission === "cvt"
-                    ? "CVT"
-                    : "Otra"}
-            </Text>
-          </View>
-        )}
-
-        {vehicle.engineSize && (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Motor:</Text>
-            <Text style={styles.infoValue}>{vehicle.engineSize}</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.infoCard}>
-        <Text style={styles.infoCardTitle}>Mantenimiento</Text>
-
-        {vehicle.lastServiceDate && (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Último servicio:</Text>
-            <Text style={styles.infoValue}>{formatDate(vehicle.lastServiceDate)}</Text>
-          </View>
-        )}
-
-        {vehicle.nextServiceDate && (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Próximo servicio:</Text>
-            <Text style={styles.infoValue}>{formatDate(vehicle.nextServiceDate)}</Text>
-          </View>
-        )}
-
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Total de servicios:</Text>
-          <Text style={styles.infoValue}>{orders.length}</Text>
-        </View>
-      </View>
-
-      {vehicle.notes && (
-        <View style={styles.infoCard}>
-          <Text style={styles.infoCardTitle}>Notas</Text>
-          <Text style={styles.notesText}>{vehicle.notes}</Text>
-        </View>
-      )}
-    </View>
-  )
-
-  const renderHistoryTab = () => (
-    <View style={styles.tabContent}>
-      {orders.length > 0 ? (
-        <FlatList
-          data={orders}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.orderCard}
-              onPress={() => navigation.navigate("OrderDetail", { orderId: item.id })}
-            >
-              <View style={styles.orderHeader}>
-                <Text style={styles.orderNumber}>Orden #{item.number}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: item.statusColor }]}>
-                  <Text style={styles.statusText}>{item.statusText}</Text>
-                </View>
-              </View>
-
-              <Text style={styles.orderDescription} numberOfLines={2}>
-                {item.description}
-              </Text>
-
-              <View style={styles.orderFooter}>
-                <Text style={styles.orderDate}>{item.formattedDate}</Text>
-                <Text style={styles.orderTotal}>{item.formattedTotal}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={styles.ordersList}
-        />
-      ) : (
-        <View style={styles.emptyState}>
-          <Feather name="clipboard" size={48} color="#ccc" />
-          <Text style={styles.emptyStateText}>No hay historial de servicios</Text>
-        </View>
-      )}
-    </View>
-  )
-
-  const renderImagesTab = () => (
-    <View style={styles.tabContent}>
-      <View style={styles.imageActions}>
-        <TouchableOpacity 
-          style={styles.addImageButton} 
-          onPress={handleAddImage}
-          disabled={isLoading || !vehicle}
-        >
-          <Feather name="plus" size={20} color="#fff" />
-          <Text style={styles.addImageButtonText}>Añadir imagen</Text>
-        </TouchableOpacity>
-      </View>
-
-      {vehicle?.images && vehicle.images.length > 0 ? (
-        <FlatList
-          data={vehicle.images}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.imageItem}>
-              <Image source={{ uri: item.uri }} style={styles.image} />
-              {item.description && (
-                <View style={styles.imageDescriptionContainer}>
-                  <Text style={styles.imageDescription}>{item.description}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={styles.imagesList}
-        />
-      ) : (
-        <View style={styles.emptyState}>
-          <Feather name="image" size={48} color="#ccc" />
-          <Text style={styles.emptyStateText}>No hay imágenes</Text>
-        </View>
-      )}
-    </View>
-  )
-
-  const renderDocumentsTab = () => (
-    <View style={styles.tabContent}>
-      <View style={styles.documentActions}>
-        <TouchableOpacity style={styles.generateReportButton} onPress={handleGeneratePDF} disabled={isGeneratingPDF}>
-          {isGeneratingPDF ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <>
-              <Feather name="file-text" size={20} color="#fff" />
-              <Text style={styles.generateReportButtonText}>Generar informe</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.documentsList}>
-        <TouchableOpacity style={styles.documentItem} onPress={handleGeneratePDF}>
-          <View style={styles.documentIconContainer}>
-            <Feather name="file-text" size={24} color="#1a73e8" />
-          </View>
-          <View style={styles.documentInfo}>
-            <Text style={styles.documentTitle}>Informe del vehículo</Text>
-            <Text style={styles.documentDescription}>Detalles completos e historial de servicios</Text>
-          </View>
-          <Feather name="download" size={20} color="#666" />
-        </TouchableOpacity>
-
-        {vehicle.serviceHistory && vehicle.serviceHistory.length > 0 && (
-          <TouchableOpacity style={styles.documentItem} onPress={handleGeneratePDF}>
-            <View style={styles.documentIconContainer}>
-              <Feather name="file-text" size={24} color="#4caf50" />
-            </View>
-            <View style={styles.documentInfo}>
-              <Text style={styles.documentTitle}>Historial de mantenimiento</Text>
-              <Text style={styles.documentDescription}>Registro detallado de todos los servicios</Text>
-            </View>
-            <Feather name="download" size={20} color="#666" />
-          </TouchableOpacity>
-        )}
-
-        {orders.length > 0 && (
-          <TouchableOpacity style={styles.documentItem} onPress={handleGeneratePDF}>
-            <View style={styles.documentIconContainer}>
-              <Feather name="file-text" size={24} color="#f5a623" />
-            </View>
-            <View style={styles.documentInfo}>
-              <Text style={styles.documentTitle}>Historial de órdenes</Text>
-              <Text style={styles.documentDescription}>Todas las órdenes de servicio</Text>
-            </View>
-            <Feather name="download" size={20} color="#666" />
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  )
-
-  if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1a73e8" />
-        <Text style={styles.loadingText}>Cargando datos del vehículo...</Text>
-      </View>
-    )
-  }
-
-  return (
-    <View style={styles.container}>
-      <ScrollView>
-        <View style={styles.header}>
-          {vehicle.images && vehicle.images.length > 0 ? (
-            <Image source={{ uri: vehicle.images[0].uri }} style={styles.vehicleImage} />
-          ) : (
-            <View style={styles.noImageContainer}>
-              <Feather name="truck" size={64} color="#ccc" />
-            </View>
-          )}
-
-          <View style={styles.vehicleInfo}>
-            <Text style={styles.vehicleName}>
-              {vehicle.make} {vehicle.model}
-            </Text>
-            <Text style={styles.vehicleDetails}>
-              {vehicle.year} • {vehicle.licensePlate}
-            </Text>
-
-            {vehicle.mileage && (
-              <View style={styles.mileageContainer}>
-                <Feather name="activity" size={16} color="#666" />
-                <Text style={styles.mileageText}>{vehicle.mileage.toLocaleString()} km</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        <View style={styles.tabBar}>
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === "details" && styles.activeTabButton]}
-            onPress={() => setActiveTab("details")}
-          >
-            <Text style={[styles.tabButtonText, activeTab === "details" && styles.activeTabButtonText]}>Detalles</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === "history" && styles.activeTabButton]}
-            onPress={() => setActiveTab("history")}
-          >
-            <Text style={[styles.tabButtonText, activeTab === "history" && styles.activeTabButtonText]}>Historial</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === "images" && styles.activeTabButton]}
-            onPress={() => setActiveTab("images")}
-          >
-            <Text style={[styles.tabButtonText, activeTab === "images" && styles.activeTabButtonText]}>Imágenes</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === "documents" && styles.activeTabButton]}
-            onPress={() => setActiveTab("documents")}
-          >
-            <Text style={[styles.tabButtonText, activeTab === "documents" && styles.activeTabButtonText]}>
-              Documentos
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {activeTab === "details" && renderDetailsTab()}
-        {activeTab === "history" && renderHistoryTab()}
-        {activeTab === "images" && renderImagesTab()}
-        {activeTab === "documents" && renderDocumentsTab()}
-      </ScrollView>
-    </View>
-  )
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: "#666",
-  },
-  header: {
-    backgroundColor: "#fff",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e1e4e8",
-  },
-  vehicleImage: {
-    width: "100%",
-    height: 200,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  noImageContainer: {
-    width: "100%",
-    height: 200,
-    borderRadius: 8,
-    backgroundColor: "#f0f0f0",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  vehicleInfo: {
-    alignItems: "center",
-  },
-  vehicleName: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
-  },
-  vehicleDetails: {
-    fontSize: 16,
-    color: "#666",
-    marginBottom: 8,
-  },
-  mileageContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f0f0f0",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  mileageText: {
-    fontSize: 14,
-    color: "#666",
-    marginLeft: 6,
-    fontWeight: "500",
-  },
-  tabBar: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e1e4e8",
-    marginBottom: 16,
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-  },
-  activeTabButton: {
-    borderBottomColor: "#1a73e8",
-  },
-  tabButtonText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  activeTabButtonText: {
-    color: "#1a73e8",
-    fontWeight: "bold",
-  },
-  tabContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-  },
-  infoCard: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  infoCardTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 12,
-  },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: "#666",
-  },
-  infoValue: {
-    fontSize: 14,
-    color: "#333",
-    fontWeight: "500",
-    textAlign: "right",
-  },
-  notesText: {
-    fontSize: 14,
-    color: "#333",
-    lineHeight: 20,
-  },
-  ordersList: {
-    paddingBottom: 16,
-  },
-  orderCard: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  orderHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  orderNumber: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  orderDescription: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 8,
-  },
-  orderFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  orderDate: {
-    fontSize: 12,
-    color: "#999",
-  },
-  orderTotal: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#4caf50",
-  },
-  imageActions: {
-    marginBottom: 16,
-  },
-  addImageButton: {
-    backgroundColor: "#1a73e8",
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addImageButtonText: {
-    color: "#fff",
-    fontWeight: "500",
-    marginLeft: 8,
-  },
-  imagesList: {
-    paddingBottom: 16,
-  },
-  imageItem: {
-    width: "48%",
-    aspectRatio: 1,
-    margin: "1%",
-    borderRadius: 8,
-    overflow: "hidden",
-    position: "relative",
-  },
-  image: {
-    width: "100%",
-    height: "100%",
-  },
-  imageDescriptionContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    padding: 8,
-  },
-  imageDescription: {
-    color: "#fff",
-    fontSize: 12,
-  },
-  documentActions: {
-    marginBottom: 16,
-  },
-  generateReportButton: {
-    backgroundColor: "#4caf50",
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  generateReportButtonText: {
-    color: "#fff",
-    fontWeight: "500",
-    marginLeft: 8,
-  },
-  documentsList: {
-    marginBottom: 16,
-  },
-  documentItem: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  documentIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#f5f5f5",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  documentInfo: {
-    flex: 1,
-  },
-  documentTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 4,
-  },
-  documentDescription: {
-    fontSize: 14,
-    color: "#666",
-  },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: "#999",
-    marginTop: 16,
-  },
+"use client"  
+  
+import { useState, useCallback, useEffect } from "react"  
+import {  
+  StyleSheet,  
+  View,  
+  Text,  
+  TouchableOpacity,  
+  ScrollView,  
+  ActivityIndicator,  
+  Alert,  
+  Image,  
+  Modal,  
+  FlatList,  
+  SafeAreaView,  
+  RefreshControl,  
+} from "react-native"  
+import { Feather } from "@expo/vector-icons"  
+import { useFocusEffect } from "@react-navigation/native"  
+import { useAuth } from "../context/auth-context"  
+// Importaciones corregidas para usar servicios de Supabase  
+import * as vehicleService from "../services/supabase/vehicle-service"  
+import * as orderService from "../services/supabase/order-service"  
+import * as clientService from "../services/supabase/client-service"  
+import * as appointmentService from "../services/supabase/appointment-service"  
+import * as accessService from "../services/supabase/access-service"  
+import * as userService from "../services/supabase/user-service"  
+  
+// Tipos TypeScript para resolver errores  
+interface VehicleDetailScreenProps {  
+  route: any  
+  navigation: any  
+}  
+  
+interface VehicleType {  
+  id: string  
+  marca: string  
+  modelo: string  
+  año: number  
+  placa: string  
+  vin?: string  
+  color?: string  
+  kilometraje?: number  
+  client_id: string  
+  fecha_registro?: string  
+  proximo_servicio?: string  
+  imagenes?: string[]  
+  notas?: string  
+  activo?: boolean  
+}  
+  
+interface ClientType {  
+  id: string  
+  nombre: string  
+  email?: string  
+  telefono?: string  
+}  
+  
+interface OrderType {  
+  id: string  
+  numero_orden: string  
+  descripcion: string  
+  estado: string  
+  prioridad: string  
+  client_id: string  
+  vehiculo_id: string  
+  costo?: number  
+  fecha_creacion: string  
+  fecha_actualizacion?: string  
+}  
+  
+interface AppointmentType {  
+  id: string  
+  client_id: string  
+  vehiculo_id: string  
+  fecha: string  
+  hora: string  
+  tipo_servicio: string  
+  estado: string  
+  notas?: string  
+}  
+  
+export default function VehicleDetailScreen({ route, navigation }: VehicleDetailScreenProps) {  
+  const { vehicleId } = route.params  
+  const { user } = useAuth()  
+    
+  const [vehicle, setVehicle] = useState<VehicleType | null>(null)  
+  const [client, setClient] = useState<ClientType | null>(null)  
+  const [orders, setOrders] = useState<OrderType[]>([])  
+  const [appointments, setAppointments] = useState<AppointmentType[]>([])  
+  const [loading, setLoading] = useState(true)  
+  const [refreshing, setRefreshing] = useState(false)  
+  const [error, setError] = useState<string | null>(null)  
+  const [userRole, setUserRole] = useState<string | null>(null)  
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null)  
+  
+  // Cargar datos del vehículo  
+  const loadVehicleData = useCallback(async () => {  
+    try {  
+      setLoading(true)  
+      setRefreshing(true)  
+      setError(null)  
+  
+      if (!user?.id) return  
+  
+      // Validar permisos del usuario  
+      const userTallerId = await userService.getUserTaller(user.id)  
+      const userPermissions = await accessService.checkUserPermissions(user.id, userTallerId)  
+      setUserRole(userPermissions?.rol || 'client')  
+  
+      // Cargar datos del vehículo  
+      const vehicleData = await vehicleService.getVehicleById(vehicleId)  
+      if (!vehicleData) {  
+        setError("Vehículo no encontrado")  
+        return  
+      }  
+  
+      setVehicle(vehicleData)  
+  
+      // Cargar datos del cliente propietario  
+      const clientData = await clientService.getClientById(vehicleData.client_id)  
+      setClient(clientData)  
+  
+      // Cargar órdenes del vehículo  
+      const vehicleOrders = await orderService.getOrdersByVehicleId(vehicleId)  
+      // Ordenar por fecha más reciente  
+      const sortedOrders = vehicleOrders.sort((a: OrderType, b: OrderType) =>   
+        new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime()  
+      )  
+      setOrders(sortedOrders)  
+  
+      // Cargar citas del vehículo  
+      const vehicleAppointments = await appointmentService.getAppointmentsByVehicleId(vehicleId)  
+      // Ordenar por fecha más reciente  
+      const sortedAppointments = vehicleAppointments.sort((a: AppointmentType, b: AppointmentType) =>   
+        new Date(b.fecha).getTime() - new Date(a.fecha).getTime()  
+      )  
+      setAppointments(sortedAppointments)  
+  
+    } catch (error) {  
+      console.error("Error loading vehicle data:", error)  
+      setError("No se pudieron cargar los datos del vehículo")  
+    } finally {  
+      setLoading(false)  
+      setRefreshing(false)  
+    }  
+  }, [vehicleId, user])  
+  
+  useFocusEffect(  
+    useCallback(() => {  
+      loadVehicleData()  
+    }, [loadVehicleData])  
+  )  
+  
+  // Obtener color del estado de la orden  
+  const getStatusColor = (estado: string) => {  
+    switch (estado) {  
+      case "Pendiente":  
+        return "#1a73e8"  
+      case "En Diagnóstico":  
+        return "#f5a623"  
+      case "Esperando Repuestos":  
+        return "#9c27b0"  
+      case "En Proceso":  
+        return "#ff9800"  
+      case "Control Calidad":  
+        return "#607d8b"  
+      case "Completada":  
+        return "#4caf50"  
+      case "Entregada":  
+        return "#607d8b"  
+      case "Cancelada":  
+        return "#e53935"  
+      default:  
+        return "#666"  
+    }  
+  }  
+  
+  // Obtener color del estado de la cita  
+  const getAppointmentStatusColor = (estado: string) => {  
+    switch (estado) {  
+      case "programada":  
+        return "#1a73e8"  
+      case "confirmada":  
+        return "#4caf50"  
+      case "en_proceso":  
+        return "#ff9800"  
+      case "completada":  
+        return "#607d8b"  
+      case "cancelada":  
+        return "#e53935"  
+      default:  
+        return "#666"  
+    }  
+  }  
+  
+  // Renderizar modal de imagen  
+  const renderImageModal = () => (  
+    <Modal  
+      visible={selectedImageIndex !== null}  
+      transparent={true}  
+      animationType="fade"  
+      onRequestClose={() => setSelectedImageIndex(null)}  
+    >  
+      <View style={styles.imageModalOverlay}>  
+        <TouchableOpacity   
+          style={styles.imageModalClose}  
+          onPress={() => setSelectedImageIndex(null)}  
+        >  
+          <Feather name="x" size={24} color="#fff" />  
+        </TouchableOpacity>  
+          
+        {selectedImageIndex !== null && vehicle?.imagenes && (  
+          <Image   
+            source={{ uri: vehicle.imagenes[selectedImageIndex] }}   
+            style={styles.fullScreenImage}  
+            resizeMode="contain"  
+          />  
+        )}  
+      </View>  
+    </Modal>  
+  )  
+  
+  if (loading) {  
+    return (  
+      <View style={styles.loadingContainer}>  
+        <ActivityIndicator size="large" color="#1a73e8" />  
+        <Text style={styles.loadingText}>Cargando vehículo...</Text>  
+      </View>  
+    )  
+  }  
+  
+  if (error) {  
+    return (  
+      <View style={styles.errorContainer}>  
+        <Feather name="alert-circle" size={64} color="#f44336" />  
+        <Text style={styles.errorText}>{error}</Text>  
+        <TouchableOpacity style={styles.retryButton} onPress={loadVehicleData}>  
+          <Text style={styles.retryButtonText}>Reintentar</Text>  
+        </TouchableOpacity>  
+      </View>  
+    )  
+  }  
+  
+  if (!vehicle) return null  
+  
+  return (  
+    <SafeAreaView style={styles.container}>  
+      <View style={styles.header}>  
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
+          <Feather name="arrow-left" size={24} color="#333" />  
+        </TouchableOpacity>  
+        <Text style={styles.headerTitle}>Detalle del Vehículo</Text>  
+        <TouchableOpacity   
+          style={styles.editButton}  
+          onPress={() => navigation.navigate("EditVehicle", { vehicleId: vehicle.id })}  
+        >  
+          <Feather name="edit-2" size={24} color="#1a73e8" />  
+        </TouchableOpacity>  
+      </View>  
+  
+      <ScrollView   
+        style={styles.content}   
+        showsVerticalScrollIndicator={false}  
+        refreshControl={  
+          <RefreshControl refreshing={refreshing} onRefresh={loadVehicleData} />  
+        }  
+      >  
+        {/* Header del vehículo */}  
+        <View style={styles.vehicleHeader}>  
+          <View style={styles.vehicleInfo}>  
+            <Text style={styles.vehicleName}>  
+              {vehicle.marca} {vehicle.modelo}  
+            </Text>  
+            <Text style={styles.vehicleYear}>{vehicle.año}</Text>  
+            <Text style={styles.vehiclePlate}>Placa: {vehicle.placa}</Text>  
+          </View>  
+          <View style={styles.vehicleIcon}>  
+            <Feather name="truck" size={32} color="#1a73e8" />  
+          </View>  
+        </View>  
+  
+        {/* Imágenes del vehículo */}  
+        {vehicle.imagenes && vehicle.imagenes.length > 0 && (  
+          <View style={styles.imagesSection}>  
+            <Text style={styles.sectionTitle}>Imágenes</Text>  
+            <ScrollView horizontal style={styles.imagesContainer}>  
+              {vehicle.imagenes.map((imageUri, index) => (  
+                <TouchableOpacity  
+                  key={index}  
+                  style={styles.imageContainer}  
+                  onPress={() => setSelectedImageIndex(index)}  
+                >  
+                  <Image source={{ uri: imageUri }} style={styles.vehicleImage} />  
+                </TouchableOpacity>  
+              ))}  
+            </ScrollView>  
+          </View>  
+        )}  
+  
+        {/* Información del cliente */}  
+        {client && (  
+          <View style={styles.section}>  
+            <Text style={styles.sectionTitle}>Propietario</Text>  
+            <TouchableOpacity  
+              style={styles.clientCard}  
+              onPress={() => navigation.navigate("ClientDetail", { clientId: client.id })}  
+            >  
+              <View style={styles.clientAvatar}>  
+                <Feather name="user" size={24} color="#1a73e8" />  
+              </View>  
+              <View style={styles.clientInfo}>  
+                <Text style={styles.clientName}>{client.nombre}</Text>  
+                <Text style={styles.clientEmail}>{client.email}</Text>  
+                <Text style={styles.clientPhone}>{client.telefono}</Text>  
+              </View>  
+              <Feather name="chevron-right" size={20} color="#999" />  
+            </TouchableOpacity>  
+          </View>  
+        )}  
+  
+        {/* Información del vehículo */}  
+        <View style={styles.section}>  
+          <Text style={styles.sectionTitle}>Información del Vehículo</Text>  
+          <View style={styles.infoCard}>  
+            <View style={styles.infoRow}>  
+              <Text style={styles.infoLabel}>Marca:</Text>  
+              <Text style={styles.infoValue}>{vehicle.marca}</Text>  
+            </View>  
+            <View style={styles.infoRow}>  
+              <Text style={styles.infoLabel}>Modelo:</Text>  
+              <Text style={styles.infoValue}>{vehicle.modelo}</Text>  
+            </View>  
+            <View style={styles.infoRow}>  
+              <Text style={styles.infoLabel}>Año:</Text>  
+              <Text style={styles.infoValue}>{vehicle.año}</Text>  
+            </View>  
+            <View style={styles.infoRow}>  
+              <Text style={styles.infoLabel}>Placa:</Text>  
+              <Text style={styles.infoValue}>{vehicle.placa}</Text>  
+            </View>  
+            {vehicle.vin && (  
+              <View style={styles.infoRow}>  
+                <Text style={styles.infoLabel}>VIN:</Text>  
+                <Text style={styles.infoValue}>{vehicle.vin}</Text>  
+              </View>  
+            )}  
+            {vehicle.color && (  
+              <View style={styles.infoRow}>  
+                <Text style={styles.infoLabel}>Color:</Text>  
+                <Text style={styles.infoValue}>{vehicle.color}</Text>  
+              </View>  
+            )}  
+            {vehicle.kilometraje && (  
+              <View style={styles.infoRow}>  
+                <Text style={styles.infoLabel}>Kilometraje:</Text>  
+                <Text style={styles.infoValue}>{vehicle.kilometraje.toLocaleString()} km</Text>  
+              </View>  
+            )}  
+          </View>  
+        </View>  
+  
+        {/* Historial de órdenes */}  
+        <View style={styles.section}>  
+          <View style={styles.sectionHeader}>  
+            <Text style={styles.sectionTitle}>Historial de Órdenes</Text>  
+            <TouchableOpacity  
+              style={styles.newOrderButton}  
+              onPress={() => navigation.navigate("NewOrder", { preselectedVehicle: vehicle.id })}  
+            >  
+              <Feather name="plus" size={16} color="#fff" />  
+              <Text style={styles.newOrderButtonText}>Nueva Orden</Text>  
+            </TouchableOpacity>  
+          </View>  
+  
+          {orders.length > 0 ? (  
+            <FlatList  
+              data={orders}  
+              keyExtractor={(item) => item.id}  
+              renderItem={({ item }) => (  
+                <TouchableOpacity  
+                  style={styles.orderCard}  
+                  onPress={() => navigation.navigate("OrderDetail", { orderId: item.id })}  
+                >  
+                  <View style={styles.orderHeader}>  
+                    <Text style={styles.orderNumber}>#{item.numero_orden}</Text>  
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.estado) }]}>  
+                      <Text style={styles.statusText}>{item.estado}</Text>  
+                    </View>  
+                  </View>  
+  
+                  <Text style={styles.orderDescription} numberOfLines={2}>  
+                    {item.descripcion}  
+                  </Text>  
+  
+                  <View style={styles.orderFooter}>  
+                    <Text style={styles.orderDate}>  
+                      {new Date(item.fecha_creacion).toLocaleDateString("es-ES")}  
+                    </Text>  
+                    <Text style={styles.orderTotal}>  
+                      ${(item.costo || 0).toFixed(2)}  
+                    </Text>  
+                  </View>  
+                </TouchableOpacity>  
+              )}  
+              scrollEnabled={false}  
+            />  
+          ) : (  
+            <View style={styles.emptyState}>  
+              <Feather name="clipboard" size={48} color="#ccc" />  
+              <Text style={styles.emptyStateText}>No hay órdenes registradas</Text>  
+            </View>  
+          )}  
+        </View>  
+  
+        {/* Citas programadas */}  
+        <View style={styles.section}>  
+          <View style={styles.sectionHeader}>  
+            <Text style={styles.sectionTitle}>Citas Programadas</Text>  
+            <TouchableOpacity  
+              style={styles.newAppointmentButton}  
+              onPress={() => navigation.navigate("NewAppointment", { preselectedVehicle: vehicle.id })}  
+            >  
+              <Feather name="calendar" size={16} color="#fff" />  
+              <Text style={styles.newAppointmentButtonText}>Nueva Cita</Text>  
+            </TouchableOpacity>  
+          </View>  
+  
+          {appointments.length > 0 ? (  
+            <FlatList  
+              data={appointments}  
+              keyExtractor={(item) => item.id}  
+              renderItem={({ item }) => (  
+                <TouchableOpacity  
+                  style={styles.appointmentCard}  
+                  onPress={() => navigation.navigate("AppointmentDetail", { appointmentId: item.id })}  
+                >  
+                  <View style={styles.appointmentHeader}>  
+                    <Text style={styles.appointmentService}>{item.tipo_servicio}</Text>  
+                    <View style={[styles.statusBadge, { backgroundColor: getAppointmentStatusColor(item.estado) }]}>  
+                      <Text style={styles.statusText}>{item.estado}</Text>  
+                    </View>  
+                  </View>  
+  
+                  <View style={styles.appointmentDateTime}>  
+                    <View style={styles.appointmentDateInfo}>  
+                      <Feather name="calendar" size={14} color="#666" />  
+                      <Text style={styles.appointmentDate}>  
+                        {new Date(item.fecha).toLocaleDateString("es-ES")}  
+                      </Text>  
+                    </View>  
+                    <View style={styles.appointmentTimeInfo}>  
+                      <Feather name="clock" size={14} color="#666" />  
+                      <Text style={styles.appointmentTime}>{item.hora}</Text>  
+                    </View>  
+                  </View>  
+  
+                  {item.notas && (  
+                    <Text style={styles.appointmentNotes} numberOfLines={2}>  
+                      {item.notas}  
+                    </Text>  
+                  )}  
+                </TouchableOpacity>  
+              )}  
+              scrollEnabled={false}  
+            />  
+          ) : (  
+            <View style={styles.emptyState}>  
+              <Feather name="calendar" size={48} color="#ccc" />  
+              <Text style={styles.emptyStateText}>No hay citas programadas</Text>  
+            </View>  
+          )}  
+        </View>  
+  
+        {/* Notas del vehículo */}  
+        {vehicle.notas && (  
+          <View style={styles.section}>  
+            <Text style={styles.sectionTitle}>Notas</Text>  
+            <View style={styles.notesCard}>  
+              <Text style={styles.notesText}>{vehicle.notas}</Text>  
+            </View>  
+          </View>  
+        )}  
+      </ScrollView>  
+  
+      {renderImageModal()}  
+    </SafeAreaView>  
+  )  
+}  
+  
+const styles = StyleSheet.create({  
+  container: {  
+    flex: 1,  
+    backgroundColor: "#f8f9fa",  
+  },  
+  loadingContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    backgroundColor: "#f8f9fa",  
+  },  
+  loadingText: {  
+    marginTop: 10,  
+    fontSize: 16,  
+    color: "#666",  
+  },  
+  errorContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    padding: 20,  
+  },  
+  errorText: {  
+    fontSize: 16,  
+    color: "#f44336",  
+    textAlign: "center",  
+    marginTop: 16,  
+    marginBottom: 20,  
+  },  
+  retryButton: {  
+    backgroundColor: "#1a73e8",  
+    paddingHorizontal: 20,  
+    paddingVertical: 10,  
+    borderRadius: 8,  
+  },  
+  retryButtonText: {  
+    color: "#fff",  
+    fontWeight: "bold",  
+  },  
+  header: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    justifyContent: "space-between",  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    backgroundColor: "#fff",  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  backButton: {  
+    padding: 8,  
+  },  
+  headerTitle: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+    flex: 1,  
+    textAlign: "center",  
+  },  
+  editButton: {  
+    padding: 8,  
+  },  
+  content: {  
+    flex: 1,  
+    padding: 16,  
+  },  
+  vehicleHeader: {  
+    backgroundColor: "#fff",  
+    borderRadius: 8,  
+    padding: 16,  
+    marginBottom: 16,  
+    flexDirection: "row",  
+    alignItems: "center",  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 1 },  
+    shadowOpacity: 0.1,  
+    shadowRadius: 2,  
+    elevation: 2,  
+  },  
+  vehicleInfo: {  
+    flex: 1,  
+  },  
+  vehicleName: {  
+    fontSize: 20,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 4,  
+  },  
+  vehicleYear: {  
+    fontSize: 16,  
+    color: "#666",  
+    marginBottom: 4,  
+  },  
+  vehiclePlate: {  
+    fontSize: 14,  
+    color: "#999",  
+  },  
+  vehicleIcon: {  
+    width: 60,  
+    height: 60,  
+    borderRadius: 30,  
+    backgroundColor: "#f5f5f5",  
+    justifyContent: "center",  
+    alignItems: "center",  
+  },  
+  imagesSection: {  
+    backgroundColor: "#fff",  
+    borderRadius: 8,  
+    padding: 16,  
+    marginBottom: 16,  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 1 },  
+    shadowOpacity: 0.1,  
+    shadowRadius: 2,  
+    elevation: 2,  
+  },  
+  imagesContainer: {  
+    marginTop: 12,  
+  },  
+  imageContainer: {  
+    marginRight: 12,  
+  },  
+  vehicleImage: {  
+    width: 100,  
+    height: 100,  
+    borderRadius: 8,  
+  },  
+  section: {  
+    backgroundColor: "#fff",  
+    borderRadius: 8,  
+    padding: 16,  
+    marginBottom: 16,  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 1 },  
+    shadowOpacity: 0.1,  
+    shadowRadius: 2,  
+    elevation: 2,  
+  },  
+  sectionTitle: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 16,  
+  },  
+  sectionHeader: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+    marginBottom: 16,  
+  },  
+  newOrderButton: {  
+    backgroundColor: "#1a73e8",  
+    flexDirection: "row",  
+    alignItems: "center",  
+    paddingHorizontal: 12,  
+    paddingVertical: 8,  
+    borderRadius: 6,  
+    gap: 4,  
+  },  
+  newOrderButtonText: {  
+    color: "#fff",  
+    fontSize: 12,  
+    fontWeight: "500",  
+  },  
+  newAppointmentButton: {  
+    backgroundColor: "#4caf50",  
+    flexDirection: "row",  
+    alignItems: "center",  
+    paddingHorizontal: 12,  
+    paddingVertical: 8,  
+    borderRadius: 6,  
+    gap: 4,  
+  },  
+  newAppointmentButtonText: {  
+    color: "#fff",  
+    fontSize: 12,  
+    fontWeight: "500",  
+  },  
+  clientCard: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    padding: 12,  
+    backgroundColor: "#f8f9fa",  
+    borderRadius: 8,  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  clientAvatar: {  
+    width: 48,  
+    height: 48,  
+    borderRadius: 24,  
+    backgroundColor: "#fff",  
+    justifyContent: "center",  
+    alignItems: "center",  
+    marginRight: 12,  
+  },  
+  clientInfo: {  
+    flex: 1,  
+  },  
+  clientName: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 2,  
+  },  
+  clientEmail: {  
+    fontSize: 12,  
+    color: "#666",  
+    marginBottom: 2,  
+  },  
+  clientPhone: {  
+    fontSize: 12,  
+    color: "#666",  
+  },  
+  infoCard: {  
+    backgroundColor: "#f8f9fa",  
+    borderRadius: 8,  
+    padding: 12,  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  infoRow: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+    paddingVertical: 8,  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#f0f0f0",  
+  },  
+  infoLabel: {  
+    fontSize: 14,  
+    color: "#666",  
+  },  
+  infoValue: {  
+    fontSize: 14,  
+    fontWeight: "500",  
+    color: "#333",  
+  },  
+  orderCard: {  
+    backgroundColor: "#f8f9fa",  
+    borderRadius: 8,  
+    padding: 12,  
+    marginBottom: 8,  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  orderHeader: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+    marginBottom: 8,  
+  },  
+  orderNumber: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#333",  
+  },  
+  statusBadge: {  
+    paddingHorizontal: 8,  
+    paddingVertical: 4,  
+    borderRadius: 12,  
+  },  
+  statusText: {  
+    fontSize: 12,  
+    color: "#fff",  
+    fontWeight: "500",  
+  },  
+  orderDescription: {  
+    fontSize: 14,  
+    color: "#666",  
+    marginBottom: 8,  
+  },  
+  orderFooter: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+  },  
+  orderDate: {  
+    fontSize: 12,  
+    color: "#666",  
+  },  
+  orderTotal: {  
+    fontSize: 14,  
+    fontWeight: "bold",  
+    color: "#4caf50",  
+  },  
+  appointmentCard: {  
+    backgroundColor: "#f8f9fa",  
+    borderRadius: 8,  
+    padding: 12,  
+    marginBottom: 8,  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  appointmentHeader: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+    marginBottom: 8,  
+  },  
+  appointmentService: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#333",  
+  },  
+  appointmentDateTime: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+    marginBottom: 8,  
+  },  
+  appointmentDateInfo: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+  },  
+  appointmentDate: {  
+    fontSize: 12,  
+    color: "#666",  
+    marginLeft: 4,  
+  },  
+  appointmentTimeInfo: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+  },  
+  appointmentTime: {  
+    fontSize: 12,  
+    color: "#666",  
+    marginLeft: 4,  
+  },  
+  appointmentNotes: {  
+    fontSize: 12,  
+    color: "#999",  
+    fontStyle: "italic",  
+  },  
+  emptyState: {  
+    alignItems: "center",  
+    paddingVertical: 40,  
+  },  
+  emptyStateText: {  
+    fontSize: 16,  
+    color: "#999",  
+    marginTop: 12,  
+  },  
+  notesCard: {  
+    backgroundColor: "#f8f9fa",  
+    borderRadius: 8,  
+    padding: 12,  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  notesText: {  
+    fontSize: 14,  
+    color: "#666",  
+    lineHeight: 20,  
+  },  
+  imageModalOverlay: {  
+    flex: 1,  
+    backgroundColor: "rgba(0, 0, 0, 0.9)",  
+    justifyContent: "center",  
+    alignItems: "center",  
+  },  
+  imageModalClose: {  
+    position: "absolute",  
+    top: 50,  
+    right: 20,  
+    zIndex: 1,  
+    padding: 10,  
+  },  
+  fullScreenImage: {  
+    width: "90%",  
+    height: "80%",  
+  },  
 })
