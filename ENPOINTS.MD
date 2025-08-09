@@ -63,129 +63,177 @@ Wiki pages you might want to explore:
 
 
 
+Basándome en el documento anterior, aquí está la versión expandida con todas las operaciones CRUD necesarias para cada pantalla:
 
-Endpoints por Pantalla con CRUD Completo - AutoFlowX
-Dashboard Principal
-dashboard-screen.tsx
-Estado: ✅ Moderno (Funcional)
+# Endpoints por Pantalla con CRUD Completo - AutoFlowX
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-READ	POST	/rest/v1/rpc/get_dashboard	{"p_tecnico_id": integer}	Estadísticas del dashboard
-READ	POST	/rest/v1/rpc/get_ordenes_por_tecnico	{"p_tecnico_id": integer}	Órdenes por técnico
-READ	GET	/rest/v1/clients	{}	Lista de clientes
-READ	GET	/rest/v1/orders	{}	Lista de órdenes
-READ	GET	/rest/v1/inventory?stock=lte.5	{}	Items con stock bajo
-Dashboard de Cliente
-client-dashboard-screen.tsx
-Estado: ⚠️ Mixto (Requiere ajustes)
+## Dashboard Principal
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-READ	GET	/rest/v1/clients?id=eq.{userId}	{}	Datos del cliente
-READ	GET	/rest/v1/vehicles?client_id=eq.{userId}	{}	Vehículos del cliente
-READ	GET	/rest/v1/orders?client_id=eq.{userId}	{}	Órdenes del cliente
-READ	GET	/rest/v1/citas?client_id=eq.{userId}	{}	⚠️ Citas del cliente (servicio faltante)
-Gestión de Inventario
-inventory-screen.tsx
-Estado: ❌ Legacy (Requiere migración completa)
+### `dashboard-screen.tsx`
+**Estado**: ✅ Moderno (Funcional)
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-CREATE	POST	/rest/v1/inventory	{"codigo": "string", "nombre": "string", "categoria_id": "string", "precio_compra": number, "precio_venta": number, "stock_actual": number, "stock_minimo": number, "ubicacion_almacen": "string"}	❌ Crear item de inventario
-READ	GET	/rest/v1/inventory	{}	❌ Lista de inventario
-READ	GET	/rest/v1/inventory_categories	{}	❌ Categorías
-UPDATE	PUT	/rest/v1/inventory?id=eq.{itemId}	{"stock_actual": integer, "precio_compra": number, "precio_venta": number, "updated_at": "timestamp"}	❌ Actualizar item
-DELETE	DELETE	/rest/v1/inventory?id=eq.{itemId}	{}	❌ Eliminar item
-READ	POST	/rest/v1/rpc/user_has_role	{"role_name": "string"}	❌ Verificar permisos
-inventory-item-detail-screen.tsx
-Estado: ✅ Moderno (Funcional)
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **READ** | POST | `/rest/v1/rpc/get_dashboard` | `{"p_tecnico_id": integer}` | Estadísticas del dashboard |
+| **READ** | POST | `/rest/v1/rpc/get_ordenes_por_tecnico` | `{"p_tecnico_id": integer}` | Órdenes por técnico |
+| **READ** | GET | `/rest/v1/clients` | `{}` | Lista de clientes |
+| **READ** | GET | `/rest/v1/orders` | `{}` | Lista de órdenes |
+| **READ** | GET | `/rest/v1/inventory?stock=lte.5` | `{}` | Items con stock bajo | [1](#20-0) 
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-READ	GET	/rest/v1/inventory?id=eq.{itemId}	{}	Detalles del item
-READ	GET	/rest/v1/inventory_history?item_id=eq.{itemId}	{}	Historial de movimientos
-UPDATE	PUT	/rest/v1/inventory?id=eq.{itemId}	{"stock_actual": integer, "updated_at": "timestamp"}	Ajustar stock
-CREATE	POST	/rest/v1/inventory_movements	{"item_id": "string", "tipo": "string", "cantidad": integer, "motivo": "string"}	Registrar movimiento
-DELETE	DELETE	/rest/v1/inventory?id=eq.{itemId}	{}	Eliminar item (con permisos)
-new-inventory-item-screen.tsx
-Estado: ❌ Legacy (Requiere migración)
+---
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-CREATE	POST	/rest/v1/inventory	{"codigo": "string", "nombre": "string", "categoria_id": "string", "precio_compra": number, "precio_venta": number, "stock_actual": number, "stock_minimo": number, "ubicacion_almacen": "string"}	❌ Crear item
-Gestión de Clientes
-client-detail-screen.tsx
-Estado: ❌ Legacy (Requiere migración completa)
+## Dashboard de Cliente
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-READ	GET	/rest/v1/clients?id=eq.{clientId}	{}	❌ Datos del cliente
-READ	GET	/rest/v1/vehicles?client_id=eq.{clientId}	{}	❌ Vehículos del cliente
-READ	GET	/rest/v1/orders?client_id=eq.{clientId}	{}	❌ Órdenes del cliente
-UPDATE	PUT	/rest/v1/clients?id=eq.{clientId}	{"name": "string", "email": "string", "phone": "string", "company": "string", "updated_at": "timestamp"}	❌ Actualizar cliente
-DELETE	DELETE	/rest/v1/clients?id=eq.{clientId}	{}	❌ Eliminar cliente
-new-client-screen.tsx
-Estado: ❌ Legacy (Requiere migración)
+### `client-dashboard-screen.tsx`
+**Estado**: ⚠️ Mixto (Requiere ajustes)
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-CREATE	POST	/rest/v1/clients	{"name": "string", "email": "string", "phone": "string", "company": "string", "client_type": "string", "status": "string"}	❌ Crear cliente
-Pantalla de Lista de Clientes (Faltante)
-Estado: ❌ Requiere creación
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **READ** | GET | `/rest/v1/clients?id=eq.{userId}` | `{}` | Datos del cliente |
+| **READ** | GET | `/rest/v1/vehicles?client_id=eq.{userId}` | `{}` | Vehículos del cliente |
+| **READ** | GET | `/rest/v1/orders?client_id=eq.{userId}` | `{}` | Órdenes del cliente |
+| **READ** | GET | `/rest/v1/citas?client_id=eq.{userId}` | `{}` | ⚠️ Citas del cliente (servicio faltante) | [2](#20-1) 
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-READ	GET	/rest/v1/clients	{}	Lista todos los clientes
-READ	GET	/rest/v1/clients?name=ilike.%{searchTerm}%	{}	Buscar clientes por nombre
-READ	GET	/rest/v1/clients?client_type=eq.{type}	{}	Filtrar por tipo de cliente
-Gestión de Vehículos
-vehicle-detail-screen.tsx
-Estado: ⚠️ Mixto (Funcional con servicios faltantes)
+---
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-READ	GET	/rest/v1/vehicles?id=eq.{vehicleId}	{}	Datos del vehículo
-READ	GET	/rest/v1/clients?id=eq.{clientId}	{}	Datos del propietario
-READ	GET	/rest/v1/orders?vehiculo_id=eq.{vehicleId}	{}	Órdenes del vehículo
-READ	GET	/rest/v1/citas?vehiculo_id=eq.{vehicleId}	{}	⚠️ Citas del vehículo (servicio faltante)
-UPDATE	PUT	/rest/v1/vehicles?id=eq.{vehicleId}	{"marca": "string", "modelo": "string", "año": integer, "placa": "string", "kilometraje": integer, "updated_at": "timestamp"}	Actualizar vehículo
-DELETE	DELETE	/rest/v1/vehicles?id=eq.{vehicleId}	{}	Eliminar vehículo
-Pantalla de Nuevo Vehículo (Faltante)
-Estado: ❌ Requiere creación
+## Gestión de Inventario
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-CREATE	POST	/rest/v1/vehicles	{"client_id": "string", "marca": "string", "modelo": "string", "año": integer, "placa": "string", "vin": "string", "color": "string", "kilometraje": integer}	Crear nuevo vehículo
-Pantalla de Lista de Vehículos (Faltante)
-Estado: ❌ Requiere creación
+### `inventory-screen.tsx`
+**Estado**: ❌ Legacy (Requiere migración completa)
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-READ	GET	/rest/v1/vehicles	{}	Lista todos los vehículos
-READ	GET	/rest/v1/vehicles?marca=ilike.%{searchTerm}%	{}	Buscar por marca
-READ	GET	/rest/v1/vehicles?placa=ilike.%{searchTerm}%	{}	Buscar por placa
-Gestión de Órdenes
-Pantalla de Lista de Órdenes (Faltante)
-Estado: ❌ Requiere creación
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **CREATE** | POST | `/rest/v1/inventory` | `{"codigo": "string", "nombre": "string", "categoria_id": "string", "precio_compra": number, "precio_venta": number, "stock_actual": number, "stock_minimo": number, "ubicacion_almacen": "string"}` | ❌ Crear item de inventario |
+| **READ** | GET | `/rest/v1/inventory` | `{}` | ❌ Lista de inventario |
+| **READ** | GET | `/rest/v1/inventory_categories` | `{}` | ❌ Categorías |
+| **UPDATE** | PUT | `/rest/v1/inventory?id=eq.{itemId}` | `{"stock_actual": integer, "precio_compra": number, "precio_venta": number, "updated_at": "timestamp"}` | ❌ Actualizar item |
+| **DELETE** | DELETE | `/rest/v1/inventory?id=eq.{itemId}` | `{}` | ❌ Eliminar item |
+| **READ** | POST | `/rest/v1/rpc/user_has_role` | `{"role_name": "string"}` | ❌ Verificar permisos | [3](#20-2) 
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-CREATE	POST	/rest/v1/orders	{"client_id": "string", "vehiculo_id": "string", "descripcion": "string", "estado": "string", "prioridad": "string", "tecnico_id": "string"}	Crear nueva orden
-READ	GET	/rest/v1/orders	{}	Lista todas las órdenes
-READ	POST	/rest/v1/rpc/get_ordenes_tecnico	{"p_taller_id": "uuid", "p_tecnico_id": "uuid", "p_estado": "string", "p_limit": 20, "p_offset": 0}	Órdenes con filtros
-UPDATE	PUT	/rest/v1/orders?id=eq.{orderId}	{"estado": "string", "descripcion": "string", "costo": number, "updated_at": "timestamp"}	Actualizar orden
-DELETE	DELETE	/rest/v1/orders?id=eq.{orderId}	{}	Eliminar orden
-Pantalla de Detalle de Orden (Faltante)
-Estado: ❌ Requiere creación
+### `inventory-item-detail-screen.tsx`
+**Estado**: ✅ Moderno (Funcional)
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-READ	GET	/rest/v1/orders?id=eq.{orderId}	{}	Detalles de la orden
-READ	GET	/rest/v1/order_parts?order_id=eq.{orderId}	{}	Partes de la orden
-READ	GET	/rest/v1/order_comments?order_id=eq.{orderId}	{}	Comentarios de la orden
-CREATE	POST	/rest/v1/order_comments	{"order_id": "string", "comment": "string", "user_id": "string"}	Agregar comentario
-CREATE	POST	/rest/v1/order_parts	{"order_id": "string", "part_id": "string", "cantidad": integer, "precio": number}	Agregar parte
-UPDATE	PUT	/rest/v1/order_parts?id=eq.{partId}	{"cantidad": integer, "precio": number}	Actualizar parte
-DELETE	DELETE	/rest/v1/order_parts?id=eq.{partId}	{}	Eliminar parte
-Gestión de Citas
-Pantalla de Lista de Citas (Faltante)
-Estado: ❌ Requiere creación
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **READ** | GET | `/rest/v1/inventory?id=eq.{itemId}` | `{}` | Detalles del item |
+| **READ** | GET | `/rest/v1/inventory_history?item_id=eq.{itemId}` | `{}` | Historial de movimientos |
+| **UPDATE** | PUT | `/rest/v1/inventory?id=eq.{itemId}` | `{"stock_actual": integer, "updated_at": "timestamp"}` | Ajustar stock |
+| **CREATE** | POST | `/rest/v1/inventory_movements` | `{"item_id": "string", "tipo": "string", "cantidad": integer, "motivo": "string"}` | Registrar movimiento |
+| **DELETE** | DELETE | `/rest/v1/inventory?id=eq.{itemId}` | `{}` | Eliminar item (con permisos) |
 
-Operación	Método HTTP	Endpoint/RPC	Body Parameters	Descripción
-CREATE	POST	/rest/v1/citas	{"client_id": "string", "vehiculo_id": "string", "fecha": "date", "hora": "time", "tipo_servicio": "string", "estado": "string", "notas": "string"}	Crear nueva cita
-READ	GET	/rest/v1/citas	{}	Lista todas las citas
-READ	GET	/rest/v1/citas?fecha=gte.{startDate}&fecha=lte.{endDate}	{}	Citas por rango de fechas
-READ	GET	/rest/v1/citas?estado=eq.{status}	{}	Filtrar por estado
-UPDATE	PUT	/rest/v1/citas?id=eq.{citaId}	{"fecha": "date", "hora": "time", "estado": "string", "notas": "string", "updated_at": "timestamp"}	Actualizar c
+### `new-inventory-item-screen.tsx`
+**Estado**: ❌ Legacy (Requiere migración)
+
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **CREATE** | POST | `/rest/v1/inventory` | `{"codigo": "string", "nombre": "string", "categoria_id": "string", "precio_compra": number, "precio_venta": number, "stock_actual": number, "stock_minimo": number, "ubicacion_almacen": "string"}` | ❌ Crear item |
+
+---
+
+## Gestión de Clientes
+
+### `client-detail-screen.tsx`
+**Estado**: ❌ Legacy (Requiere migración completa)
+
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **READ** | GET | `/rest/v1/clients?id=eq.{clientId}` | `{}` | ❌ Datos del cliente |
+| **READ** | GET | `/rest/v1/vehicles?client_id=eq.{clientId}` | `{}` | ❌ Vehículos del cliente |
+| **READ** | GET | `/rest/v1/orders?client_id=eq.{clientId}` | `{}` | ❌ Órdenes del cliente |
+| **UPDATE** | PUT | `/rest/v1/clients?id=eq.{clientId}` | `{"name": "string", "email": "string", "phone": "string", "company": "string", "updated_at": "timestamp"}` | ❌ Actualizar cliente |
+| **DELETE** | DELETE | `/rest/v1/clients?id=eq.{clientId}` | `{}` | ❌ Eliminar cliente | [4](#20-3) [5](#20-4) 
+
+### `new-client-screen.tsx`
+**Estado**: ❌ Legacy (Requiere migración)
+
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **CREATE** | POST | `/rest/v1/clients` | `{"name": "string", "email": "string", "phone": "string", "company": "string", "client_type": "string", "status": "string"}` | ❌ Crear cliente | [6](#20-5) 
+
+### **Pantalla de Lista de Clientes** (Faltante)
+**Estado**: ❌ Requiere creación
+
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **READ** | GET | `/rest/v1/clients` | `{}` | Lista todos los clientes |
+| **READ** | GET | `/rest/v1/clients?name=ilike.%{searchTerm}%` | `{}` | Buscar clientes por nombre |
+| **READ** | GET | `/rest/v1/clients?client_type=eq.{type}` | `{}` | Filtrar por tipo de cliente |
+
+---
+
+## Gestión de Vehículos
+
+### `vehicle-detail-screen.tsx`
+**Estado**: ⚠️ Mixto (Funcional con servicios faltantes)
+
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **READ** | GET | `/rest/v1/vehicles?id=eq.{vehicleId}` | `{}` | Datos del vehículo |
+| **READ** | GET | `/rest/v1/clients?id=eq.{clientId}` | `{}` | Datos del propietario |
+| **READ** | GET | `/rest/v1/orders?vehiculo_id=eq.{vehicleId}` | `{}` | Órdenes del vehículo |
+| **READ** | GET | `/rest/v1/citas?vehiculo_id=eq.{vehicleId}` | `{}` | ⚠️ Citas del vehículo (servicio faltante) |
+| **UPDATE** | PUT | `/rest/v1/vehicles?id=eq.{vehicleId}` | `{"marca": "string", "modelo": "string", "año": integer, "placa": "string", "kilometraje": integer, "updated_at": "timestamp"}` | Actualizar vehículo |
+| **DELETE** | DELETE | `/rest/v1/vehicles?id=eq.{vehicleId}` | `{}` | Eliminar vehículo | [7](#20-6) 
+
+### **Pantalla de Nuevo Vehículo** (Faltante)
+**Estado**: ❌ Requiere creación
+
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **CREATE** | POST | `/rest/v1/vehicles` | `{"client_id": "string", "marca": "string", "modelo": "string", "año": integer, "placa": "string", "vin": "string", "color": "string", "kilometraje": integer}` | Crear nuevo vehículo |
+
+### **Pantalla de Lista de Vehículos** (Faltante)
+**Estado**: ❌ Requiere creación
+
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **READ** | GET | `/rest/v1/vehicles` | `{}` | Lista todos los vehículos |
+| **READ** | GET | `/rest/v1/vehicles?marca=ilike.%{searchTerm}%` | `{}` | Buscar por marca |
+| **READ** | GET | `/rest/v1/vehicles?placa=ilike.%{searchTerm}%` | `{}` | Buscar por placa |
+
+---
+
+## Gestión de Órdenes
+
+### **Pantalla de Lista de Órdenes** (Faltante)
+**Estado**: ❌ Requiere creación
+
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **CREATE** | POST | `/rest/v1/orders` | `{"client_id": "string", "vehiculo_id": "string", "descripcion": "string", "estado": "string", "prioridad": "string", "tecnico_id": "string"}` | Crear nueva orden |
+| **READ** | GET | `/rest/v1/orders` | `{}` | Lista todas las órdenes |
+| **READ** | POST | `/rest/v1/rpc/get_ordenes_tecnico` | `{"p_taller_id": "uuid", "p_tecnico_id": "uuid", "p_estado": "string", "p_limit": 20, "p_offset": 0}` | Órdenes con filtros |
+| **UPDATE** | PUT | `/rest/v1/orders?id=eq.{orderId}` | `{"estado": "string", "descripcion": "string", "costo": number, "updated_at": "timestamp"}` | Actualizar orden |
+| **DELETE** | DELETE | `/rest/v1/orders?id=eq.{orderId}` | `{}` | Eliminar orden |
+
+### **Pantalla de Detalle de Orden** (Faltante)
+**Estado**: ❌ Requiere creación
+
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **READ** | GET | `/rest/v1/orders?id=eq.{orderId}` | `{}` | Detalles de la orden |
+| **READ** | GET | `/rest/v1/order_parts?order_id=eq.{orderId}` | `{}` | Partes de la orden |
+| **READ** | GET | `/rest/v1/order_comments?order_id=eq.{orderId}` | `{}` | Comentarios de la orden |
+| **CREATE** | POST | `/rest/v1/order_comments` | `{"order_id": "string", "comment": "string", "user_id": "string"}` | Agregar comentario |
+| **CREATE** | POST | `/rest/v1/order_parts` | `{"order_id": "string", "part_id": "string", "cantidad": integer, "precio": number}` | Agregar parte |
+| **UPDATE** | PUT | `/rest/v1/order_parts?id=eq.{partId}` | `{"cantidad": integer, "precio": number}` | Actualizar parte |
+| **DELETE** | DELETE | `/rest/v1/order_parts?id=eq.{partId}` | `{}` | Eliminar parte |
+
+---
+
+## Gestión de Citas
+
+### **Pantalla de Lista de Citas** (Faltante)
+**Estado**: ❌ Requiere creación
+
+| Operación | Método HTTP | Endpoint/RPC | Body Parameters | Descripción |
+|-----------|-------------|--------------|-----------------|-------------|
+| **CREATE** | POST | `/rest/v1/citas` | `{"client_id": "string", "vehiculo_id": "string", "fecha": "date", "hora": "time", "tipo_servicio": "string", "estado": "string", "notas": "string"}` | Crear nueva cita |
+| **READ** | GET | `/rest/v1/citas` | `{}` | Lista todas las citas |
+| **READ** | GET | `/rest/v1/citas?fecha=gte.{startDate}&fecha=lte.{endDate}` | `{}` | Citas por rango de fechas |
+| **READ** | GET | `/rest/v1/citas?estado=eq.{status}` | `{}` | Filtrar por estado |
+| **UPDATE** | PUT | `/rest/v1/citas?id=eq.{citaId}` | `{"fecha": "date", "hora": "time", "estado": "string", "notas": "string", "updated_at": "timestamp"}` | Actualizar c
+
 Wiki pages you might want to explore:
-
-Client Management (pubnicaragua/autoflowx-apps)
-Vehicle Management (pubnicaragua/autoflowx-apps)
+- [Client Management (pubnicaragua/autoflowx-apps)](/wiki/pubnicaragua/autoflowx-apps#4.2)
+- [Vehicle Management (pubnicaragua/autoflowx-apps)](/wiki/pubnicaragua/autoflowx-apps#4.3)
