@@ -32,7 +32,7 @@ export const userService = {
 
       // Obtener el perfil extendido del usuario
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .select('*')
         .eq('id', user.id)
         .single()
@@ -152,7 +152,7 @@ export const userService = {
 
       // Crear perfil en la base de datos
       const { error: profileError } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .insert([{
           id: authData.user.id,
           email: userData.email,
@@ -216,7 +216,7 @@ export const userService = {
       // Si se actualiza el nombre o apellido, actualizar también el full_name
       if (updates.firstName || updates.lastName) {
         const { data: currentProfile } = await supabase
-          .from('profiles')
+          .from('perfil_usuario')
           .select('first_name, last_name')
           .eq('id', userId)
           .single()
@@ -227,7 +227,7 @@ export const userService = {
       }
 
       const { data, error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .update(updateData)
         .eq('id', userId)
         .select()
@@ -299,7 +299,7 @@ export const userService = {
   async hasRole(userId: string, requiredRole: USER_ROLES_TYPE): Promise<boolean> {
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .select('role')
         .eq('id', userId)
         .single()
@@ -326,7 +326,7 @@ export const userService = {
   async hasAnyRole(userId: string, requiredRoles: USER_ROLES_TYPE[]): Promise<boolean> {
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .select('role')
         .eq('id', userId)
         .single()
@@ -353,7 +353,7 @@ export const userService = {
   async getAllUsers(): Promise<UserProfile[]> {
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .select('*')
         .order('created_at', { ascending: false })
 
@@ -386,7 +386,7 @@ export const userService = {
   async updateUSER_ROLES_TYPE(userId: string, role: USER_ROLES_TYPE): Promise<{ success: boolean; error?: Error }> {
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .update({ role })
         .eq('id', userId)
 
@@ -409,7 +409,7 @@ export const userService = {
   async toggleUserStatus(userId: string, isActive: boolean): Promise<{ success: boolean; error?: Error }> {
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .update({ is_active: isActive })
         .eq('id', userId)
 
@@ -603,10 +603,10 @@ export const userService = {
   }, 
   async GetUserById(userId: string): Promise<User | null> {  
     try {  
-      const { data, error } = await supabase  
-        .from('profiles')  
-        .select('*')  
-        .eq('id', userId)  
+            const { data, error } = await supabase
+        .from('perfil_usuario')
+        .select('*')
+        .eq('id', userId)
         .single()
 
       if (error) {
@@ -639,7 +639,7 @@ export const userService = {
   async getAllTechnicians(): Promise<UserProfile[]> {
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .select('*')
         .eq('role', 'technician')
         .eq('is_active', true)

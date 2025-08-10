@@ -38,6 +38,9 @@ export const orderService = {
       return (data || []).map(order => ({
         ...order,
         // Map database fields to our type
+        clientId: order.client_id,
+        vehicleId: order.vehicle_id,
+        technicianId: order.technician_id,
         estimatedCompletionDate: order.estimated_completion_date,
         completionDate: order.completion_date,
         paymentStatus: order.payment_status,
@@ -287,7 +290,26 @@ export const orderService = {
         return []
       }
 
-      return data || []
+      return (data || []).map(order => ({
+        ...order,
+        // Map database fields to our type
+        clientId: order.client_id,
+        vehicleId: order.vehicle_id,
+        technicianId: order.technician_id,
+        estimatedCompletionDate: order.estimated_completion_date,
+        completionDate: order.completion_date,
+        paymentStatus: order.payment_status,
+        paymentMethod: order.payment_method,
+        paymentNotes: order.payment_notes,
+        paidAmount: order.paid_amount,
+        createdAt: order.created_at,
+        updatedAt: order.updated_at,
+        // Initialize empty arrays that will be populated by separate queries
+        images: [],
+        comments: [],
+        items: [],
+        repairProcesses: [],
+      }))
     } catch (error) {
       console.error('Error in getOrdersByClientId:', error)
       return []

@@ -99,6 +99,9 @@ export type UiScreenNavProp = {
   navigation: StackNavigationProp<any>
 }
 
+// Re-exportar tipos de navegación
+export * from './navigation'
+
 // Common screen props type
 export type UiScreenProps = {
   route: { params: any }
