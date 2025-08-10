@@ -15,10 +15,10 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import VEHICULO_SERVICES, { VehiculoType } from "../services/VEHICULOS.SERVICE"  
-import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
+import VEHICULO_SERVICES from "../services/supabase/vehicle-service"  
+import CLIENTS_SERVICES from "../services/supabase/client-service"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service" 
   
 export default function ClientVehicleScreen({ route, navigation }) {  
   const { clientId } = route.params  

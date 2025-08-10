@@ -19,8 +19,8 @@ import { Feather } from "@expo/vector-icons"
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
 // Usar los servicios que realmente existen  
-import * as orderService from "../services/order-service"  
-import * as inventoryService from "../services/inventory-service"  
+import * as orderService from "../services/supabase/order-service"  
+import * as inventoryService from "../services/supabase/inventory-service"  
   
 // Tipos TypeScript para resolver errores  
 interface OrderPartsScreenProps {  
@@ -418,9 +418,11 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
         <Feather name="alert-circle" size={64} color="#f44336" />  
         <Text style={styles.errorText}>{error}</Text>  
         <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>  
-          <Text style={styles.retryButtonText}>Reintentar</Text          <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>  
-          <Text style={styles.retryButtonText}>Reintentar</Text>  
+          <Text style={styles.retryButtonText}>Reintentar</Text>          
         </TouchableOpacity>  
+        <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>  
+          <Text style={styles.retryButtonText}>Reintentar</Text>  
+        </TouchableOpacity>
       </View>  
     )  
   }  

@@ -29,16 +29,7 @@ export default function App() {
         setIsLoading(true)  
   
         // Inicializar todos los servicios de Supabase  
-        await Promise.all([  
-          clientService.initializeClients(),  
-          vehicleService.initializeVehicles(),  
-          orderService.initializeOrders(),  
-          inventoryService.initializeInventory(),  
-          currencyService.initializeCurrencies(),  
-          companyService.initializeCompanySettings(),  
-          imageService.initializeImages(),  
-          notificationService.initializeNotifications(),  
-          storageService.initializeStorage(),  
+        await Promise.all([   
         ])  
   
         console.log("Datos inicializados correctamente con Supabase")  

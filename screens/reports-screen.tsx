@@ -143,7 +143,7 @@ export default function ReportsScreen({ navigation }: ReportsScreenProps) {
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await userService.getTallerId(user.id)  
+      const userTallerId = await userService.userService.GET_TALLER_ID(user.id)  
       const userPermissions = await accessService.getUserPermissions(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   

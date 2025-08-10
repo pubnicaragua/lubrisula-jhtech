@@ -16,9 +16,9 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import ORDENES_TRABAJO_SERVICES, { OrdenTrabajoType } from "../services/ORDENES.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
+import ORDENES_TRABAJO_SERVICES, { OrdenTrabajoType } from "../services/supabase/order-service"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service" 
   
 // Estados disponibles para las órdenes  
 const ORDER_STATUSES = [  

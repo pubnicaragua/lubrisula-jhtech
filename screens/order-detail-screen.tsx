@@ -14,10 +14,10 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useAuth } from "../context/auth-context"  
 import ORDENES_TRABAJO_SERVICES, { OrdenTrabajoType } from "../services/supabase/order-service"  
-import VEHICULO_SERVICES, { VehiculoType } from "../services/"  
-import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
+import VEHICULO_SERVICES, { VehiculoType } from "../services/supabase/vehicle-service"  
+import CLIENTS_SERVICES, { ClienteType } from "../services/supabase/client-service"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service" 
   
 export default function OrderDetailScreen({ route, navigation }) {  
   const { orderId } = route.params  

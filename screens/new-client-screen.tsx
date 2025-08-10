@@ -13,8 +13,18 @@ import {
 } from "react-native"  
 import { Feather } from "@expo/vector-icons"  
 import { useAuth } from "../context/auth-context"  
-import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
+import CLIENTS_SERVICES from "../services/supabase/client-service"  
   
+interface ClienteType {  
+  id: string  
+  name: string  
+  email?: string  
+  phone?: string
+  company?: string  
+  client_type: "individual" | "empresa"
+  status: "Activo" | "Inactivo"  
+}  
+
 export default function NewClientScreen({ navigation }) {  
   const { user } = useAuth()  
   const [loading, setLoading] = useState(false)  
@@ -56,7 +66,7 @@ export default function NewClientScreen({ navigation }) {
     try {  
       setLoading(true)  
         
-      const newClient = await CLIENTS_SERVICES.ADD_NEW_CLIENTE(formData as ClienteType)  
+      const newClient = await CLIENTS_SERVICES.createClient(formData as ClienteType)  
         
       Alert.alert(  
         "Éxito",  

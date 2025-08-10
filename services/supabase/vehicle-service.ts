@@ -295,6 +295,15 @@ export const vehicleService = {
       throw error;
     }
   },
+
+  initializeVehicles: async (): Promise<void> => {
+    try {
+      const vehicles = await vehicleService.getAllVehicles()
+    } catch (error) {
+      console.error('Error initializing mock vehicle data:', error);
+      throw error;
+    }
+  },
 };
 
 export default vehicleService;

@@ -17,9 +17,10 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import INVENTARIO_SERVICES, { InventarioType, CategoriaMaterialType, ProveedorType } from "../services/INVETARIO.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
+import INVENTARIO_SERVICES from "../services/supabase/inventory-service"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service"
+import { InventarioType, CategoriaMaterialType, ProveedorType } from "../services/supabase/services-service"
   
 export default function InventoryScreen({ navigation }) {  
   const { user } = useAuth()  

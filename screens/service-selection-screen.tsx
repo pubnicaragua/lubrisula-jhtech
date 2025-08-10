@@ -16,9 +16,10 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import SERVICIOS_SERVICES, { ServicioType } from "../services/SERVICIOS.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
+import SERVICIOS_SERVICES from "../services/supabase/services-service"
+import ServicioType from "../services/supabase/services-service"
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service" 
   
 export default function ServiceSelectionScreen({ navigation, route }) {  
   const { onServiceSelect, selectedService = null, multiSelect = false } = route.params || {}  
@@ -711,5 +712,3 @@ const styles = StyleSheet.create({
     color: "#fff",  
   },  
 })  
-  
-export default ServiceSelectionScreen

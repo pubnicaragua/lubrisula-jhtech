@@ -16,10 +16,10 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import INVENTARIO_SERVICES, { InventarioType } from "../services/INVETARIO.SERVICE"  
-import CATEGORIA_MATERIALES_SERVICES from "../services/CATEGORIA_MATERIALES.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
+import INVENTARIO_SERVICES, { InventarioType } from "../services/supabase/inventory-service"  
+import CATEGORIA_MATERIALES_SERVICES from "../services/supabase/categoria-materiales-service"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service" 
   
 export default function PartSelectionScreen({ navigation, route }) {  
   const { onPartSelect, selectedParts = [], multiSelect = true } = route.params || {}  

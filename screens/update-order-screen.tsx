@@ -19,7 +19,7 @@ import { useAuth } from "../context/auth-context"
 import * as orderService from "../services/supabase/order-service"  
 import * as clientService from "../services/supabase/client-service"  
 import * as vehicleService from "../services/supabase/vehicle-service"  
-import * as serviceService from "../services/supabase/service-service"  
+import * as serviceService from "../services/supabase/services-service"  
 import * as userService from "../services/supabase/user-service"  
 import * as accessService from "../services/supabase/access-service"  
   

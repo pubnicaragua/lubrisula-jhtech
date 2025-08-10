@@ -18,9 +18,10 @@ import { useAuth } from "../context/auth-context"
 import { clientService, Client } from "../services/supabase/client-service"
 import { vehicleService, Vehicle } from "../services/supabase/vehicle-service"  
 import { orderService } from "../services/supabase/order-service" 
-import OrdenTrabajo from "../services/supabase/order-service"
+import ORDER_SERVICE from "../services/supabase/order-service"
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
-import USER_SERVICE from "../services/supabase/user-service" 
+import USER_SERVICES from "../services/supabase/user-service" 
+import CLIENT_SERVICES from "../services/supabase/client-service";
   
 export default function ClientDetailScreen({ route, navigation }) {  
   const { clientId } = route.params  
@@ -50,12 +51,12 @@ export default function ClientDetailScreen({ route, navigation }) {
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      const userTallerId = await USER_SERVICES.GET_TALLER_ID(user.id)  
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       // Obtener datos del cliente  
-      const clientData = await clientimport clientService from "../services/supabase/client-service".GET_CLIENTS_BY_ID(clientId)  
+      const clientData = await CLIENT_SERVICES.getClientById(clientId)  
         
       if (!clientData) {  
         setError("Cliente no encontrado")  
@@ -113,7 +114,7 @@ export default function ClientDetailScreen({ route, navigation }) {
         updated_at: new Date().toISOString()  
       }  
   
-      await clientimport clientService from "../services/supabase/client-service".UPDATE_CLIENTE(clientId, updatedClient)  
+      await CLIENT_SERVICES.updateClient(clientId, updatedClient)  
       setClient(updatedClient)  
       setEditModalVisible(false)  
   
@@ -137,7 +138,7 @@ export default function ClientDetailScreen({ route, navigation }) {
           style: "destructive",  
           onPress: async () => {  
             try {  
-              await clientimport clientService from "../services/supabase/client-service".DELETE_CLIENTE(clientId)  
+              await CLIENT_SERVICES.deleteClient(clientId)  
               Alert.alert("Éxito", "Cliente eliminado correctamente")  
               navigation.goBack()  
             } catch (error) {  

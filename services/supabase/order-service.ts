@@ -306,7 +306,8 @@ export const orderService = {
       throw error;
     }
   },
-  getOrdersByClientId(clientId: string): Promise<Order[]> {
+
+  async getOrdersByClientId(clientId: string): Promise<Order[]> {
     try {
       const { data, error } = await supabase
         .from('ordenes')
@@ -323,6 +324,15 @@ export const orderService = {
     } catch (error) {
       console.error('Error in getOrdersByClientId:', error)
       return []
+    }
+  },
+  
+  async initializeOrders(): Promise<void> {
+    try {
+      const orders = await orderService.getAllOrders();
+    } catch (error) {
+      console.error('Error initializing orders:', error);
+      throw new Error('Failed to initialize orders. Please check your connection and try again.');
     }
   }
 };

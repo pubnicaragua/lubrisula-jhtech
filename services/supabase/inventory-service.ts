@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase'
-import type { InventoryItem, InventoryItemFormData } from '../../types/inventory'
+import { DashboardInventoryItem } from '../../types/dashboard'
+import type { InventoryItem } from '../../types/inventory'
 
 // Tipos para el servicio de inventario
 type InventoryFilters = {
@@ -26,6 +27,27 @@ const INVENTORY_STATUS = {
 }
 
 export const inventoryService = {
+
+  async getAllInventory(): Promise<InventoryItem[]> {
+    try {
+      // Hacer fetch de todos los items del inventario desde Supabase  
+      const { data, error } = await supabase
+        .from('inventario')
+        .select('*')
+        .order('nombre', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching inventory:', error);
+        throw error;
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error in getAllInventory:', error);
+      throw error;
+    }
+  },
+
   // Obtener todos los artículos de inventario con filtros opcionales
   async getInventoryItems(filters: InventoryFilters = {}) {
     try {
@@ -51,7 +73,7 @@ export const inventoryService = {
 
       if (error) throw error
 
-      return data.map((item: any) => ({
+      return data.map((item: InventoryItem) => ({
         id: item.id,
         name: item.name,
         description: item.description,
@@ -70,7 +92,7 @@ export const inventoryService = {
         images: item.images || [],
         createdAt: item.created_at,
         updatedAt: item.updated_at
-      })) as InventoryItem[]
+      }))
     } catch (error) {
       console.error('Error fetching inventory items:', error)
       throw error
@@ -159,8 +181,8 @@ export const inventoryService = {
           price: itemData.price,
           supplier_id: itemData.supplierId,
           location: itemData.location,
-          status: itemData.stock <= 0 ? 'out_of_stock' : 
-                  (itemData.minStock && itemData.stock <= itemData.minStock ? 'low_stock' : 'in_stock'),
+          status: itemData.stock <= 0 ? 'out_of_stock' :
+            (itemData.minStock && itemData.stock <= itemData.minStock ? 'low_stock' : 'in_stock'),
           notes: itemData.notes,
           images: itemData.images || []
         }])
@@ -180,15 +202,15 @@ export const inventoryService = {
   async updateInventoryItem(id: string, updates: Partial<InventoryItemFormData>): Promise<InventoryItem> {
     try {
       const updateData: any = { ...updates }
-      
+
       // Mapear campos si es necesario
       if ('minStock' in updates) updateData.min_stock = updates.minStock
       if ('supplierId' in updates) updateData.supplier_id = updates.supplierId
-      
+
       // Actualizar estado según stock
       if ('stock' in updates) {
-        updateData.status = updates.stock === 0 ? 'out_of_stock' : 
-                          (updates.minStock && updates.stock && updates.stock <= updates.minStock ? 'low_stock' : 'in_stock')
+        updateData.status = updates.stock === 0 ? 'out_of_stock' :
+          (updates.minStock && updates.stock && updates.stock <= updates.minStock ? 'low_stock' : 'in_stock')
       }
 
       const { error } = await supabase
@@ -233,14 +255,14 @@ export const inventoryService = {
       if (!currentItem) throw new Error('Artículo no encontrado')
 
       const newStock = currentItem.stock + quantity
-      
+
       // Actualizamos el stock
       const { error } = await supabase
         .from('inventory')
-        .update({ 
+        .update({
           stock: newStock,
-          status: newStock === 0 ? 'out_of_stock' : 
-                 (currentItem.min_stock && newStock <= currentItem.min_stock ? 'low_stock' : 'in_stock')
+          status: newStock === 0 ? 'out_of_stock' :
+            (currentItem.min_stock && newStock <= currentItem.min_stock ? 'low_stock' : 'in_stock')
         })
         .eq('id', id)
 
@@ -308,6 +330,14 @@ export const inventoryService = {
     } catch (error) {
       console.error(`Error fetching history for item ${itemId}:`, error)
       throw error
+    }
+  },
+  async initializeInventory(): Promise<void> {
+    try {
+      const inventory = await inventoryService.getAllInventory();
+    } catch (error) {
+      console.error('Error initializing orders:', error);
+      throw new Error('Failed to initialize orders. Please check your connection and try again.');
     }
   }
 }

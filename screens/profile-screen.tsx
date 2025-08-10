@@ -14,9 +14,9 @@ import {
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useAuth } from "../context/auth-context"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
-import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
+import USER_SERVICE from "../services/supabase/user-service" 
+import CLIENTS_SERVICES, { ClienteType } from "../services/supabase/client-service"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
   
 export default function ProfileScreen({ navigation }) {  
   const { user, logout } = useAuth()  

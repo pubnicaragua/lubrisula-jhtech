@@ -16,8 +16,8 @@ import {
 } from "react-native"
 import { useAuth } from "../context/auth-context"
 import { isValidEmail } from "../utils/helpers"
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE"
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"
+import USER_SERVICE from "../services/supabase/user-service"
+import ACCESOS_SERVICES from "../services/supabase/access-service"
 
 export default function LoginScreen() {
   const { login } = useAuth()

@@ -30,7 +30,6 @@ import * as orderService from "../services/supabase/order-service"
 import * as clientService from "../services/supabase/client-service"  
 import * as vehicleService from "../services/supabase/vehicle-service"  
 import * as inventoryService from "../services/supabase/inventory-service"  
-import * as servicesService from "../services/supabase/services-service" // Corregido: services-service  
 import * as userService from "../services/supabase/user-service"  
 import * as accessService from "../services/supabase/access-service"  
 import * as imageService from "../services/supabase/image-service"  
@@ -166,8 +165,7 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
         clientService.getClients(), // Corregido: getClients en lugar de getAllClients  
         currencyService.getAllCurrencies(),  
         companyService.getCompanySettings(),  
-        inventoryService.getInventoryItems(), // Corregido: getInventoryItems en lugar de getAllInventory  
-        servicesService.getAllServices()  
+        inventoryService.getInventoryItems(), // Corregido: getInventoryItems en lugar de getAllInventory    
       ])  
   
       setClients(allClients)  
