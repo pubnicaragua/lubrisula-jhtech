@@ -306,7 +306,7 @@ export const orderService = {
       throw error;
     }
   },
-  getOrdersByClientId(clientId: string): Promise<Order[]> {
+  async getOrdersByClientId(clientId: string): Promise<Order[]> {
     try {
       const { data, error } = await supabase
         .from('ordenes')

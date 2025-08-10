@@ -414,14 +414,13 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
   
   if (error) {  
     return (  
-      <View style={styles.errorContainer}>  
-        <Feather name="alert-circle" size={64} color="#f44336" />  
-        <Text style={styles.errorText}>{error}</Text>  
-        <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>  
-          <Text style={styles.retryButtonText}>Reintentar</Text          <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>  
-          <Text style={styles.retryButtonText}>Reintentar</Text>  
-        </TouchableOpacity>  
-      </View>  
+      <View style={styles.errorContainer}>
+  <Text style={styles.errorText}>{error}</Text>
+  <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>
+    <Text style={styles.retryButtonText}>Reintentar</Text>
+  </TouchableOpacity>
+</View>
+
     )  
   }  
   

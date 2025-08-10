@@ -51,11 +51,11 @@ export default function ClientDetailScreen({ route, navigation }) {
   
       // Validar permisos del usuario  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
-      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      const userPermissions = await ACCESOS_SERVICES.getPermisosUsuario(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       // Obtener datos del cliente  
-      const clientData = await clientimport clientService from "../services/supabase/client-service".GET_CLIENTS_BY_ID(clientId)  
+      const clientData = await clientService.getClientById(clientId)  
         
       if (!clientData) {  
         setError("Cliente no encontrado")  
@@ -79,8 +79,8 @@ export default function ClientDetailScreen({ route, navigation }) {
   
       // Cargar vehículos y órdenes del cliente  
       const [clientVehicles, allOrders] = await Promise.all([  
-        vehicleService.GET_ALL_VEHICULOS_BY_CLIENT(clientId),  
-        orderService.GET_ALL_ORDENES()  
+        vehicleService.getAllVehiculosByClient(clientId),  
+        orderService.getAllOrdenes()  
       ])  
   
       setVehicles(clientVehicles)  
@@ -113,7 +113,7 @@ export default function ClientDetailScreen({ route, navigation }) {
         updated_at: new Date().toISOString()  
       }  
   
-      await clientimport clientService from "../services/supabase/client-service".UPDATE_CLIENTE(clientId, updatedClient)  
+      await clientService.updateCliente(clientId, updatedClient)  
       setClient(updatedClient)  
       setEditModalVisible(false)  
   
@@ -137,7 +137,7 @@ export default function ClientDetailScreen({ route, navigation }) {
           style: "destructive",  
           onPress: async () => {  
             try {  
-              await clientimport clientService from "../services/supabase/client-service".DELETE_CLIENTE(clientId)  
+              await clientService.deleteCliente(clientId)  
               Alert.alert("Éxito", "Cliente eliminado correctamente")  
               navigation.goBack()  
             } catch (error) {  
