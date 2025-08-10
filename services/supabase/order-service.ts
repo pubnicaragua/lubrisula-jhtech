@@ -66,7 +66,7 @@ export const orderService = {
     try {
       // Get the order
       const { data: order, error } = await supabase
-        .from('orders')
+        .from('ordenes_trabajo')
         .select('*')
         .eq('id', id)
         .single();
@@ -169,7 +169,7 @@ export const orderService = {
       };
 
       const { data, error } = await supabase
-        .from('orders')
+        .from('ordenes_trabajo')
         .insert([newOrder])
         .select()
         .single();
@@ -198,7 +198,7 @@ export const orderService = {
       };
 
       const { error } = await supabase
-        .from('orders')
+        .from('ordenes_trabajo')
         .update(updateData)
         .eq('id', id);
 
@@ -214,7 +214,7 @@ export const orderService = {
   async updateOrderStatus(id: string, status: string): Promise<Order | null> {
     try {
       const { data, error } = await supabase
-        .from('orders')
+        .from('ordenes_trabajo')
         .update({ status })
         .eq('id', id)
 
@@ -228,7 +228,7 @@ export const orderService = {
 
   async deleteOrder(id: string): Promise<void> {
     try {
-      const { error } = await supabase.from('orders').delete().eq('id', id)
+      const { error } = await supabase.from('ordenes_trabajo').delete().eq('id', id)
       if (error) throw error
     } catch (error) {
       handleSupabaseError(error, `delete order ${id}`);
@@ -280,7 +280,7 @@ export const orderService = {
   async getOrdersByClientId(clientId: string): Promise<Order[]> {
     try {
       const { data, error } = await supabase
-        .from('ordenes')
+        .from('ordenes_trabajo')
         .select('*')
         .eq('client_id', clientId)
         .order('fecha_creacion', { ascending: false })
@@ -410,7 +410,7 @@ export const orderService = {
   async getOrdersByVehicleId(vehicleId: string): Promise<Order[]> {
     try {
       const { data, error } = await supabase
-        .from('orders')
+        .from('ordenes_trabajo')
         .select('*')
         .eq('vehicle_id', vehicleId)
         .order('created_at', { ascending: false });

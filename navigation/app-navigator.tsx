@@ -260,7 +260,7 @@ const AppNavigator = () => {
   }
 
   // Determinar qué navegador mostrar según el rol del usuario
-  if (user?.role === "client") {
+  if (user?.role === "client") { //cambiar !== por ===
     return <ClientTabNavigator />
   } else {
     return <TechnicianTabNavigator />

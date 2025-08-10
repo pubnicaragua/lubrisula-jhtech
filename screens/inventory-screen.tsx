@@ -56,7 +56,7 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
       const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
-      if (userPermissions?.rol === 'client') {  
+      if (userPermissions?.rol === 'client') {   //cambiar !== por ===
         // Los clientes no tienen acceso al inventario  
         setError("No tienes permisos para ver el inventario")  
         return  

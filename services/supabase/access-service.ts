@@ -67,30 +67,12 @@ export const accessService = {
 
   async GET_PERMISOS_USUARIO(userId: string, tallerId: string): Promise<UserPermissions | null> {
     try {
-      const { data, error } = await supabase
-        .from('usuarios_talleres')
-        .select(`  
-            rol,  
-            permisos,  
-            taller_id,  
-            talleres (  
-              id,  
-              nombre  
-            )  
-          `)
-        .eq('usuario_id', userId)
-        .eq('taller_id', tallerId)
-        .single()
-
-      if (error) {
-        console.error('Error getting user permissions:', error)
-        return null
-      }
-
+      // Por ahora, asumimos que todos los usuarios son clientes
+      // En el futuro, esto se puede expandir para incluir roles y permisos reales
       return {
-        rol: data?.rol || 'client',
-        permisos: data?.permisos || [],
-        taller_id: data?.taller_id || tallerId
+        rol: 'client',
+        permisos: [],
+        taller_id: tallerId
       }
     } catch (error) {
       console.error('Error in GET_PERMISOS_USUARIO:', error)

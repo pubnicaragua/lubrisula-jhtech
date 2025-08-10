@@ -27,17 +27,11 @@ import { UiScreenProps } from "../types"
 import { Order } from '../types';
 
 export default function ClientDetailScreen({ route, navigation }: UiScreenProps) {  
-  const { clientId } = route.params  
   const { user } = useAuth()
+  const [clientId, setClientId] = useState<string | null>(null)  
+
+  console.log("clientId", clientId)
   
-  // Early return if no clientId
-  if (!clientId) {
-    return (
-      <View style={styles.container}>
-        <Text>Error: ID del cliente no válido</Text>
-      </View>
-    )
-  }  
   const [client, setClient] = useState<Client | null>(null)  
   const [vehicles, setVehicles] = useState<Vehicle[]>([])  
   const [orders, setOrders] = useState<Order[]>([])  
@@ -46,19 +40,43 @@ export default function ClientDetailScreen({ route, navigation }: UiScreenProps)
   const [error, setError] = useState<string | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
   const [editModalVisible, setEditModalVisible] = useState(false)  
+
+  useEffect(() => {
+    const getClientId = async () => {
+      if (user?.id) {
+        try {
+          const client = await clientService.getClientById(user.id)
+          setClientId(client?.id || null)
+        } catch (error) {
+          console.error('Error getting client:', error)
+          setClientId(null)
+        }
+      }
+    }
+    
+    getClientId()
+  }, [user?.id])
+
+  if (!clientId) {
+    return (
+      <View style={styles.container}>
+        <Text>Error: ID del cliente no válido id: {clientId}</Text>
+      </View>
+    )
+  }  
     
   const [editFormData, setEditFormData] = useState<{
     name: string;
     email: string;
     phone: string;
     company: string;
-    client_type: 'individual' | 'empresa';
+    client_type: 'Individual' | 'Empresa';
   }>({  
     name: "",  
     email: "",  
     phone: "",  
     company: "",  
-    client_type: "individual",  
+    client_type: "Individual",  
   })  
   
   const loadClientData = useCallback(async () => {  
@@ -99,7 +117,7 @@ export default function ClientDetailScreen({ route, navigation }: UiScreenProps)
         email: clientData.email || "",  
         phone: clientData.phone || "",  
         company: clientData.insuranceInfo?.company || "",  
-        client_type: "individual",  
+        client_type: "Individual",  
       })  
   
       // Cargar vehículos y órdenes del cliente  
@@ -276,13 +294,13 @@ export default function ClientDetailScreen({ route, navigation }: UiScreenProps)
                 <TouchableOpacity  
                   style={[  
                     styles.radioOption,  
-                    editFormData.client_type === "individual" && styles.radioOptionSelected  
+                    editFormData.client_type === "Individual" && styles.radioOptionSelected  
                   ]}  
-                  onPress={() => setEditFormData(prev => ({ ...prev, client_type: "individual" }))}  
+                  onPress={() => setEditFormData(prev => ({ ...prev, client_type: "Individual" }))}  
                 >  
                   <View style={[  
                     styles.radioCircle,  
-                    editFormData.client_type === "individual" && styles.radioCircleSelected  
+                    editFormData.client_type === "Individual" && styles.radioCircleSelected  
                   ]} />  
                   <Text style={styles.radioText}>Individual</Text>  
                 </TouchableOpacity>  
@@ -290,13 +308,13 @@ export default function ClientDetailScreen({ route, navigation }: UiScreenProps)
                 <TouchableOpacity  
                   style={[  
                     styles.radioOption,  
-                    editFormData.client_type === "empresa" && styles.radioOptionSelected  
+                    editFormData.client_type === "Empresa" && styles.radioOptionSelected  
                   ]}  
-                  onPress={() => setEditFormData(prev => ({ ...prev, client_type: "empresa" }))}  
+                  onPress={() => setEditFormData(prev => ({ ...prev, client_type: "Empresa" }))}  
                 >  
                   <View style={[  
                     styles.radioCircle,  
-                    editFormData.client_type === "empresa" && styles.radioCircleSelected  
+                    editFormData.client_type === "Empresa" && styles.radioCircleSelected  
                   ]} />  
                   <Text style={styles.radioText}>Empresa</Text>  
                 </TouchableOpacity>  

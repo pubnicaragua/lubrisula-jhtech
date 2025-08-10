@@ -19,11 +19,11 @@ import VEHICULO_SERVICES, { Vehicle } from "../services/supabase/vehicle-service
 import CLIENTS_SERVICES, { Client } from "../services/supabase/client-service"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service" 
-import { UiScreenProps } from "../types"
+import { ClientVehiclesScreenProps } from "../types"
   
-export default function ClientVehicleScreen({ route, navigation }: UiScreenProps) {  
-  const { clientId } = route.params  
-  const { user } = useAuth()  
+export default function ClientVehicleScreen({ route, navigation }: ClientVehiclesScreenProps) {  
+  const { user } = useAuth() 
+  const [clientId, setClientId] = useState<string | null>(null)  
   const [client, setClient] = useState<Client| null>(null)  
   const [vehicles, setVehicles] = useState<Vehicle[]>([])  
   const [loading, setLoading] = useState(true)  
@@ -31,12 +31,31 @@ export default function ClientVehicleScreen({ route, navigation }: UiScreenProps
   const [error, setError] = useState<string | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
   
+  useEffect(() => {
+    const getClientId = async () => {
+      if (user?.id) {
+        try {
+          const client = await CLIENTS_SERVICES.getClientById(user.id)
+          setClientId(client?.id || null)
+        } catch (error) {
+          console.error('Error getting client:', error)
+          setClientId(null)
+        }
+      }
+    }
+    
+    getClientId()
+  }, [user?.id])
+
   const loadClientVehicles = useCallback(async () => {  
     try {  
       setLoading(true)  
       setError(null)  
   
-      if (!user?.id) return  
+      if (!user?.id || !clientId) {
+        setError("Usuario no autenticado o ID de cliente no disponible")
+        return
+      }  
   
       // Validar permisos del usuario  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
@@ -104,7 +123,7 @@ export default function ClientVehicleScreen({ route, navigation }: UiScreenProps
           {item.make} {item.model}  
         </Text>  
         <Text style={styles.vehicleDetails}>  
-          {item.year} • {item.licensePlate}  
+          {item.year} • {item.license_plate}  
         </Text>  
         <Text style={styles.vehicleKm}>  
           {item.mileage?.toLocaleString()} km  
@@ -113,9 +132,9 @@ export default function ClientVehicleScreen({ route, navigation }: UiScreenProps
         <View style={styles.vehicleStatus}>  
           <View style={[  
             styles.statusIndicator,  
-            { backgroundColor: item.nextServiceDate ? "#4caf50" : "#f5a623" }  
+            { backgroundColor: item.next_service_date ? "#4caf50" : "#f5a623" }  
           ]} />  
-          <Text style={styles.statusText}>{item.nextServiceDate ? "Activo" : "Pendiente"}</Text>  
+          <Text style={styles.statusText}>{item.next_service_date ? "Activo" : "Pendiente"}</Text>  
         </View>  
       </View>  
   
@@ -144,7 +163,7 @@ export default function ClientVehicleScreen({ route, navigation }: UiScreenProps
         {userRole !== 'client' && (  
           <TouchableOpacity   
             style={styles.addButton}  
-            onPress={() => navigation.navigate("NewVehicle", { clientId })}  
+            onPress={() => navigation.navigate("NewVehicle", { clientId: clientId || "" })}  
           >  
             <Feather name="plus" size={24} color="#1a73e8" />  
           </TouchableOpacity>  
@@ -171,7 +190,7 @@ export default function ClientVehicleScreen({ route, navigation }: UiScreenProps
               {userRole !== 'client' && (  
                 <TouchableOpacity   
                   style={styles.emptyActionButton}  
-                  onPress={() => navigation.navigate("NewVehicle", { clientId })}  
+                  onPress={() => navigation.navigate("NewVehicle", { clientId: clientId || "" })}  
                 >  
                   <Text style={styles.emptyActionButtonText}>Agregar Vehículo</Text>  
                 </TouchableOpacity>  

@@ -1,4 +1,13 @@
 import { StackNavigationProp } from "@react-navigation/stack"
+import { 
+  ClientStackParamList, 
+  ClientVehiclesStackParamList, 
+  ClientOrdersStackParamList,
+  InventoryStackParamList,
+  OrdersStackParamList,
+  ProfileStackParamList,
+  ReportsStackParamList
+} from './navigation'
 
 // Tipos de moneda para los países de Centroamérica
 export type CurrencyCode = "USD" | "GTQ" | "HNL" | "NIO" | "CRC" | "PAB" | "SVC" | "BZD"
@@ -96,7 +105,51 @@ export interface CitasDetalleType {
 }
 
 export type UiScreenNavProp = {
-  navigation: StackNavigationProp<any>
+  navigation: StackNavigationProp<
+    | ClientStackParamList 
+    | ClientVehiclesStackParamList 
+    | ClientOrdersStackParamList
+    | InventoryStackParamList
+    | OrdersStackParamList
+    | ProfileStackParamList
+    | ReportsStackParamList
+  >
+}
+
+// Tipos específicos para cada stack
+export type ClientScreenProps = {
+  navigation: StackNavigationProp<ClientStackParamList>
+  route: any
+}
+
+export type ClientVehiclesScreenProps = {
+  navigation: StackNavigationProp<ClientVehiclesStackParamList>
+  route: any
+}
+
+export type ClientOrdersScreenProps = {
+  navigation: StackNavigationProp<ClientOrdersStackParamList>
+  route: any
+}
+
+export type InventoryScreenProps = {
+  navigation: StackNavigationProp<InventoryStackParamList>
+  route: any
+}
+
+export type OrdersScreenProps = {
+  navigation: StackNavigationProp<OrdersStackParamList>
+  route: any
+}
+
+export type ProfileScreenProps = {
+  navigation: StackNavigationProp<ProfileStackParamList>
+  route: any
+}
+
+export type ReportsScreenProps = {
+  navigation: StackNavigationProp<ReportsStackParamList>
+  route: any
 }
 
 // Re-exportar tipos de navegación
@@ -112,3 +165,17 @@ export type UiScreenProps = {
 export * from './order';
 export * from './canvan';
 export * from './services';
+
+// Tipo para crear un cliente según el schema de la base de datos
+export type CreateClientType = {
+  name: string                    // NOT NULL
+  user_id?: string               // uuid, opcional
+  company?: string               // text, opcional
+  phone?: string                 // text, opcional
+  email?: string                 // text, opcional
+  client_type?: 'Individual' | 'Empresa'  // text, default 'Individual'
+  taller_id?: string            // uuid, opcional, referencia a talleres(id)
+}
+
+// Re-export Client type from client service
+export type { Client } from '../services/supabase/client-service'

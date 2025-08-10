@@ -26,7 +26,7 @@ import * as accessService from "../services/supabase/access-service"
 import * as userService from "../services/supabase/user-service"  
 import { Client } from "../services/supabase/client-service"
 import { Order } from '../types/order';
-import { UiScreenNavProp } from "../types"
+import { ClientScreenProps } from "../types"
 
 // Tipos TypeScript para resolver errores  
 interface ClientStatsType {  
@@ -36,7 +36,7 @@ interface ClientStatsType {
   vehicleCount: number  
 }  
 
-export default function ClientsScreen({ navigation }: UiScreenNavProp) {  
+export default function ClientsScreen({ navigation }: ClientScreenProps) {  
   const { user } = useAuth()  
     
   const [clients, setClients] = useState<Client[]>([])  
@@ -71,7 +71,7 @@ export default function ClientsScreen({ navigation }: UiScreenNavProp) {
       const userPermissions = await accessService.accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
-      if (userPermissions?.rol === 'client') {  
+      if (userPermissions?.rol !== 'client') {  
         setError("No tienes permisos para ver la lista de clientes")  
         return  
       }  
@@ -136,8 +136,8 @@ export default function ClientsScreen({ navigation }: UiScreenNavProp) {
           comparison = a.name.localeCompare(b.name)  
           break  
         case "date":  
-          const dateA = new Date(a.createdAt || 0).getTime()  
-          const dateB = new Date(b.createdAt || 0).getTime()  
+          const dateA = new Date(a.created_at || 0).getTime()  
+          const dateB = new Date(b.created_at || 0).getTime()  
           comparison = dateA - dateB  
           break  
         case "orders":  
@@ -174,7 +174,7 @@ export default function ClientsScreen({ navigation }: UiScreenNavProp) {
     return (  
       <TouchableOpacity  
         style={styles.clientCard}  
-        onPress={() => navigation.navigate("ClientDetail", { clientId: item.id })}  
+        onPress={() => navigation.navigate("ClientDetail", { clientId: item.user_id || "" })}  
       >  
         <View style={styles.clientHeader}>  
           <View style={styles.clientAvatar}>  

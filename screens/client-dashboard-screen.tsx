@@ -17,7 +17,7 @@ import { useAuth } from "../context/auth-context"
 import * as clientService from "../services/supabase/client-service"
 import * as vehicleService from "../services/supabase/vehicle-service"
 import * as orderService from "../services/supabase/order-service"
-import * as appointmentService from "../services/supabase/appointment-service"
+import { CITAS_SERVICES } from "../services/supabase/citas-services"
 import { Vehicle } from "../services/supabase/vehicle-service"
 import { Client } from "../services/supabase/client-service"
 import { Order } from '../types/order';
@@ -70,22 +70,33 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
 
       if (!user?.id) return
 
-      // Obtener datos del cliente  
+      // Obtener datos del cliente usando el userId
       const client = await clientService.clientService.getClientById(user.id)
       if (client) {
         setClientData(client)
       }
 
-      // Obtener vehículos del cliente  
-      const clientVehicles = await vehicleService.vehicleService.getVehiclesByClientId(user.id)
+      // Obtener vehículos del cliente usando el clientId
+      let clientVehicles: Vehicle[] = []
+      if (client) {
+        clientVehicles = await vehicleService.vehicleService.getVehiclesByClientId(client.id)
+      }
       setVehicles(clientVehicles)
 
-      // Obtener órdenes del cliente  
-      const clientOrders = await orderService.orderService.getOrdersByClientId(user.id)
+      // Obtener órdenes del cliente usando el clientId
+      let clientOrders: Order[] = []
+      if (client) {
+        clientOrders = await orderService.orderService.getOrdersByClientId(client.id)
+      }
       setOrders(clientOrders)
 
-      // Obtener citas del cliente  
-      const clientAppointments = await appointmentService.getAppointmentsByClientId(user.id)
+      // Obtener citas del cliente usando el clientId
+      let clientAppointments: AppointmentType[] = []
+      if (client) {
+        // Usar el servicio de citas existente
+        const allAppointments = await CITAS_SERVICES.GET_ALL_CITAS()
+        clientAppointments = allAppointments.filter(app => app.client_id === client.id)
+      }
       setAppointments(clientAppointments)
 
       // Calcular estadísticas  
@@ -98,9 +109,9 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
 
       // Identificar vehículos con servicios próximos  
       const vehiclesWithUpcomingService = clientVehicles.filter((vehicle: Vehicle) => {
-        if (!vehicle.nextServiceDate) return false
+        if (!vehicle.next_service_date) return false
 
-        const nextService = new Date(vehicle.nextServiceDate!)
+        const nextService = new Date(vehicle.next_service_date)
         const today = new Date()
         const diffDays = Math.ceil((nextService.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 
@@ -116,7 +127,7 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
 
       // Preparar datos para servicios próximos  
       const upcomingServicesData = vehiclesWithUpcomingService.map((vehicle: Vehicle) => {
-        const nextService = new Date(vehicle.nextServiceDate!)
+        const nextService = new Date(vehicle.next_service_date!)
         const today = new Date()
         const diffDays = Math.ceil((nextService.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 

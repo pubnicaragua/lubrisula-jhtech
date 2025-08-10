@@ -45,16 +45,16 @@ export const userService = {
       return {
         id: user.id,
         email: user.email || '',
-        phone: user.phone || '',
-        firstName: profile.first_name || '',
-        lastName: profile.last_name || '',
-        fullName: profile.full_name || '',
-        avatarUrl: profile.avatar_url || '',
+        phone: profile.phone || '',
+        first_name: profile.first_name || '',
+        last_name: profile.last_name || '',
+        full_name: profile.full_name || '',
+        avatar_url: profile.avatar_url || '',
         role: profile.role || 'client',
-        isActive: profile.is_active !== false, // Por defecto true si no está definido
-        lastLogin: profile.last_login_at ? new Date(profile.last_login_at) : null,
-        createdAt: profile.created_at ? new Date(profile.created_at) : new Date(),
-        updatedAt: profile.updated_at ? new Date(profile.updated_at) : new Date()
+        is_active: profile.is_active !== false, // Por defecto true si no está definido
+        last_login_at: profile.last_login_at || undefined,
+        created_at: profile.created_at || new Date().toISOString(),
+        updated_at: profile.updated_at || new Date().toISOString()
       }
     } catch (error) {
       console.error('Error in getCurrentUserProfile:', error)
@@ -504,18 +504,9 @@ export const userService = {
 
   async GET_TALLER_ID(userId: string): Promise<string | null> {  
     try {  
-      const { data, error } = await supabase  
-        .from('usuarios')  
-        .select('taller_id')  
-        .eq('id', userId)  
-        .single()  
-  
-      if (error) {  
-        console.error('Error getting taller ID:', error)  
-        return null  
-      }  
-  
-      return data?.taller_id || null  
+      // Por ahora, asumimos que todos los usuarios pertenecen al mismo taller
+      // En el futuro, esto se puede expandir para incluir múltiples talleres
+      return 'default-taller-id'
     } catch (error) {  
       console.error('Error in GET_TALLER_ID:', error)  
       return null  

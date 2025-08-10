@@ -1,31 +1,18 @@
 import { supabase, supabaseService } from '../../lib/supabase';
-import type { AppImage } from '../../types';
+import type { AppImage, CreateClientType } from '../../types';
 
 // Define types
 export type Client = {
   id: string;
   name: string;
-  email: string;
-  phone: string;
-  address?: string;
-  city?: string;
-  country?: string;
-  taxId?: string;
-  notes?: string;
-  profileImage?: AppImage;
-  createdAt: string;
-  updatedAt?: string;
-  userId?: string;
+  user_id?: string;
   company?: string;
-  client_type?: 'individual' | 'empresa';
-  status?: string;
-  insuranceInfo?: {
-    company?: string;
-    policyNumber?: string;
-    expirationDate?: string;
-    contactPerson?: string;
-    contactPhone?: string;
-  };
+  phone?: string;
+  email?: string;
+  client_type?: 'Individual' | 'Empresa';
+  created_at: string;
+  updated_at?: string;
+  taller_id?: string;
 };
 
 // Client Service with Supabase integration
@@ -58,7 +45,7 @@ export const clientService = {
       const { data, error } = await supabase
         .from('clients')
         .select('*')
-        .eq('id', id)
+        .eq('user_id', id)
         .single();
 
       if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows returned
@@ -75,7 +62,7 @@ export const clientService = {
       const { data, error } = await supabase
         .from('clients')
         .select('*')
-        .eq('userId', userId)
+        .eq('user_id', userId)
         .single();
 
       if (error && error.code !== 'PGRST116') throw error;
@@ -87,12 +74,12 @@ export const clientService = {
   },
 
   // Create a new client
-  createClient: async (clientData: Omit<Client, 'id' | 'createdAt'>): Promise<Client> => {
+  createClient: async (clientData: CreateClientType): Promise<Client> => {
     try {
       const newClient = {
         ...clientData,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       const { data, error } = await supabase
@@ -114,7 +101,7 @@ export const clientService = {
     try {
       const updateData = {
         ...updates,
-        updatedAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       const { data, error } = await supabase
@@ -186,7 +173,7 @@ export const clientService = {
 
   initializeClients: async (userId: string): Promise<any> => {
     try {
-      const clients = await clientService.getClientById(userId);
+      const clients = await clientService.getClientByUserId(userId);
       return clients
     } catch (error) {
       console.error('Error initializing client service:', error);
