@@ -12,42 +12,15 @@ import * as dashboardService from "../services/supabase/dashboard-service"
 import * as userService from "../services/supabase/user-service"  
 import * as accessService from "../services/supabase/access-service"  
 import { useAuth } from "../context/auth-context"  
-  
+import { Client } from "../services/supabase/client-service"
+import { DashboardInventoryItem } from "../types/dashboard"
+import { Order } from '../types/order';
+
 // Tipos TypeScript para resolver errores  
 interface DashboardScreenProps {  
   navigation: any  
 }  
-  
-interface OrderType {  
-  id: string  
-  numero_orden: string  
-  descripcion: string  
-  estado: string  
-  prioridad: string  
-  client_id: string  
-  vehiculo_id: string  
-  tecnico_id?: string  
-  costo?: number  
-  fecha_creacion: string  
-  observacion?: string  
-}  
-  
-interface ClientType {  
-  id: string  
-  nombre: string  
-  email?: string  
-  telefono?: string  
-}  
-  
-interface InventoryItemType {  
-  id: string  
-  nombre: string  
-  codigo: string  
-  stock_actual: number  
-  stock_minimo?: number  
-  precio_venta?: number  
-}  
-  
+
 interface StatsType {  
   totalOrders: number  
   pendingOrders: number  
@@ -56,14 +29,14 @@ interface StatsType {
   totalClients: number  
   lowStockItems: number  
 }  
-  
+
 export default function DashboardScreen({ navigation }: DashboardScreenProps) {  
   const { user } = useAuth()  
   const [isLoading, setIsLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
-  const [orders, setOrders] = useState<OrderType[]>([])  
-  const [clients, setClients] = useState<ClientType[]>([])  
-  const [lowStockItems, setLowStockItems] = useState<InventoryItemType[]>([])  
+  const [orders, setOrders] = useState<Order[]>([])  
+  const [clients, setClients] = useState<Client[]>([])  
+  const [lowStockItems, setLowStockItems] = useState<DashboardInventoryItem[]>([])  
   const [stats, setStats] = useState<StatsType>({  
     totalOrders: 0,  
     pendingOrders: 0,  
@@ -85,38 +58,42 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await userService.getTallerId(user.id)  
-      const userPermissions = await accessService.getUserPermissions(user.id, userTallerId)  
+      const userTallerId = await userService.userService.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {
+        setError("No se pudo obtener la información del taller")
+        return
+      }
+      const userPermissions = await accessService.accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       // Cargar datos según el rol del usuario  
       if (userPermissions?.rol === "client") {  
         // Para clientes, solo cargar sus órdenes  
-        const clientOrders = await orderService.getOrdersByClientId(user.id)  
+        const clientOrders = await orderService.orderService.getOrdersByClientId(user.id)  
         setOrders(clientOrders)  
   
         // Calcular estadísticas del cliente  
         const pendingOrders = clientOrders.filter(  
-          (order: OrderType) => order.estado !== "Completada" && order.estado !== "Entregada"  
+          (order: Order) => order.status !== "completed" && order.status !== "delivered"  
         )  
         const completedOrders = clientOrders.filter(  
-          (order: OrderType) => order.estado === "Completada" || order.estado === "Entregada"  
+          (order: Order) => order.status === "completed" || order.status === "delivered"  
         )  
   
         setStats({  
           totalOrders: clientOrders.length,  
           pendingOrders: pendingOrders.length,  
           completedOrders: completedOrders.length,  
-          totalRevenue: clientOrders.reduce((sum: number, order: OrderType) => sum + (order.costo || 0), 0),  
+          totalRevenue: clientOrders.reduce((sum: number, order: Order) => sum + (order.total || 0), 0),  
           totalClients: 0,  
           lowStockItems: 0  
         })  
       } else {  
         // Para técnicos y administradores, cargar todos los datos  
         const [allOrders, allClients, lowStock] = await Promise.all([  
-          orderService.getAllOrders(),  
-          clientService.getAllClients(),  
-          inventoryService.getLowStockItems(),  
+          orderService.orderService.getAllOrders(),  
+          clientService.clientService.getAllClients(),  
+          inventoryService.inventoryService.getLowStockItems(),  
         ])  
   
         setOrders(allOrders)  
@@ -124,18 +101,18 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
         setLowStockItems(lowStock)  
   
         // Calcular estadísticas generales  
-        const pendingOrders = allOrders.filter((order: OrderType) =>   
-          order.estado !== "Completada" && order.estado !== "Entregada"  
+        const pendingOrders = allOrders.filter((order: Order) =>   
+          order.status !== "completed" && order.status !== "delivered"  
         )  
         const completedOrders = allOrders.filter(  
-          (order: OrderType) => order.estado === "Completada" || order.estado === "Entregada"  
+          (order: Order) => order.status === "completed" || order.status === "delivered"  
         )  
   
         setStats({  
           totalOrders: allOrders.length,  
           pendingOrders: pendingOrders.length,  
           completedOrders: completedOrders.length,  
-          totalRevenue: allOrders.reduce((sum: number, order: OrderType) => sum + (order.costo || 0), 0),  
+          totalRevenue: allOrders.reduce((sum: number, order: Order) => sum + (order.total || 0), 0),  
           totalClients: allClients.length,  
           lowStockItems: lowStock.length  
         })  
@@ -293,7 +270,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
         </View>  
   
         {orders.length > 0 ? (  
-          orders.slice(0, 5).map((order: OrderType) => (  
+          orders.slice(0, 5).map((order: Order) => (  
             <TouchableOpacity  
               key={order.id}  
               style={styles.orderCard}  
@@ -305,19 +282,19 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
               }  
             >  
               <View style={styles.orderInfo}>  
-                <Text style={styles.orderNumber}>#{order.numero_orden}</Text>  
+                <Text style={styles.orderNumber}>#{order.number}</Text>  
                 <Text style={styles.orderDescription} numberOfLines={1}>  
-                  {order.descripcion}  
+                  {order.description}  
                 </Text>  
                 <Text style={styles.orderDate}>  
-                  {new Date(order.fecha_creacion).toLocaleDateString("es-ES")}  
+                  {new Date(order.createdAt).toLocaleDateString("es-ES")}  
                 </Text>  
               </View>  
               <View style={styles.orderStatus}>  
-                <Text style={[styles.statusText, { color: getStatusColor(order.estado) }]}>  
-                  {order.estado}  
+                <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>  
+                  {getStatusText(order.status)}  
                 </Text>  
-                <Text style={styles.orderAmount}>${(order.costo || 0).toFixed(2)}</Text>  
+                <Text style={styles.orderAmount}>${(order.total || 0).toFixed(2)}</Text>  
               </View>  
             </TouchableOpacity>  
           ))  
@@ -341,7 +318,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
             </View>  
   
             {clients.length > 0 ? (  
-              clients.slice(0, 3).map((client: ClientType) => (  
+              clients.slice(0, 3).map((client: Client) => (  
                 <TouchableOpacity  
                   key={client.id}  
                   style={styles.clientCard}  
@@ -356,8 +333,8 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
                     <Feather name="user" size={24} color="#1a73e8" />  
                   </View>  
                   <View style={styles.clientInfo}>  
-                    <Text style={styles.clientName}>{client.nombre}</Text>  
-                    <Text style={styles.clientContact}>{client.telefono}</Text>  
+                    <Text style={styles.clientName}>{client.name}</Text>  
+                    <Text style={styles.clientContact}>{client.phone}</Text>  
                   </View>  
                   <Feather name="chevron-right" size={20} color="#999" />  
                 </TouchableOpacity>  
@@ -380,7 +357,7 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
             </View>  
   
             {lowStockItems.length > 0 ? (  
-              lowStockItems.slice(0, 3).map((item: InventoryItemType) => (  
+              lowStockItems.slice(0, 3).map((item: DashboardInventoryItem) => (  
                 <TouchableOpacity  
                   key={item.id}  
                   style={styles.inventoryCard}  
@@ -395,17 +372,17 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
                     <Feather name="package" size={24} color="#f5a623" />  
                   </View>  
                   <View style={styles.inventoryInfo}>  
-                    <Text style={styles.inventoryName}>{item.nombre}</Text>  
-                    <Text style={styles.inventorySku}>{item.codigo}</Text>  
+                    <Text style={styles.inventoryName}>{item.name}</Text>  
+                    <Text style={styles.inventorySku}>Stock: {item.stock}</Text>  
                   </View>  
                   <View style={styles.inventoryQuantity}>  
                     <Text  
                       style={[  
                         styles.quantityText,  
-                        item.stock_actual <= (item.stock_minimo || 0) / 2 ? styles.criticalStock : styles.lowStock,  
+                        item.stock <= (item.minStock || 0) / 2 ? styles.criticalStock : styles.lowStock,  
                       ]}  
                     >  
-                      {item.stock_actual} unid.  
+                      {item.stock} unid.  
                     </Text>  
                   </View>  
                 </TouchableOpacity>  
@@ -423,26 +400,50 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
   )  
   
   // Función para obtener color del estado  
-  function getStatusColor(estado: string) {  
-    switch (estado) {  
-      case "Pendiente":  
+  function getStatusColor(status: string) {  
+    switch (status) {  
+      case "reception":  
         return "#1a73e8"  
-      case "En Diagnóstico":  
+      case "diagnosis":  
         return "#f5a623"  
-      case "Esperando Repuestos":  
+      case "waiting_parts":  
         return "#9c27b0"  
-      case "En Proceso":  
+      case "in_progress":  
         return "#ff9800"  
-      case "Control Calidad":  
+      case "quality_check":  
         return "#607d8b"  
-      case "Completada":  
+      case "completed":  
         return "#4caf50"  
-      case "Entregada":  
+      case "delivered":  
         return "#607d8b"  
-      case "Cancelada":  
+      case "cancelled":  
         return "#e53935"  
       default:  
         return "#666"  
+    }  
+  }  
+
+  // Función para obtener texto del estado  
+  function getStatusText(status: string) {  
+    switch (status) {  
+      case "reception":  
+        return "Recepción"  
+      case "diagnosis":  
+        return "Diagnóstico"  
+      case "waiting_parts":  
+        return "Esperando Repuestos"  
+      case "in_progress":  
+        return "En Proceso"  
+      case "quality_check":  
+        return "Control Calidad"  
+      case "completed":  
+        return "Completada"  
+      case "delivered":  
+        return "Entregada"  
+      case "cancelled":  
+        return "Cancelada"  
+      default:  
+        return status  
     }  
   }  
 }  

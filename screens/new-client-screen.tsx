@@ -13,22 +13,14 @@ import {
 } from "react-native"  
 import { Feather } from "@expo/vector-icons"  
 import { useAuth } from "../context/auth-context"  
-import CLIENTS_SERVICES from "../services/supabase/client-service"  
+import CLIENTS_SERVICES, { Client } from "../services/supabase/client-service"  
+import { UiScreenNavProp } from "../types"
   
-interface ClienteType {  
-  id: string  
-  name: string  
-  email?: string  
-  phone?: string
-  company?: string  
-  client_type: "individual" | "empresa"
-  status: "Activo" | "Inactivo"  
-}  
 
-export default function NewClientScreen({ navigation }) {  
+export default function NewClientScreen({ navigation }: UiScreenNavProp) {  
   const { user } = useAuth()  
   const [loading, setLoading] = useState(false)  
-  const [formData, setFormData] = useState<Partial<ClienteType>>({  
+  const [formData, setFormData] = useState<Partial<Client>>({  
     name: "",  
     email: "",  
     phone: "",  
@@ -66,7 +58,22 @@ export default function NewClientScreen({ navigation }) {
     try {  
       setLoading(true)  
         
-      const newClient = await CLIENTS_SERVICES.createClient(formData as ClienteType)  
+      const newClient = await CLIENTS_SERVICES.createClient({
+        name: formData.name!,
+        email: formData.email!,
+        phone: formData.phone!,
+        company: formData.company,
+        client_type: formData.client_type,
+        status: formData.status,
+        address: formData.address,
+        city: formData.city,
+        country: formData.country,
+        taxId: formData.taxId,
+        notes: formData.notes,
+        profileImage: formData.profileImage,
+        userId: formData.userId,
+        insuranceInfo: formData.insuranceInfo,
+      })  
         
       Alert.alert(  
         "Éxito",  
@@ -86,7 +93,7 @@ export default function NewClientScreen({ navigation }) {
     }  
   }  
   
-  const updateFormData = (field: keyof ClienteType, value: string) => {  
+  const updateFormData = (field: keyof Client, value: string) => {  
     setFormData(prev => ({ ...prev, [field]: value }))  
     if (errors[field]) {  
       setErrors(prev => ({ ...prev, [field]: "" }))  

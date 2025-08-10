@@ -45,7 +45,12 @@ class CompanyService {
       console.error('Error updating company info:', error)  
       return false  
     }  
-  }  
+  }
+
+  // Get company settings (alias for GET_COMPANY_INFO)
+  async getCompanySettings(): Promise<CompanyType | null> {
+    return this.GET_COMPANY_INFO()
+  }
 }  
   
 export default new CompanyService()

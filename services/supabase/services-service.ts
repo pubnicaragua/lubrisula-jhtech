@@ -35,7 +35,17 @@ export interface ProveedorType {
   contact_name?: string  
   phone?: string  
 }  
-  
+
+export interface ServicioType {
+  id: string
+  nombre: string
+  descripcion?: string
+  precio: number
+  categoria: string
+  tiempo_estimado?: number
+  estado: 'Activo' | 'Inactivo'
+}
+
 // Funciones exportadas siguiendo el patrón moderno  
 export async function getAllInventory(): Promise<InventarioType[]> {  
   try {  
@@ -137,8 +147,28 @@ export async function updateInventoryItem(id: string, updates: Partial<Inventari
     console.error('Error in updateInventoryItem:', error)  
     return null  
   }  
-}  
-  
+}
+
+export async function getAllServices(): Promise<ServicioType[]> {
+  try {
+    const { data, error } = await supabase
+      .from('services')
+      .select('*')
+      .eq('estado', 'Activo')
+      .order('nombre', { ascending: true })
+
+    if (error) {
+      console.error('Error getting services:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error in getAllServices:', error)
+    return []
+  }
+}
+
 // Funciones de compatibilidad con servicios legacy  
 export const inventarioService = {  
   GET_INVENTARIO: getAllInventory,  

@@ -15,16 +15,17 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import VEHICULO_SERVICES from "../services/supabase/vehicle-service"  
-import CLIENTS_SERVICES from "../services/supabase/client-service"  
+import VEHICULO_SERVICES, { Vehicle } from "../services/supabase/vehicle-service"  
+import CLIENTS_SERVICES, { Client } from "../services/supabase/client-service"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service" 
+import { UiScreenProps } from "../types"
   
-export default function ClientVehicleScreen({ route, navigation }) {  
+export default function ClientVehicleScreen({ route, navigation }: UiScreenProps) {  
   const { clientId } = route.params  
   const { user } = useAuth()  
-  const [client, setClient] = useState<ClienteType | null>(null)  
-  const [vehicles, setVehicles] = useState<VehiculoType[]>([])  
+  const [client, setClient] = useState<Client| null>(null)  
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
@@ -39,6 +40,12 @@ export default function ClientVehicleScreen({ route, navigation }) {
   
       // Validar permisos del usuario  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+
+      if (!userTallerId) {
+        setError("No se pudo obtener la información del taller")
+        return
+      }
+      
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
@@ -50,8 +57,8 @@ export default function ClientVehicleScreen({ route, navigation }) {
   
       // Obtener datos del cliente y sus vehículos  
       const [clientData, clientVehicles] = await Promise.all([  
-        CLIENTS_SERVICES.GET_CLIENTS_BY_ID(clientId),  
-        VEHICULO_SERVICES.GET_ALL_VEHICULOS_BY_CLIENT(clientId)  
+        CLIENTS_SERVICES.getClientById(clientId as string),  
+        VEHICULO_SERVICES.getVehiclesByClientId(clientId as string)  
       ])  
   
       if (!clientData) {  
@@ -77,14 +84,14 @@ export default function ClientVehicleScreen({ route, navigation }) {
     }, [loadClientVehicles])  
   )  
   
-  const renderVehicleItem = ({ item }: { item: VehiculoType }) => (  
+  const renderVehicleItem = ({ item, index }: { item: Vehicle, index: number }) => (  
     <TouchableOpacity  
       style={styles.vehicleCard}  
       onPress={() => navigation.navigate("VehicleDetail", { vehicleId: item.id })}  
     >  
       <View style={styles.vehicleImageContainer}>  
-        {item.imagen_url ? (  
-          <Image source={{ uri: item.imagen_url }} style={styles.vehicleImage} />  
+        {item.images ? (  
+          <Image source={{ uri: item.images[index].uri }} style={styles.vehicleImage} />  
         ) : (  
           <View style={styles.noImageContainer}>  
             <Feather name="truck" size={32} color="#ccc" />  
@@ -94,21 +101,21 @@ export default function ClientVehicleScreen({ route, navigation }) {
   
       <View style={styles.vehicleInfo}>  
         <Text style={styles.vehicleName}>  
-          {item.marca} {item.modelo}  
+          {item.make} {item.model}  
         </Text>  
         <Text style={styles.vehicleDetails}>  
-          {item.ano} • {item.placa}  
+          {item.year} • {item.licensePlate}  
         </Text>  
         <Text style={styles.vehicleKm}>  
-          {item.kilometraje?.toLocaleString()} km  
+          {item.mileage?.toLocaleString()} km  
         </Text>  
           
         <View style={styles.vehicleStatus}>  
           <View style={[  
             styles.statusIndicator,  
-            { backgroundColor: item.estado === "Activo" ? "#4caf50" : "#f5a623" }  
+            { backgroundColor: item.nextServiceDate ? "#4caf50" : "#f5a623" }  
           ]} />  
-          <Text style={styles.statusText}>{item.estado}</Text>  
+          <Text style={styles.statusText}>{item.nextServiceDate ? "Activo" : "Pendiente"}</Text>  
         </View>  
       </View>  
   

@@ -16,32 +16,14 @@ import { Feather, MaterialIcons } from "@expo/vector-icons"
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
 // Importaciones corregidas para usar servicios de Supabase  
-import * as orderService from "../services/supabase/order-service"  
-import * as clientService from "../services/supabase/client-service"  
-import * as vehicleService from "../services/supabase/vehicle-service"  
-import * as serviceService from "../services/supabase/services-service"  
-import * as userService from "../services/supabase/user-service"  
-import * as accessService from "../services/supabase/access-service"  
-  
-// Tipos TypeScript para resolver errores  
-interface UpdateOrderScreenProps {  
-  route: any  
-  navigation: any  
-}  
-  
-interface OrderType {  
-  id: string  
-  numero_orden: string  
-  descripcion: string  
-  estado: string  
-  prioridad: string  
-  client_id: string  
-  vehiculo_id: string  
-  tecnico_id?: string  
-  costo?: number  
-  fecha_creacion: string  
-  observacion?: string  
-}  
+import { orderService } from "../services/supabase/order-service"  
+import { clientService } from "../services/supabase/client-service"  
+import { vehicleService } from "../services/supabase/vehicle-service"  
+import { getAllServices } from "../services/supabase/services-service"  
+import { userService } from "../services/supabase/user-service"  
+import { accessService } from "../services/supabase/access-service"  
+import { UiScreenProps } from "../types"
+import { Order } from "../types/order"
   
 interface TechnicianType {  
   id: string  
@@ -54,11 +36,11 @@ interface ServiceType {
   precio?: number  
 }  
   
-export default function UpdateOrderScreen({ route, navigation }: UpdateOrderScreenProps) {  
+export default function UpdateOrderScreen({ route, navigation }: UiScreenProps) {  
   const { orderId } = route.params  
   const { user } = useAuth()  
     
-  const [order, setOrder] = useState<OrderType | null>(null)  
+  const [order, setOrder] = useState<Order | null>(null)  
   const [loading, setLoading] = useState(true)  
   const [saving, setSaving] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
@@ -106,7 +88,11 @@ export default function UpdateOrderScreen({ route, navigation }: UpdateOrderScre
   
       // Validar permisos del usuario  
       const userTallerId = await userService.getTallerId(user.id)  
-      const userPermissions = await accessService.getUserPermissions(user.id, userTallerId)  
+      if (!userTallerId) {
+        setError("No se pudo obtener la información del taller")
+        return
+      }
+      const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       if (userPermissions?.rol === 'client') {  
@@ -124,21 +110,26 @@ export default function UpdateOrderScreen({ route, navigation }: UpdateOrderScre
       setOrder(orderData)  
         
       // Llenar formulario con datos existentes  
-      setDescripcion(orderData.descripcion || "")  
-      setObservacion(orderData.observacion || "")  
-      setPrioridad(orderData.prioridad || "normal")  
-      setEstado(orderData.estado || "Pendiente")  
-      setCosto(orderData.costo?.toString() || "")  
-      setTecnicoId(orderData.tecnico_id || "")  
-      setServicioId(orderData.servicio_id || "")  
-  
+      setDescripcion(orderData.description || "")  
+      setObservacion(orderData.notes || "")  
+      setPrioridad(orderData.priority || "normal")  
+      setEstado(orderData.status || "reception")  
+      setCosto(orderData.total?.toString() || "")  
+      setTecnicoId(orderData.technicianId || "")  
+      setServicioId("") // Order type doesn't have serviceId, we'll handle this separately
+
       // Cargar técnicos y servicios para los dropdowns  
       const [allTechnicians, allServices] = await Promise.all([  
         userService.getAllTechnicians(),  
-        serviceService.getAllServices()  
+        getAllServices()  
       ])  
   
-      setTechnicians(allTechnicians)  
+      // Map UserProfile to TechnicianType
+      const mappedTechnicians = allTechnicians.map(tech => ({
+        id: tech.id,
+        nombre: tech.fullName || `${tech.firstName} ${tech.lastName}`.trim()
+      }))
+      setTechnicians(mappedTechnicians)  
       setServices(allServices)  
   
     } catch (error) {  
@@ -176,15 +167,13 @@ export default function UpdateOrderScreen({ route, navigation }: UpdateOrderScre
       setSaving(true)  
   
       const updatedOrder = {  
-        ...order,  
-        descripcion: descripcion.trim(),  
-        observacion: observacion.trim(),  
-        prioridad,  
-        estado,  
-        costo: costo ? parseFloat(costo) : null,  
-        tecnico_id: tecnicoId || null,  
-        servicio_id: servicioId || null,  
-        updated_at: new Date().toISOString()  
+        description: descripcion.trim(),  
+        notes: observacion.trim(),  
+        priority: prioridad as any,  
+        status: estado as any,  
+        total: costo ? parseFloat(costo) : 0,  
+        technicianId: tecnicoId || undefined,  
+        updatedAt: new Date().toISOString()  
       }  
   
       await orderService.updateOrder(orderId, updatedOrder)  
@@ -380,7 +369,7 @@ export default function UpdateOrderScreen({ route, navigation }: UpdateOrderScre
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
           <Feather name="arrow-left" size={24} color="#333" />  
         </TouchableOpacity>  
-        <Text style={styles.headerTitle}>Editar Orden #{order.numero_orden}</Text>  
+        <Text style={styles.headerTitle}>Editar Orden #{order.number}</Text>  
         <TouchableOpacity   
           style={styles.saveButton}  
           onPress={handleUpdateOrder}  

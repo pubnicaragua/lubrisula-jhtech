@@ -15,14 +15,18 @@ import {
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
+import { StackNavigationProp } from "@react-navigation/stack"
 import { useAuth } from "../context/auth-context"  
-import { CITAS_SERVICES, CitasDetalleType } from "../services/supabase/citas-services"  
-import VEHICULO_SERVICES from "../services/supabase/vehicle-service"  
-import CLIENTS_SERVICES from "../services/supabase/client-service"
+import { CITAS_SERVICES } from "../services/supabase/citas-services"
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service" 
-  
-export default function AppointmentsScreen({ navigation }) {  
+import { CitasDetalleType } from "../types"
+
+type AppointmentsScreenProps = {
+  navigation: StackNavigationProp<any>
+}
+
+export default function AppointmentsScreen({ navigation }: AppointmentsScreenProps) {  
   const { user } = useAuth()  
   const [appointments, setAppointments] = useState<CitasDetalleType[]>([])  
   const [loading, setLoading] = useState(true)  
@@ -42,6 +46,10 @@ export default function AppointmentsScreen({ navigation }) {
   
       // Validar permisos del usuario  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {  
+        setError("Usuario no asociado a un taller")  
+        return        
+      }
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   

@@ -1,18 +1,5 @@
 import { supabase } from '../../lib/supabase'  
-  
-export interface CitasDetalleType {  
-  id: string  
-  client_id: string  
-  vehiculo_id: string  
-  fecha: string  
-  hora: string  
-  tipo_servicio: string  
-  estado: string  
-  notas?: string  
-  tecnico_id?: string  
-  costo?: number  
-  fecha_creacion: string  
-}  
+import { CitasDetalleType } from '../../types'
   
 class CitasService {  
   async GET_ALL_CITAS(): Promise<CitasDetalleType[]> {  

@@ -16,6 +16,9 @@ export type Client = {
   createdAt: string;
   updatedAt?: string;
   userId?: string;
+  company?: string;
+  client_type?: 'individual' | 'empresa';
+  status?: string;
   insuranceInfo?: {
     company?: string;
     policyNumber?: string;
@@ -181,9 +184,10 @@ export const clientService = {
     }
   },
 
-  initializeClients: async (): Promise<void> => {
+  initializeClients: async (userId: string): Promise<any> => {
     try {
-      const clients = await clientService.getAllClients();
+      const clients = await clientService.getClientById(userId);
+      return clients
     } catch (error) {
       console.error('Error initializing client service:', error);
       throw error;

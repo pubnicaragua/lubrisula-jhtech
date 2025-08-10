@@ -1,6 +1,6 @@
 import { supabase } from '../../lib/supabase'
 import { DashboardInventoryItem } from '../../types/dashboard'
-import type { InventoryItem } from '../../types/inventory'
+import type { InventoryItem, InventoryItemFormData } from '../../types/inventory'
 
 // Tipos para el servicio de inventario
 type InventoryFilters = {
@@ -73,7 +73,7 @@ export const inventoryService = {
 
       if (error) throw error
 
-      return data.map((item: InventoryItem) => ({
+      return data.map((item: any) => ({
         id: item.id,
         name: item.name,
         description: item.description,
@@ -91,8 +91,11 @@ export const inventoryService = {
         notes: item.notes,
         images: item.images || [],
         createdAt: item.created_at,
-        updatedAt: item.updated_at
-      }))
+        updatedAt: item.updated_at,
+        priceUSD: item.priceUSD || item.price || 0,
+        priceHNL: item.priceHNL || 0,
+        isActive: item.isActive !== false
+      })) as InventoryItem[]
     } catch (error) {
       console.error('Error fetching inventory items:', error)
       throw error
@@ -155,7 +158,10 @@ export const inventoryService = {
         notes: data.notes,
         images: data.images || [],
         createdAt: data.created_at,
-        updatedAt: data.updated_at
+        updatedAt: data.updated_at,
+        priceUSD: data.priceUSD || data.price || 0,
+        priceHNL: data.priceHNL || 0,
+        isActive: data.isActive !== false
       }
     } catch (error) {
       console.error(`Error fetching inventory item ${id}:`, error)
@@ -248,7 +254,7 @@ export const inventoryService = {
       // Primero obtenemos el stock actual
       const { data: currentItem } = await supabase
         .from('inventory')
-        .select('stock')
+        .select('stock, min_stock')
         .eq('id', id)
         .single()
 

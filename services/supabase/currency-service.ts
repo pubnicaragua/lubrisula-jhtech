@@ -19,6 +19,17 @@ class CurrencyService {
     })  
   }  
   
+  async getAllCurrencies(): Promise<CurrencyType[]> {
+    try {
+      const { data, error } = await supabase.from('monedas').select('*')
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error fetching currencies:', error)
+      throw error
+    }    
+  }
+
   async initializeCurrencies(): Promise<void> {  
     // Inicialización de monedas por defecto  
     const defaultCurrencies = [  
@@ -29,7 +40,19 @@ class CurrencyService {
     for (const currency of defaultCurrencies) {  
       await supabase.from('monedas').upsert(currency, { onConflict: 'codigo' })  
     }  
-  }  
+  }
+
+  // Convert USD to HNL (Honduran Lempira)
+  async convertUSDtoHNL(amount: number): Promise<number> {
+    // Using approximate exchange rate (1 USD = 24.5 HNL)
+    return amount * 24.5
+  }
+
+  // Convert HNL to USD
+  async convertHNLtoUSD(amount: number): Promise<number> {
+    // Using approximate exchange rate (1 HNL = 0.041 USD)
+    return amount * 0.041
+  }
 }  
   
 export default new CurrencyService()

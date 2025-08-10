@@ -51,11 +51,11 @@ const ClientStack = () => (
     }}
   >
     <Stack.Screen name="Clients" component={ClientsScreen} options={{ title: "Clientes" }} />
-    <Stack.Screen name="ClientDetail" component={ClientDetailScreen} options={{ title: "Detalle del Cliente" }} />
+    <Stack.Screen name="ClientDetail" component={ClientDetailScreen as any} options={{ title: "Detalle del Cliente" }} />
     <Stack.Screen name="NewClient" component={NewClientScreen} options={{ title: "Nuevo Cliente" }} />
-    <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: "Detalle de Orden" }} />
+    <Stack.Screen name="OrderDetail" component={OrderDetailScreen as any} options={{ title: "Detalle de Orden" }} />
     <Stack.Screen name="NewOrder" component={NewOrderScreen} options={{ title: "Nueva Orden" }} />
-    <Stack.Screen name="VehicleDetail" component={VehicleDetailScreen} options={{ title: "Detalle de Vehículo" }} />
+    <Stack.Screen name="VehicleDetail" component={VehicleDetailScreen as any} options={{ title: "Detalle de Vehículo" }} />
   </Stack.Navigator>
 )
 
@@ -75,7 +75,7 @@ const InventoryStack = () => (
     <Stack.Screen name="Inventory" component={InventoryScreen} options={{ title: "Inventario" }} />
     <Stack.Screen
       name="InventoryItemDetail"
-      component={InventoryItemDetailScreen}
+      component={InventoryItemDetailScreen as any}
       options={{ title: "Detalle de Artículo" }}
     />
     <Stack.Screen name="NewInventoryItem" component={NewInventoryItemScreen} options={{ title: "Nuevo Artículo" }} />
@@ -96,10 +96,10 @@ const OrdersStack = () => (
     }}
   >
     <Stack.Screen name="Kanban" component={KanbanScreen} options={{ title: "Órdenes de Trabajo" }} />
-    <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: "Detalle de Orden" }} />
-    <Stack.Screen name="UpdateOrder" component={UpdateOrderScreen} options={{ title: "Actualizar Orden" }} />
+    <Stack.Screen name="OrderDetail" component={OrderDetailScreen as any} options={{ title: "Detalle de Orden" }} />
+    <Stack.Screen name="UpdateOrder" component={UpdateOrderScreen as any} options={{ title: "Actualizar Orden" }} />
     <Stack.Screen name="OrderParts" component={OrderPartsScreen} options={{ title: "Repuestos" }} />
-    <Stack.Screen name="VehicleDetail" component={VehicleDetailScreen} options={{ title: "Detalle de Vehículo" }} />
+    <Stack.Screen name="VehicleDetail" component={VehicleDetailScreen as any} options={{ title: "Detalle de Vehículo" }} />
   </Stack.Navigator>
 )
 
@@ -116,8 +116,8 @@ const ClientOrdersStack = () => (
       },
     }}
   >
-    <Stack.Screen name="ClientOrders" component={ClientOrdersScreen} options={{ title: "Mis Órdenes" }} />
-    <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: "Detalle de Orden" }} />
+    <Stack.Screen name="ClientOrders" component={ClientOrdersScreen as any} options={{ title: "Mis Órdenes" }} />
+    <Stack.Screen name="OrderDetail" component={OrderDetailScreen as any} options={{ title: "Detalle de Orden" }} />
   </Stack.Navigator>
 )
 
@@ -134,9 +134,9 @@ const ClientVehiclesStack = () => (
       },
     }}
   >
-    <Stack.Screen name="ClientVehicles" component={ClientVehicleScreen} options={{ title: "Mis Vehículos" }} />
-    <Stack.Screen name="VehicleDetail" component={VehicleDetailScreen} options={{ title: "Detalle de Vehículo" }} />
-    <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: "Detalle de Orden" }} />
+    <Stack.Screen name="ClientVehicles" component={ClientVehicleScreen as any} options={{ title: "Mis Vehículos" }} />
+    <Stack.Screen name="VehicleDetail" component={VehicleDetailScreen as any} options={{ title: "Detalle de Vehículo" }} />
+    <Stack.Screen name="OrderDetail" component={OrderDetailScreen as any} options={{ title: "Detalle de Orden" }} />
   </Stack.Navigator>
 )
 
@@ -179,7 +179,7 @@ const TechnicianTabNavigator = () => (
   <Tab.Navigator
     screenOptions={({ route }) => ({
       tabBarIcon: ({ color, size }) => {
-        let iconName
+        let iconName: any
 
         if (route.name === "Dashboard") {
           iconName = "home"
@@ -216,7 +216,7 @@ const ClientTabNavigator = () => (
   <Tab.Navigator
     screenOptions={({ route }) => ({
       tabBarIcon: ({ color, size }) => {
-        let iconName
+        let iconName: any
 
         if (route.name === "ClientDashboard") {
           iconName = "home"

@@ -18,6 +18,31 @@ export interface InventoryItem {
   createdAt: string
   updatedAt: string
   isActive: boolean
+  // Additional properties for database mapping
+  barcode?: string
+  type?: string
+  status?: string
+  notes?: string
+  supplierId?: string
+  price?: number
+}
+
+// Form data type for creating/updating inventory items
+export interface InventoryItemFormData {
+  name: string
+  description?: string
+  sku: string
+  barcode?: string
+  category: string
+  type?: string
+  stock: number
+  minStock?: number
+  cost?: number
+  price?: number
+  supplierId?: string
+  location?: string
+  notes?: string
+  images?: string[]
 }
 
 export interface Service {

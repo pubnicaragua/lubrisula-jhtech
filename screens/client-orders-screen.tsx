@@ -14,16 +14,19 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import ORDENES_TRABAJO_SERVICES from "../services/supabase/order-service"  
-import CLIENTS_SERVICES from "../services/supabase/company-service"
+import orderService from "../services/supabase/order-service"  
+import clientService from "../services/supabase/client-service"
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service"  
+import { UiScreenProps } from "../types"
+import { Client } from "../services/supabase/client-service"
+import { Order } from '../types/order';
   
-export default function ClientOrdersScreen({ route, navigation }) {  
+export default function ClientOrdersScreen({ route, navigation }:UiScreenProps) {  
   const { clientId } = route.params  
   const { user } = useAuth()  
-  const [client, setClient] = useState<ClienteType | null>(null)  
-  const [orders, setOrders] = useState<OrdenTrabajoType[]>([])  
+  const [client, setClient] = useState<Client | null>(null)  
+  const [orders, setOrders] = useState<Order[]>([])  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
@@ -38,20 +41,27 @@ export default function ClientOrdersScreen({ route, navigation }) {
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
-      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      const userId = user.id as string
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(userId)  
+      
+      if (!userTallerId) {
+        setError("No se pudo obtener la información del taller")
+        return
+      }
+      
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       // Verificar permisos de acceso  
-      if (userPermissions?.rol === 'client' && clientId !== user.id) {  
+      if (userPermissions?.rol === 'client' && clientId !== userId) {  
         setError("No tienes permisos para ver las órdenes de este cliente")  
         return  
       }  
   
       // Obtener datos del cliente y sus órdenes  
       const [clientData, allOrders] = await Promise.all([  
-        CLIENTS_SERVICES.GET_CLIENTS_BY_ID(clientId),  
-        ORDENES_TRABAJO_SERVICES.GET_ALL_ORDENES()  
+        clientService.getClientById(clientId as string),  
+        orderService.getAllOrders()  
       ])  
   
       if (!clientData) {  
@@ -62,7 +72,7 @@ export default function ClientOrdersScreen({ route, navigation }) {
       setClient(clientData)  
         
       // Filtrar órdenes del cliente  
-      const clientOrders = allOrders.filter(order => order.client_id === clientId)  
+      const clientOrders = allOrders.filter(order => order.clientId === clientId)  
       setOrders(clientOrders)  
   
     } catch (error) {  
@@ -82,14 +92,27 @@ export default function ClientOrdersScreen({ route, navigation }) {
   
   const getStatusColor = (status: string) => {  
     switch (status) {  
-      case "Pendiente": return "#1a73e8"  
-      case "En Proceso": return "#f5a623"  
-      case "Completada": return "#4caf50"  
-      case "Entregada": return "#607d8b"  
-      case "Cancelada": return "#e53935"  
+      case "reception": return "#1a73e8"  
+      case "diagnosis": return "#f5a623"  
+      case "in_progress": return "#f5a623"  
+      case "completed": return "#4caf50"  
+      case "delivered": return "#607d8b"  
+      case "cancelled": return "#e53935"  
       default: return "#666"  
     }  
   }  
+  
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case "reception": return "Recepción"
+      case "diagnosis": return "Diagnóstico"
+      case "in_progress": return "En Proceso"
+      case "completed": return "Completada"
+      case "delivered": return "Entregada"
+      case "cancelled": return "Cancelada"
+      default: return status
+    }
+  }
   
   const formatCurrency = (amount: number) => {  
     return amount.toLocaleString("es-ES", {  
@@ -101,45 +124,45 @@ export default function ClientOrdersScreen({ route, navigation }) {
   
   const filteredOrders = orders.filter(order => {  
     if (filterStatus === "all") return true  
-    return order.estado === filterStatus  
+    return order.status === filterStatus  
   })  
   
-  const renderOrderItem = ({ item }: { item: OrdenTrabajoType }) => (  
+  const renderOrderItem = ({ item }: { item: Order }) => (  
     <TouchableOpacity  
       style={styles.orderCard}  
       onPress={() => navigation.navigate("OrderDetail", { orderId: item.id })}  
     >  
       <View style={styles.orderHeader}>  
-        <Text style={styles.orderNumber}>Orden #{item.numero_orden}</Text>  
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.estado) }]}>  
-          <Text style={styles.statusText}>{item.estado}</Text>  
+        <Text style={styles.orderNumber}>Orden #{item.number}</Text>  
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>  
+          <Text style={styles.statusText}>{getStatusText(item.status)}</Text>  
         </View>  
       </View>  
         
       <Text style={styles.orderDescription} numberOfLines={2}>  
-        {item.descripcion}  
+        {item.description}  
       </Text>  
         
       <View style={styles.orderDetails}>  
         <View style={styles.orderDetail}>  
-          <Feather name="wrench" size={16} color="#666" />  
-          <Text style={styles.orderDetailText}>{item.servicio_name || "Servicio"}</Text>  
+          <Feather name="tool" size={16} color="#666" />  
+          <Text style={styles.orderDetailText}>{item.description || "Servicio"}</Text>  
         </View>  
         <View style={styles.orderDetail}>  
           <Feather name="user" size={16} color="#666" />  
-          <Text style={styles.orderDetailText}>{item.tecnico_name || "Sin asignar"}</Text>  
+          <Text style={styles.orderDetailText}>Técnico asignado</Text>  
         </View>  
         <View style={styles.orderDetail}>  
           <Feather name="flag" size={16} color="#666" />  
-          <Text style={styles.orderDetailText}>Prioridad: {item.prioridad}</Text>  
+          <Text style={styles.orderDetailText}>Prioridad: {item.priority || "Normal"}</Text>  
         </View>  
       </View>  
         
       <View style={styles.orderFooter}>  
         <Text style={styles.orderDate}>  
-          {new Date(item.fecha_creacion).toLocaleDateString("es-ES")}  
+          {new Date(item.createdAt).toLocaleDateString("es-ES")}  
         </Text>  
-        <Text style={styles.orderAmount}>{formatCurrency(item.costo)}</Text>  
+        <Text style={styles.orderAmount}>{formatCurrency(item.total)}</Text>  
       </View>  
     </TouchableOpacity>  
   )  
@@ -172,26 +195,26 @@ export default function ClientOrdersScreen({ route, navigation }) {
           </Text>  
         </TouchableOpacity>  
         <TouchableOpacity  
-          style={[styles.filterButton, filterStatus === "Pendiente" && styles.filterButtonActive]}  
-          onPress={() => setFilterStatus("Pendiente")}  
+          style={[styles.filterButton, filterStatus === "reception" && styles.filterButtonActive]}  
+          onPress={() => setFilterStatus("reception")}  
         >  
-          <Text style={[styles.filterButtonText, filterStatus === "Pendiente" && styles.filterButtonTextActive]}>  
-            Pendientes  
+          <Text style={[styles.filterButtonText, filterStatus === "reception" && styles.filterButtonTextActive]}>  
+            Recepción  
           </Text>  
         </TouchableOpacity>  
         <TouchableOpacity  
-          style={[styles.filterButton, filterStatus === "En Proceso" && styles.filterButtonActive]}  
-          onPress={() => setFilterStatus("En Proceso")}  
+          style={[styles.filterButton, filterStatus === "in_progress" && styles.filterButtonActive]}  
+          onPress={() => setFilterStatus("in_progress")}  
         >  
-          <Text style={[styles.filterButtonText, filterStatus === "En Proceso" && styles.filterButtonTextActive]}>  
+          <Text style={[styles.filterButtonText, filterStatus === "in_progress" && styles.filterButtonTextActive]}>  
             En Proceso  
           </Text>  
         </TouchableOpacity>  
         <TouchableOpacity  
-          style={[styles.filterButton, filterStatus === "Completada" && styles.filterButtonActive]}  
-          onPress={() => setFilterStatus("Completada")}  
+          style={[styles.filterButton, filterStatus === "completed" && styles.filterButtonActive]}  
+          onPress={() => setFilterStatus("completed")}  
         >  
-          <Text style={[styles.filterButtonText, filterStatus === "Completada" && styles.filterButtonTextActive]}>  
+          <Text style={[styles.filterButtonText, filterStatus === "completed" && styles.filterButtonTextActive]}>  
             Completadas  
           </Text>  
         </TouchableOpacity>  
@@ -214,7 +237,7 @@ export default function ClientOrdersScreen({ route, navigation }) {
               <Text style={styles.emptySubtext}>  
                 {filterStatus === "all"   
                   ? "Este cliente no tiene órdenes registradas"   
-                  : `No hay órdenes con estado "${filterStatus}"`  
+                  : `No hay órdenes con estado "${getStatusText(filterStatus)}"`  
                 }  
               </Text>  
             </View>  

@@ -12,6 +12,14 @@ export const USER_ROLES = {
 } as const
 
 export const userService = {
+  initializeUsers: async (): Promise<void> => {
+    try {
+      const { data, error } = await supabase.auth.getSession()
+      console.log('Users initialized:', data)
+    } catch (error) {
+      console.error('Error initializing users:', error)
+    }
+  },
   // Obtener perfil de usuario actual
   async getCurrentUserProfile(): Promise<UserProfile | null> {
     try {
@@ -72,7 +80,7 @@ export const userService = {
 
       // Actualizar último inicio de sesión
       await supabase
-        .from('users')
+        .from('perfil_usuario')
         .update({ last_login_at: new Date().toISOString() })
         .eq('id', data.user.id)
 
@@ -592,7 +600,80 @@ export const userService = {
       console.error('Error in USER_HAS_ROLE:', error)  
       return false  
     }  
-  }    
+  }, 
+  async GetUserById(userId: string): Promise<User | null> {  
+    try {  
+      const { data, error } = await supabase  
+        .from('profiles')  
+        .select('*')  
+        .eq('id', userId)  
+        .single()
+
+      if (error) {
+        console.error('Error fetching user by ID:', error)
+        return null
+      }
+
+      return {
+        id: data.id,
+        email: data.email || '',
+        firstName: data.first_name || '',
+        lastName: data.last_name || '',
+        fullName: data.full_name || '',
+        avatarUrl: data.avatar_url || '',
+        role: data.role || 'client',
+        isActive: data.is_active !== false
+      }
+    } catch (error) {
+      console.error('Error in GetUserById:', error)
+      return null
+    }
+  },
+
+  // Get taller ID for a user (alias for GET_TALLER_ID)
+  async getTallerId(userId: string): Promise<string | null> {
+    return this.GET_TALLER_ID(userId)
+  },
+
+  // Get all technicians
+  async getAllTechnicians(): Promise<UserProfile[]> {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'technician')
+        .eq('is_active', true)
+        .order('full_name', { ascending: true })
+
+      if (error) {
+        console.error('Error fetching technicians:', error)
+        return []
+      }
+
+      return (data || []).map(profile => ({
+        id: profile.id,
+        email: profile.email || '',
+        phone: profile.phone || '',
+        firstName: profile.first_name || '',
+        lastName: profile.last_name || '',
+        fullName: profile.full_name || '',
+        avatarUrl: profile.avatar_url || '',
+        role: profile.role || 'technician',
+        isActive: profile.is_active !== false,
+        lastLogin: profile.last_login_at ? new Date(profile.last_login_at) : null,
+        createdAt: profile.created_at ? new Date(profile.created_at) : new Date(),
+        updatedAt: profile.updated_at ? new Date(profile.updated_at) : new Date()
+      }))
+    } catch (error) {
+      console.error('Error in getAllTechnicians:', error)
+      return []
+    }
+  },
+
+  // Get user taller (alias for GET_TALLER_ID)
+  async getUserTaller(userId: string): Promise<string | null> {
+    return this.GET_TALLER_ID(userId)
+  }
 }
 
 export default userService

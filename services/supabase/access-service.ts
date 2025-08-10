@@ -425,10 +425,7 @@ export const accessService = {
   // Verificar si una ruta es accesible para un rol específico
   async isRouteAccessible(role: USER_ROLES_TYPE, path: string): Promise<boolean> {
     try {
-      // Obtener el menú de navegación para el rol
       const menu = await this.getNavigationMenu(role)
-
-      // Función recursiva para buscar la ruta en el menú
       const findRoute = (items: any[], targetPath: string): any => {
         for (const item of items) {
           if (item.path === targetPath) return item
@@ -440,20 +437,21 @@ export const accessService = {
         return null
       }
 
-      const routeItem = findRoute(menu, path)
-
-      // Si la ruta no está en el menú, denegar por defecto (seguridad por defecto)
-      if (!routeItem) return false
-
-      // Si la ruta no requiere permiso, permitir acceso
-      if (!routeItem.requiredPermission) return true
-
-      // Verificar si el rol tiene el permiso requerido
-      return this.hasPermission(role, routeItem.requiredPermission, 'view')
+      return findRoute(menu, path) !== null
     } catch (error) {
-      console.error('Error checking route access:', error)
-      return false // En caso de error, denegar acceso
+      console.error('Error checking route accessibility:', error)
+      return false
     }
+  },
+
+  // Get user permissions (alias for GET_PERMISOS_USUARIO)
+  async getUserPermissions(userId: string, tallerId: string): Promise<UserPermissions | null> {
+    return this.GET_PERMISOS_USUARIO(userId, tallerId)
+  },
+
+  // Check user permissions (alias for GET_PERMISOS_USUARIO)
+  async checkUserPermissions(userId: string, tallerId: string): Promise<UserPermissions | null> {
+    return this.GET_PERMISOS_USUARIO(userId, tallerId)
   }
 }
 

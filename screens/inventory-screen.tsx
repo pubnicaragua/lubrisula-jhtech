@@ -17,22 +17,24 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import INVENTARIO_SERVICES from "../services/supabase/inventory-service"  
-import ACCESOS_SERVICES from "../services/supabase/access-service"  
-import USER_SERVICE from "../services/supabase/user-service"
-import { InventarioType, CategoriaMaterialType, ProveedorType } from "../services/supabase/services-service"
+import { inventoryService } from "../services/supabase/inventory-service"  
+import { accessService} from "../services/supabase/access-service"  
+import { userService } from "../services/supabase/user-service"
+import { getSuppliers, getInventoryCategories } from "../services/supabase/services-service"
+import { InventoryItem } from "../types/inventory"
+import { UiScreenNavProp } from "../types"
   
-export default function InventoryScreen({ navigation }) {  
+export default function InventoryScreen({ navigation }: UiScreenNavProp) {  
   const { user } = useAuth()  
-  const [inventory, setInventory] = useState<InventarioType[]>([])  
-  const [categories, setCategories] = useState<CategoriaMaterialType[]>([])  
-  const [suppliers, setSuppliers] = useState<ProveedorType[]>([])  
+  const [inventory, setInventory] = useState<InventoryItem[]>([])  
+  const [categories, setCategories] = useState<any[]>([])  
+  const [suppliers, setSuppliers] = useState<any[]>([])  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
   const [searchTerm, setSearchTerm] = useState("")  
-  const [filteredInventory, setFilteredInventory] = useState<InventarioType[]>([])  
+  const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>([])  
   const [selectedCategory, setSelectedCategory] = useState<string>("all")  
-  const [selectedItem, setSelectedItem] = useState<InventarioType | null>(null)  
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)  
   const [itemDetailModalVisible, setItemDetailModalVisible] = useState(false)  
   const [filterModalVisible, setFilterModalVisible] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
@@ -46,8 +48,12 @@ export default function InventoryScreen({ navigation }) {
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
-      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      const userTallerId = await userService.GET_TALLER_ID(user.id)
+      if (!userTallerId) {
+        setError("No se pudo cargar la información del cliente")  
+        return
+      }  
+      const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       if (userPermissions?.rol === 'client') {  
@@ -58,9 +64,9 @@ export default function InventoryScreen({ navigation }) {
   
       // Cargar datos del inventario  
       const [inventoryData, categoriesData, suppliersData] = await Promise.all([  
-        INVENTARIO_SERVICES.GET_INVENTARIO(),  
-        INVENTARIO_SERVICES.GET_CATEGORIA_MATERIALES(),  
-        INVENTARIO_SERVICES.GET_PROVEEDORES()  
+        inventoryService.getAllInventory(),  
+        getInventoryCategories(),  
+        getSuppliers()  
       ])  
   
       setInventory(inventoryData)  
@@ -99,24 +105,24 @@ export default function InventoryScreen({ navigation }) {
   
     // Filtrar por categoría  
     if (category !== "all") {  
-      filtered = filtered.filter(item => item.categoria_id === category)  
+      filtered = filtered.filter(item => item.category === category)  
     }  
   
     // Filtrar por búsqueda  
     if (search.trim() !== "") {  
       filtered = filtered.filter(item =>  
-        item.nombre?.toLowerCase().includes(search.toLowerCase()) ||  
-        item.codigo?.toLowerCase().includes(search.toLowerCase()) ||  
-        item.descripcion?.toLowerCase().includes(search.toLowerCase()) ||  
-        item.categorias_materiales?.nombre?.toLowerCase().includes(search.toLowerCase()) ||  
-        item.suppliers?.name?.toLowerCase().includes(search.toLowerCase())  
+        item.name?.toLowerCase().includes(search.toLowerCase()) ||  
+        item.sku?.toLowerCase().includes(search.toLowerCase()) ||  
+        item.description?.toLowerCase().includes(search.toLowerCase()) ||  
+        item.category?.toLowerCase().includes(search.toLowerCase()) ||  
+        item.supplier?.toLowerCase().includes(search.toLowerCase())  
       )  
     }  
   
     setFilteredInventory(filtered)  
   }, [inventory])  
   
-  const handleItemPress = (item: InventarioType) => {  
+  const handleItemPress = (item: InventoryItem) => {  
     setSelectedItem(item)  
     setItemDetailModalVisible(true)  
   }  
@@ -125,7 +131,7 @@ export default function InventoryScreen({ navigation }) {
     navigation.navigate("NewInventoryItem")  
   }  
   
-  const handleEditItem = (item: InventarioType) => {  
+  const handleEditItem = (item: InventoryItem) => {  
     setItemDetailModalVisible(false)  
     navigation.navigate("EditInventoryItem", { itemId: item.id })  
   }  
@@ -138,17 +144,17 @@ export default function InventoryScreen({ navigation }) {
     })  
   }  
   
-  const getStockStatus = (item: InventarioType) => {  
-    if (item.stock_actual === 0) {  
+  const getStockStatus = (item: InventoryItem) => {  
+    if (item.stock === 0) {  
       return { status: "Sin Stock", color: "#f44336" }  
-    } else if (item.stock_actual <= item.stock_minimo) {  
+    } else if (item.minStock && item.stock <= item.minStock) {  
       return { status: "Stock Bajo", color: "#ff9800" }  
     } else {  
       return { status: "En Stock", color: "#4caf50" }  
     }  
   }  
   
-  const renderInventoryItem = ({ item }: { item: InventarioType }) => {  
+  const renderInventoryItem = ({ item }: { item: InventoryItem }) => {  
     const stockStatus = getStockStatus(item)  
       
     return (  
@@ -161,10 +167,10 @@ export default function InventoryScreen({ navigation }) {
             <Feather name="package" size={24} color="#1a73e8" />  
           </View>  
           <View style={styles.inventoryInfo}>  
-            <Text style={styles.inventoryName}>{item.nombre}</Text>  
-            <Text style={styles.inventoryCode}>Código: {item.codigo}</Text>  
+            <Text style={styles.inventoryName}>{item.name}</Text>  
+            <Text style={styles.inventoryCode}>Código: {item.sku}</Text>  
             <Text style={styles.inventoryCategory}>  
-              {item.categorias_materiales?.nombre}  
+              {item.category}  
             </Text>  
           </View>  
           <View style={styles.inventoryStatus}>  
@@ -180,21 +186,21 @@ export default function InventoryScreen({ navigation }) {
         <View style={styles.inventoryDetails}>  
           <View style={styles.inventoryDetail}>  
             <MaterialIcons name="inventory" size={16} color="#666" />  
-            <Text style={styles.inventoryStock}>  
-              Stock: {item.stock_actual} / {item.stock_minimo} mín.  
-            </Text>  
+                          <Text style={styles.inventoryStock}>  
+                Stock: {item.stock} / {item.minStock ?? 0} mín.  
+              </Text>  
           </View>  
   
-          {item.suppliers && (  
+          {item.supplier && (  
             <View style={styles.inventoryDetail}>  
               <Feather name="truck" size={16} color="#666" />  
-              <Text style={styles.inventorySupplier}>{item.suppliers.name}</Text>  
+              <Text style={styles.inventorySupplier}>{item.supplier}</Text>  
             </View>  
           )}  
   
           <View style={styles.inventoryDetail}>  
             <Feather name="map-pin" size={16} color="#666" />  
-            <Text style={styles.inventoryLocation}>{item.ubicacion_almacen}</Text>  
+            <Text style={styles.inventoryLocation}>{item.location}</Text>  
           </View>  
         </View>  
   
@@ -202,13 +208,13 @@ export default function InventoryScreen({ navigation }) {
           <View style={styles.priceContainer}>  
             <Text style={styles.priceLabel}>Compra:</Text>  
             <Text style={styles.priceValue}>  
-              {formatCurrency(item.precio_compra)}  
+              {formatCurrency(item.cost ?? 0)}  
             </Text>  
           </View>  
           <View style={styles.priceContainer}>  
             <Text style={styles.priceLabel}>Venta:</Text>  
             <Text style={styles.priceValue}>  
-              {formatCurrency(item.precio_venta)}  
+              {formatCurrency(item.priceUSD)}  
             </Text>  
           </View>  
         </View>  
@@ -325,29 +331,29 @@ export default function InventoryScreen({ navigation }) {
               <Text style={styles.sectionTitle}>Información General</Text>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Nombre:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.nombre}</Text>  
+                <Text style={styles.detailValue}>{selectedItem.name}</Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Código:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.codigo}</Text>  
+                <Text style={styles.detailValue}>{selectedItem.sku}</Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Categoría:</Text>  
                 <Text style={styles.detailValue}>  
-                  {selectedItem.categorias_materiales?.nombre}  
+                  {selectedItem.category}  
                 </Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Descripción:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.descripcion}</Text>  
+                <Text style={styles.detailValue}>{selectedItem.description}</Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Proveedor:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.suppliers?.name}</Text>  
+                <Text style={styles.detailValue}>{selectedItem.supplier}</Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Ubicación:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.ubicacion_almacen}</Text>  
+                <Text style={styles.detailValue}>{selectedItem.location}</Text>  
               </View>  
             </View>  
   
@@ -359,13 +365,13 @@ export default function InventoryScreen({ navigation }) {
                   styles.detailValue,  
                   { color: stockStatus.color }  
                 ]}>  
-                  {selectedItem.stock_actual} unidades  
+                  {selectedItem.stock} unidades  
                 </Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Stock Mínimo:</Text>  
                 <Text style={styles.detailValue}>  
-                  {selectedItem.stock_minimo} unidades  
+                  {selectedItem.minStock ?? 0} unidades  
                 </Text>  
               </View>  
               <View style={styles.detailRow}>  
@@ -384,19 +390,19 @@ export default function InventoryScreen({ navigation }) {
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Precio de Compra:</Text>  
                 <Text style={styles.detailValue}>  
-                  {formatCurrency(selectedItem.precio_compra)}  
+                  {formatCurrency(selectedItem.cost ?? 0)}  
                 </Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Precio de Venta:</Text>  
                 <Text style={styles.detailValue}>  
-                  {formatCurrency(selectedItem.precio_venta)}  
+                  {formatCurrency(selectedItem.priceUSD)}  
                 </Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Margen:</Text>  
                 <Text style={styles.detailValue}>  
-                  {((selectedItem.precio_venta - selectedItem.precio_compra) / selectedItem.precio_compra * 100).toFixed(1)}%  
+                  {selectedItem.cost ? ((selectedItem.priceUSD - selectedItem.cost) / selectedItem.cost * 100).toFixed(1) : '0.0'}%  
                 </Text>  
               </View>  
             </View>  
