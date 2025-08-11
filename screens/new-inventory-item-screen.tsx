@@ -19,28 +19,28 @@ import INVENTARIO_SERVICES from "../services/supabase/inventory-service"
 import { InventoryItem, InventoryCategory, InventoryItemFormData } from "../types/inventory"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service" 
-  
+import { CategoriaMaterialType } from "../services/supabase/services-service"
+
 export default function NewInventoryItemScreen({ navigation }: { navigation: any }) {
   const { user } = useAuth()
   const [loading, setLoading] = useState(false)
-  const [categories, setCategories] = useState<string[]>([])
+  const [categories, setCategories] = useState<CategoriaMaterialType[]>([])
   const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([])
   const [categoryModalVisible, setCategoryModalVisible] = useState(false)
   const [supplierModalVisible, setSupplierModalVisible] = useState(false)
     
     const [formData, setFormData] = useState<Partial<InventoryItem>>({
-    name: "",
-    sku: "",
-    description: "",
-    category: "",
-    stock: 0,
-    minStock: 0,
-    cost: 0,
-    priceUSD: 0,
-    priceHNL: 0,
-    supplier: "",
-    location: "",
-    isActive: true,
+    producto: "",
+    codigo: "",
+    descripcion: "",
+    categoria_id: "",
+    stock_actual: 0,
+    stock_minimo: 0,
+    precio_compra: 0,
+    precio_venta: 0,
+    proveedor_id: "",
+    ubicacion_almacen: "",
+    estado: 'Activo',
   })  
   
   const [errors, setErrors] = useState<Record<string, string>>({})  
@@ -62,7 +62,7 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
       }
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
   
-      if (userPermissions?.rol === 'client') {  
+      if (userPermissions?.rol === 'client') {
         Alert.alert("Error", "No tienes permisos para agregar artículos al inventario")  
         navigation.goBack()  
         return  
@@ -86,40 +86,40 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
     const validateForm = () => {
     const newErrors: Record<string, string> = {}
 
-    if (!formData.sku?.trim()) {
-      newErrors.sku = "El código SKU es requerido"
+    if (!formData.codigo?.trim()) {
+      newErrors.codigo = "El código SKU es requerido"
     }
 
-    if (!formData.name?.trim()) {
-      newErrors.name = "El nombre es requerido"
+    if (!formData.producto?.trim()) {
+      newErrors.producto = "El nombre es requerido"
     }
 
-    if (!formData.category) {
-      newErrors.category = "La categoría es requerida"
+    if (!formData.categoria_id) {
+      newErrors.categoria_id = "La categoría es requerida"
     }
 
-    if (!formData.cost || formData.cost <= 0) {
-      newErrors.cost = "El precio de compra debe ser mayor a 0"
+    if (!formData.precio_compra || formData.precio_compra <= 0) {
+      newErrors.precio_compra = "El precio de compra debe ser mayor a 0"
     }
 
-    if (!formData.priceUSD || formData.priceUSD <= 0) {
-      newErrors.priceUSD = "El precio de venta debe ser mayor a 0"
+    if (!formData.precio_venta || formData.precio_venta <= 0) {
+      newErrors.precio_venta = "El precio de venta debe ser mayor a 0"
     }
 
-    if (formData.priceUSD && formData.cost && formData.priceUSD <= formData.cost) {
-      newErrors.priceUSD = "El precio de venta debe ser mayor al precio de compra"
+    if (formData.precio_venta && formData.precio_compra && formData.precio_venta <= formData.precio_compra) {
+      newErrors.precio_venta = "El precio de venta debe ser mayor al precio de compra"
     }
 
-    if (formData.stock === undefined || formData.stock < 0) {
-      newErrors.stock = "El stock actual no puede ser negativo"
+    if (formData.stock_actual === undefined || formData.stock_actual < 0) {
+      newErrors.stock_actual = "El stock actual no puede ser negativo"
     }
 
-    if (!formData.minStock || formData.minStock < 0) {
-      newErrors.minStock = "El stock mínimo debe ser mayor o igual a 0"
+    if (!formData.stock_minimo || formData.stock_minimo < 0) {
+      newErrors.stock_minimo = "El stock mínimo debe ser mayor o igual a 0"
     }
 
-    if (!formData.location?.trim()) {
-      newErrors.location = "La ubicación en almacén es requerida"
+    if (!formData.ubicacion_almacen?.trim()) {
+      newErrors.ubicacion_almacen = "La ubicación en almacén es requerida"
     }  
   
     setErrors(newErrors)  
@@ -161,11 +161,12 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
   }  
   
   const getSelectedCategoryName = () => {  
-    return formData.category || "Seleccionar categoría"  
+    const selectedCategory = categories.find(cat => cat.id === formData.categoria_id)
+    return selectedCategory?.nombre || "Seleccionar categoría"  
   }  
   
   const getSelectedSupplierName = () => {  
-    const supplier = suppliers.find(sup => sup.id === formData.supplier)  
+    const supplier = suppliers.find(sup => sup.id === formData.proveedor_id)  
     return supplier?.name || "Seleccionar proveedor (opcional)"  
   }  
   
@@ -188,25 +189,25 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
   
         <FlatList  
           data={categories}  
-          keyExtractor={(item) => item}  
+          keyExtractor={(item) => item.id}  
           renderItem={({ item }) => (  
             <TouchableOpacity  
               style={[  
                 styles.modalOption,  
-                formData.category === item && styles.modalOptionSelected  
+                formData.categoria_id === item.id && styles.modalOptionSelected  
               ]}  
               onPress={() => {  
-                updateFormData('category', item)  
+                updateFormData('categoria_id', item.id)  
                 setCategoryModalVisible(false)  
               }}  
             >  
               <Text style={[  
                 styles.modalOptionText,  
-                formData.category === item && styles.modalOptionTextSelected  
+                formData.categoria_id === item.id && styles.modalOptionTextSelected  
               ]}>  
-                {item}  
+                {item.nombre}  
               </Text>  
-              {formData.category === item && (  
+              {formData.categoria_id === item.id && (  
                 <Feather name="check" size={20} color="#1a73e8" />  
               )}  
             </TouchableOpacity>  
@@ -241,20 +242,20 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
             <TouchableOpacity  
               style={[  
                 styles.modalOption,  
-                formData.supplier === item.id && styles.modalOptionSelected  
+                formData.proveedor_id === item.id && styles.modalOptionSelected  
               ]}  
               onPress={() => {  
-                updateFormData('supplier', item.id)  
+                updateFormData('proveedor_id', item.id)  
                 setSupplierModalVisible(false)  
               }}  
             >  
               <Text style={[  
                 styles.modalOptionText,  
-                formData.supplier === item.id && styles.modalOptionTextSelected  
+                formData.proveedor_id === item.id && styles.modalOptionTextSelected  
               ]}>  
                 {item.name}  
               </Text>  
-              {formData.supplier === item.id && (  
+              {formData.proveedor_id === item.id && (  
                 <Feather name="check" size={20} color="#1a73e8" />  
               )}  
             </TouchableOpacity>  
@@ -279,50 +280,50 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
           <View style={styles.inputGroup}>  
             <Text style={styles.label}>Código *</Text>  
             <TextInput  
-              style={[styles.input, errors.sku && styles.inputError]}  
-              value={formData.sku}  
-              onChangeText={(value) => updateFormData('sku', value)}  
+              style={[styles.input, errors.codigo && styles.inputError]}  
+              value={formData.codigo}  
+              onChangeText={(value) => updateFormData('codigo', value)}  
               placeholder="Código único del artículo"  
               autoCapitalize="characters"  
             />  
-            {errors.sku && <Text style={styles.errorText}>{errors.sku}</Text>}  
+            {errors.codigo && <Text style={styles.errorText}>{errors.codigo}</Text>}  
           </View>  
   
           <View style={styles.inputGroup}>  
             <Text style={styles.label}>Nombre *</Text>  
             <TextInput  
-              style={[styles.input, errors.name && styles.inputError]}  
-              value={formData.name}  
-              onChangeText={(value) => updateFormData('name', value)}  
+              style={[styles.input, errors.producto && styles.inputError]}  
+              value={formData.producto}  
+              onChangeText={(value) => updateFormData('producto', value)}  
               placeholder="Nombre del artículo"  
               autoCapitalize="words"  
             />  
-            {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}  
+            {errors.producto && <Text style={styles.errorText}>{errors.producto}</Text>}  
           </View>  
   
           <View style={styles.inputGroup}>  
             <Text style={styles.label}>Categoría *</Text>  
             <TouchableOpacity  
-              style={[styles.selector, errors.category && styles.inputError]}  
+              style={[styles.selector, errors.categoria_id && styles.inputError]}  
               onPress={() => setCategoryModalVisible(true)}  
             >  
               <Text style={[  
                 styles.selectorText,  
-                !formData.category && styles.placeholderText  
+                !formData.categoria_id && styles.placeholderText  
               ]}>  
                 {getSelectedCategoryName()}  
               </Text>  
               <Feather name="chevron-down" size={20} color="#666" />  
             </TouchableOpacity>  
-            {errors.category && <Text style={styles.errorText}>{errors.category}</Text>}  
+            {errors.categoria_id && <Text style={styles.errorText}>{errors.categoria_id}</Text>}  
           </View>  
   
           <View style={styles.inputGroup}>  
             <Text style={styles.label}>Descripción</Text>  
             <TextInput  
               style={[styles.input, styles.textArea]}  
-              value={formData.description}  
-              onChangeText={(value) => updateFormData('description', value)}  
+              value={formData.descripcion}  
+              onChangeText={(value) => updateFormData('descripcion', value)}  
               placeholder="Descripción del artículo"  
               multiline  
               numberOfLines={3}  
@@ -337,61 +338,61 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
           <View style={styles.inputGroup}>  
             <Text style={styles.label}>Precio de Compra *</Text>  
             <TextInput  
-              style={[styles.input, errors.cost && styles.inputError]}  
-              value={formData.cost?.toString()}  
-              onChangeText={(value) => updateFormData('cost', parseFloat(value) || 0)}  
+              style={[styles.input, errors.precio_compra && styles.inputError]}  
+              value={formData.precio_compra?.toString()}  
+              onChangeText={(value) => updateFormData('precio_compra', parseFloat(value) || 0)}  
               placeholder="0.00"  
               keyboardType="decimal-pad"  
             />  
-            {errors.cost && <Text style={styles.errorText}>{errors.cost}</Text>}  
+            {errors.precio_compra && <Text style={styles.errorText}>{errors.precio_compra}</Text>}  
           </View>  
   
           <View style={styles.inputGroup}>  
             <Text style={styles.label}>Precio de Venta *</Text>  
             <TextInput  
-              style={[styles.input, errors.priceUSD && styles.inputError]}  
-              value={formData.priceUSD?.toString()}  
-              onChangeText={(value) => updateFormData('priceUSD', parseFloat(value) || 0)}  
+              style={[styles.input, errors.precio_venta && styles.inputError]}  
+              value={formData.precio_venta?.toString()}  
+              onChangeText={(value) => updateFormData('precio_venta', parseFloat(value) || 0)}  
               placeholder="0.00"  
               keyboardType="decimal-pad"  
             />  
-            {errors.priceUSD && <Text style={styles.errorText}>{errors.priceUSD}</Text>}  
+            {errors.precio_venta && <Text style={styles.errorText}>{errors.precio_venta}</Text>}  
           </View>  
   
           <View style={styles.inputGroup}>  
             <Text style={styles.label}>Stock Inicial *</Text>  
             <TextInput  
-              style={[styles.input, errors.stock && styles.inputError]}  
-              value={formData.stock?.toString()}  
-              onChangeText={(value) => updateFormData('stock', parseInt(value) || 0)}  
+              style={[styles.input, errors.stock_actual && styles.inputError]}  
+              value={formData.stock_actual?.toString()}  
+              onChangeText={(value) => updateFormData('stock_actual', parseInt(value) || 0)}  
               placeholder="0"  
               keyboardType="number-pad"  
             />  
-            {errors.stock && <Text style={styles.errorText}>{errors.stock}</Text>}  
+            {errors.stock_actual && <Text style={styles.errorText}>{errors.stock_actual}</Text>}  
           </View>  
   
           <View style={styles.inputGroup}>  
             <Text style={styles.label}>Stock Mínimo *</Text>  
             <TextInput  
-              style={[styles.input, errors.minStock && styles.inputError]}  
-              value={formData.minStock?.toString()}  
-              onChangeText={(value) => updateFormData('minStock', parseInt(value) || 0)}  
+              style={[styles.input, errors.stock_minimo && styles.inputError]}  
+              value={formData.stock_minimo?.toString()}  
+              onChangeText={(value) => updateFormData('stock_minimo', parseInt(value) || 0)}  
               placeholder="0"  
               keyboardType="number-pad"  
             />  
-            {errors.minStock && <Text style={styles.errorText}>{errors.minStock}</Text>}  
+            {errors.stock_minimo && <Text style={styles.errorText}>{errors.stock_minimo}</Text>}  
           </View>  
   
           <View style={styles.inputGroup}>  
             <Text style={styles.label}>Ubicación en Almacén *</Text>  
             <TextInput  
-              style={[styles.input, errors.location && styles.inputError]}  
-              value={formData.location}  
-              onChangeText={(value) => updateFormData('location', value)}  
+              style={[styles.input, errors.ubicacion_almacen && styles.inputError]}  
+              value={formData.ubicacion_almacen}  
+              onChangeText={(value) => updateFormData('ubicacion_almacen', value)}  
               placeholder="Ej: A-12, Estante 3"  
               autoCapitalize="characters"  
             />  
-            {errors.location && <Text style={styles.errorText}>{errors.location}</Text>}  
+            {errors.ubicacion_almacen && <Text style={styles.errorText}>{errors.ubicacion_almacen}</Text>}  
           </View>  
   
           <View style={styles.inputGroup}>  
@@ -402,7 +403,7 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
             >  
               <Text style={[  
                 styles.selectorText,  
-                !formData.supplier && styles.placeholderText  
+                !formData.proveedor_id && styles.placeholderText  
               ]}>  
                 {getSelectedSupplierName()}  
               </Text>  

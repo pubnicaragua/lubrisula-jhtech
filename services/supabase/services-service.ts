@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 export interface InventarioType {  
   id: string  
   codigo: string  
-  nombre: string  
+  producto: string  
   descripcion?: string  
   categoria_id: string  
   proveedor_id?: string  
@@ -16,7 +16,7 @@ export interface InventarioType {
   estado: 'Activo' | 'Inactivo'  
   fecha_ingreso: string  
   categorias_materiales?: {  
-    nombre: string  
+    producto: string  
   }  
   suppliers?: {  
     name: string  
@@ -38,7 +38,7 @@ export interface ProveedorType {
 
 export interface ServicioType {
   id: string
-  nombre: string
+  producto: string
   descripcion?: string
   precio: number
   categoria: string
@@ -50,13 +50,13 @@ export interface ServicioType {
 export async function getAllInventory(): Promise<InventarioType[]> {  
   try {  
     const { data, error } = await supabase  
-      .from('inventory')  
+      .from('inventario')  
       .select(`  
         *,  
-        categorias_materiales:inventory_categories(nombre),  
+        categorias_materiales(nombre),  
         suppliers(name)  
       `)  
-      .order('nombre', { ascending: true })  
+      .order('producto', { ascending: true })  
   
     if (error) {  
       console.error('Error getting inventory:', error)  
@@ -73,9 +73,9 @@ export async function getAllInventory(): Promise<InventarioType[]> {
 export async function getInventoryCategories(): Promise<CategoriaMaterialType[]> {  
   try {  
     const { data, error } = await supabase  
-      .from('inventory_categories')  
-      .select('*')  
-      .order('nombre', { ascending: true })  
+      .from('categorias_materiales')  
+      .select('id, nombre, descripcion')  
+      .order('nombre', { ascending: true})  
   
     if (error) {  
       console.error('Error getting categories:', error)  
@@ -111,7 +111,7 @@ export async function getSuppliers(): Promise<ProveedorType[]> {
 export async function createInventoryItem(item: Omit<InventarioType, 'id'>): Promise<InventarioType | null> {  
   try {  
     const { data, error } = await supabase  
-      .from('inventory')  
+      .from('inventario')  
       .insert([item])  
       .select()  
       .single()  
@@ -131,7 +131,7 @@ export async function createInventoryItem(item: Omit<InventarioType, 'id'>): Pro
 export async function updateInventoryItem(id: string, updates: Partial<InventarioType>): Promise<InventarioType | null> {  
   try {  
     const { data, error } = await supabase  
-      .from('inventory')  
+      .from('inventario')  
       .update(updates)  
       .eq('id', id)  
       .select()  
@@ -155,7 +155,7 @@ export async function getAllServices(): Promise<ServicioType[]> {
       .from('services')
       .select('*')
       .eq('estado', 'Activo')
-      .order('nombre', { ascending: true })
+      .order('producto', { ascending: true })
 
     if (error) {
       console.error('Error getting services:', error)

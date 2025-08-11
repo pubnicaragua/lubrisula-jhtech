@@ -69,7 +69,7 @@ export default function VehicleDetailScreen({ route, navigation }: UiScreenProps
       setVehicle(vehicleData)  
   
       // Cargar datos del cliente propietario  
-      const clientData = await clientService.getClientById(vehicleData.clientId)  
+      const clientData = await clientService.getClientById(vehicleData.client_id)  
       setClient(clientData)  
   
       // Cargar órdenes del vehículo  
@@ -224,7 +224,7 @@ export default function VehicleDetailScreen({ route, navigation }: UiScreenProps
               {vehicle.make} {vehicle.model}  
             </Text>  
             <Text style={styles.vehicleYear}>{vehicle.year}</Text>  
-            <Text style={styles.vehiclePlate}>Placa: {vehicle.licensePlate}</Text>  
+            <Text style={styles.vehiclePlate}>Placa: {vehicle.license_plate}</Text>  
           </View>  
           <View style={styles.vehicleIcon}>  
             <Feather name="truck" size={32} color="#1a73e8" />  
@@ -288,7 +288,7 @@ export default function VehicleDetailScreen({ route, navigation }: UiScreenProps
             </View>  
             <View style={styles.infoRow}>  
               <Text style={styles.infoLabel}>Placa:</Text>  
-              <Text style={styles.infoValue}>{vehicle.licensePlate}</Text>  
+              <Text style={styles.infoValue}>{vehicle.license_plate}</Text>  
             </View>  
             {vehicle.vin && (  
               <View style={styles.infoRow}>  

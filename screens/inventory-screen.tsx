@@ -22,9 +22,24 @@ import { accessService} from "../services/supabase/access-service"
 import { userService } from "../services/supabase/user-service"
 import { getSuppliers, getInventoryCategories } from "../services/supabase/services-service"
 import { InventoryItem } from "../types/inventory"
-import { UiScreenNavProp } from "../types"
-  
-export default function InventoryScreen({ navigation }: UiScreenNavProp) {  
+import { InventoryScreenProps, UiScreenNavProp } from "../types"
+
+// Tipo personalizado para mapear los datos del inventario con las propiedades correctas
+type InventoryItemDisplay = {
+  id: string
+  name: string
+  sku: string
+  description: string
+  category: string
+  supplier: string
+  location: string
+  stock: number
+  minStock: number
+  cost: number
+  priceUSD: number
+}
+
+export default function InventoryScreen({ navigation }: InventoryScreenProps) {  
   const { user } = useAuth()  
   const [inventory, setInventory] = useState<InventoryItem[]>([])  
   const [categories, setCategories] = useState<any[]>([])  
@@ -56,7 +71,7 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
       const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
-      if (userPermissions?.rol === 'client') {   //cambiar !== por ===
+      if (userPermissions?.rol === 'client') {
         // Los clientes no tienen acceso al inventario  
         setError("No tienes permisos para ver el inventario")  
         return  
@@ -105,17 +120,17 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
   
     // Filtrar por categoría  
     if (category !== "all") {  
-      filtered = filtered.filter(item => item.category === category)  
+      filtered = filtered.filter(item => item.categoria_id === category)  
     }  
   
     // Filtrar por búsqueda  
     if (search.trim() !== "") {  
       filtered = filtered.filter(item =>  
-        item.name?.toLowerCase().includes(search.toLowerCase()) ||  
-        item.sku?.toLowerCase().includes(search.toLowerCase()) ||  
-        item.description?.toLowerCase().includes(search.toLowerCase()) ||  
-        item.category?.toLowerCase().includes(search.toLowerCase()) ||  
-        item.supplier?.toLowerCase().includes(search.toLowerCase())  
+        item.producto?.toLowerCase().includes(search.toLowerCase()) ||  
+        item.codigo?.toLowerCase().includes(search.toLowerCase()) ||  
+        item.descripcion?.toLowerCase().includes(search.toLowerCase()) ||  
+        item.categoria_nombre?.toLowerCase().includes(search.toLowerCase()) ||  
+        item.proveedor_nombre?.toLowerCase().includes(search.toLowerCase())  
       )  
     }  
   
@@ -133,7 +148,7 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
   
   const handleEditItem = (item: InventoryItem) => {  
     setItemDetailModalVisible(false)  
-    navigation.navigate("EditInventoryItem", { itemId: item.id })  
+    ;(navigation as any).navigate("InventoryItemDetail", { itemId: item.id })  
   }  
   
   const formatCurrency = (amount: number) => {  
@@ -145,9 +160,9 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
   }  
   
   const getStockStatus = (item: InventoryItem) => {  
-    if (item.stock === 0) {  
+    if ((item.stock_actual ?? 0) === 0) {  
       return { status: "Sin Stock", color: "#f44336" }  
-    } else if (item.minStock && item.stock <= item.minStock) {  
+    } else if (item.stock_minimo && (item.stock_actual ?? 0) <= item.stock_minimo) {  
       return { status: "Stock Bajo", color: "#ff9800" }  
     } else {  
       return { status: "En Stock", color: "#4caf50" }  
@@ -167,10 +182,10 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
             <Feather name="package" size={24} color="#1a73e8" />  
           </View>  
           <View style={styles.inventoryInfo}>  
-            <Text style={styles.inventoryName}>{item.name}</Text>  
-            <Text style={styles.inventoryCode}>Código: {item.sku}</Text>  
+            <Text style={styles.inventoryName}>{item.producto}</Text>  
+            <Text style={styles.inventoryCode}>Código: {item.codigo}</Text>  
             <Text style={styles.inventoryCategory}>  
-              {item.category}  
+              {item.categoria_nombre}  
             </Text>  
           </View>  
           <View style={styles.inventoryStatus}>  
@@ -187,20 +202,20 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
           <View style={styles.inventoryDetail}>  
             <MaterialIcons name="inventory" size={16} color="#666" />  
                           <Text style={styles.inventoryStock}>  
-                Stock: {item.stock} / {item.minStock ?? 0} mín.  
+                Stock: {item.stock_actual ?? 0} / {item.stock_minimo ?? 0} mín.  
               </Text>  
           </View>  
   
-          {item.supplier && (  
+          {item.proveedor_nombre && (  
             <View style={styles.inventoryDetail}>  
               <Feather name="truck" size={16} color="#666" />  
-              <Text style={styles.inventorySupplier}>{item.supplier}</Text>  
+              <Text style={styles.inventorySupplier}>{item.proveedor_nombre}</Text>  
             </View>  
           )}  
   
           <View style={styles.inventoryDetail}>  
             <Feather name="map-pin" size={16} color="#666" />  
-            <Text style={styles.inventoryLocation}>{item.location}</Text>  
+            <Text style={styles.inventoryLocation}>{item.ubicacion_almacen}</Text>  
           </View>  
         </View>  
   
@@ -208,13 +223,13 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
           <View style={styles.priceContainer}>  
             <Text style={styles.priceLabel}>Compra:</Text>  
             <Text style={styles.priceValue}>  
-              {formatCurrency(item.cost ?? 0)}  
+              {formatCurrency(item.precio_compra ?? 0)}  
             </Text>  
           </View>  
           <View style={styles.priceContainer}>  
             <Text style={styles.priceLabel}>Venta:</Text>  
             <Text style={styles.priceValue}>  
-              {formatCurrency(item.priceUSD)}  
+              {formatCurrency(item.precio_venta ?? 0)}  
             </Text>  
           </View>  
         </View>  
@@ -331,29 +346,29 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
               <Text style={styles.sectionTitle}>Información General</Text>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Nombre:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.name}</Text>  
+                <Text style={styles.detailValue}>{selectedItem.producto}</Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Código:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.sku}</Text>  
+                <Text style={styles.detailValue}>{selectedItem.codigo}</Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Categoría:</Text>  
                 <Text style={styles.detailValue}>  
-                  {selectedItem.category}  
+                  {selectedItem.categoria_nombre}  
                 </Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Descripción:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.description}</Text>  
+                <Text style={styles.detailValue}>{selectedItem.descripcion}</Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Proveedor:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.supplier}</Text>  
+                <Text style={styles.detailValue}>{selectedItem.proveedor_nombre}</Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Ubicación:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.location}</Text>  
+                <Text style={styles.detailValue}>{selectedItem.ubicacion_almacen}</Text>  
               </View>  
             </View>  
   
@@ -365,13 +380,13 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
                   styles.detailValue,  
                   { color: stockStatus.color }  
                 ]}>  
-                  {selectedItem.stock} unidades  
+                  {selectedItem.stock_actual ?? 0} unidades  
                 </Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Stock Mínimo:</Text>  
                 <Text style={styles.detailValue}>  
-                  {selectedItem.minStock ?? 0} unidades  
+                  {selectedItem.stock_minimo ?? 0} unidades  
                 </Text>  
               </View>  
               <View style={styles.detailRow}>  
@@ -390,19 +405,19 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Precio de Compra:</Text>  
                 <Text style={styles.detailValue}>  
-                  {formatCurrency(selectedItem.cost ?? 0)}  
+                  {formatCurrency(selectedItem.precio_compra ?? 0)}  
                 </Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Precio de Venta:</Text>  
                 <Text style={styles.detailValue}>  
-                  {formatCurrency(selectedItem.priceUSD)}  
+                  {formatCurrency(selectedItem.precio_venta ?? 0)}  
                 </Text>  
               </View>  
               <View style={styles.detailRow}>  
                 <Text style={styles.detailLabel}>Margen:</Text>  
                 <Text style={styles.detailValue}>  
-                  {selectedItem.cost ? ((selectedItem.priceUSD - selectedItem.cost) / selectedItem.cost * 100).toFixed(1) : '0.0'}%  
+                  {selectedItem.precio_compra ? (((selectedItem.precio_venta ?? 0) - selectedItem.precio_compra) / selectedItem.precio_compra * 100).toFixed(1) : '0.0'}%  
                 </Text>  
               </View>  
             </View>  
@@ -412,7 +427,7 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
             <View style={styles.modalFooter}>  
               <TouchableOpacity  
                 style={[styles.modalButton, styles.editButton]}  
-                onPress={() => handleEditItem(selectedItem)}  
+                onPress={() => selectedItem && handleEditItem(selectedItem)}  
               >  
                 <Feather name="edit" size={20} color="#fff" />  
                 <Text style={styles.buttonText}>Editar</Text>  
@@ -477,7 +492,7 @@ export default function InventoryScreen({ navigation }: UiScreenNavProp) {
             <View style={styles.emptyContainer}>  
               <Feather name="package" size={64} color="#ccc" />  
               <Text style={styles.emptyText}>No se encontraron artículos</Text>  
-              {userRole !== 'client' && (  
+              {userRole === 'client' && (  // cambiar a !client
                 <TouchableOpacity style={styles.addFirstItemButton} onPress={handleAddItem}>  
                   <Text style={styles.addFirstItemText}>Agregar primer artículo</Text>  
                 </TouchableOpacity>  
