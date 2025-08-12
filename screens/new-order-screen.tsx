@@ -1,202 +1,161 @@
 "use client"  
   
-import { useState, useCallback, useEffect } from "react"  
+import { useState, useCallback } from "react"  
 import {  
   View,  
   Text,  
   ScrollView,  
   TouchableOpacity,  
+  TextInput,  
   StyleSheet,  
   ActivityIndicator,  
   Alert,  
-  TextInput,  
-  Modal,  
 } from "react-native"  
-import { Feather, MaterialIcons } from "@expo/vector-icons"  
-import { useNavigation, useRoute } from '@react-navigation/native'  
-import type { StackNavigationProp } from '@react-navigation/stack'  
+import { Feather } from "@expo/vector-icons"  
+import { useFocusEffect } from "@react-navigation/native"  
+import { StackNavigationProp } from '@react-navigation/stack'  
+import { RouteProp } from '@react-navigation/native'  
 import { useAuth } from "../context/auth-context"  
 import { orderService } from "../services/supabase/order-service"  
 import { clientService } from "../services/supabase/client-service"  
 import { vehicleService } from "../services/supabase/vehicle-service"  
-import ACCESOS_SERVICES from "../services/supabase/access-service"  
-import USER_SERVICE from "../services/supabase/user-service"  
-import { Order, OrderStatus } from '../types/order'  
-import { Client } from '../services/supabase/client-service'  
-import { Vehicle } from '../services/supabase/vehicle-service'  
+import { RootStackParamList, NewOrderParams } from '../types/navigation'  
+import { Order, OrderStatus, CreateOrderData } from '../types/order'  
+import { Client } from '../types/client'  
+import { Vehicle } from '../types/vehicle'  
   
-interface NewOrderScreenProps {  
-  route?: {  
-    params?: {  
-      clientId?: string  
-      vehicleId?: string  
-    }  
-  }  
+type NewOrderScreenNavigationProp = StackNavigationProp<RootStackParamList, 'NewOrder'>  
+type NewOrderScreenRouteProp = RouteProp<RootStackParamList, 'NewOrder'>  
+  
+interface Props {  
+  navigation: NewOrderScreenNavigationProp  
+  route: NewOrderScreenRouteProp  
 }  
   
-export default function NewOrderScreen() {  
+export default function NewOrderScreen({ navigation, route }: Props) {  
   const { user } = useAuth()  
-  const navigation = useNavigation<StackNavigationProp<any>>()  
-  const route = useRoute()  
-  const params = route.params as NewOrderScreenProps['route']['params']  
-  
+    
+  // Obtener parámetros de navegación de forma tipada  
+  const params = route.params as NewOrderParams | undefined  
+    
   const [loading, setLoading] = useState(false)  
-  const [saving, setSaving] = useState(false)  
-  const [error, setError] = useState<string | null>(null)  
-  const [userRole, setUserRole] = useState<string | null>(null)  
-    
-  // Datos del formulario  
-  const [formData, setFormData] = useState({  
-    clientId: params?.clientId || "",  
-    vehicleId: params?.vehicleId || "",  
-    description: "",  
-    diagnosis: "",  
-    priority: "normal" as "low" | "normal" | "high" | "urgent",  
-    estimatedCompletionDate: "",  
-    notes: "",  
-  })  
-  
-  // Estados para modales de selección  
-  const [clientModalVisible, setClientModalVisible] = useState(false)  
-  const [vehicleModalVisible, setVehicleModalVisible] = useState(false)  
-    
-  // Datos para selección  
   const [clients, setClients] = useState<Client[]>([])  
   const [vehicles, setVehicles] = useState<Vehicle[]>([])  
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)  
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)  
+    
+  // Estados del formulario  
+  const [description, setDescription] = useState("")  
+  const [diagnosis, setDiagnosis] = useState("")  
+  const [priority, setPriority] = useState<"low" | "normal" | "high" | "urgent">("normal")  
+  const [estimatedCompletionDate, setEstimatedCompletionDate] = useState<string | null>(null)  
+  const [notes, setNotes] = useState("")  
   
   const loadInitialData = useCallback(async () => {  
     try {  
       setLoading(true)  
-      setError(null)  
-  
-      if (!user?.id) return  
-  
-      // Validar permisos del usuario  
-      const userId = user.id as string  
-      const userTallerId = await USER_SERVICE.GET_TALLER_ID(userId)  
         
-      if (!userTallerId) {  
-        setError("No se pudo obtener la información del taller")  
-        return  
-      }  
-        
-      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
-  
-      // Solo staff puede crear órdenes  
-      if (userPermissions?.rol === 'client') {  
-        setError("No tienes permisos para crear órdenes")  
-        return  
-      }  
-  
       // Cargar clientes y vehículos  
       const [clientsData, vehiclesData] = await Promise.all([  
         clientService.getAllClients(),  
         vehicleService.getAllVehicles()  
       ])  
-  
+        
       setClients(clientsData)  
       setVehicles(vehiclesData)  
-  
-      // Si viene con cliente preseleccionado  
+        
+      // Si viene con parámetros, preseleccionar cliente y/o vehículo  
       if (params?.clientId) {  
         const client = clientsData.find(c => c.id === params.clientId)  
         if (client) {  
           setSelectedClient(client)  
-          // Filtrar vehículos del cliente  
-          const clientVehicles = vehiclesData.filter(v => v.clientId === params.clientId)  
-          setVehicles(clientVehicles)  
-        }  
-      }  
-  
-      // Si viene con vehículo preseleccionado  
-      if (params?.vehicleId) {  
-        const vehicle = vehiclesData.find(v => v.id === params.vehicleId)  
-        if (vehicle) {  
-          setSelectedVehicle(vehicle)  
-          // También seleccionar el cliente del vehículo  
-          const client = clientsData.find(c => c.id === vehicle.clientId)  
-          if (client) {  
-            setSelectedClient(client)  
+            
+          // Filtrar vehículos del cliente seleccionado  
+          const clientVehicles = vehiclesData.filter(v => v.client_id === params.clientId)  
+            
+          // Si también viene vehicleId, preseleccionarlo  
+          if (params.vehicleId) {  
+            const vehicle = clientVehicles.find(v => v.id === params.vehicleId)  
+            if (vehicle) {  
+              setSelectedVehicle(vehicle)  
+            }  
           }  
         }  
       }  
-  
+        
     } catch (error) {  
       console.error("Error loading initial data:", error)  
-      setError("No se pudieron cargar los datos iniciales")  
+      Alert.alert("Error", "No se pudieron cargar los datos iniciales")  
     } finally {  
       setLoading(false)  
     }  
-  }, [user, params])  
+  }, [params])  
   
-  useEffect(() => {  
-    loadInitialData()  
-  }, [loadInitialData])  
+  useFocusEffect(  
+    useCallback(() => {  
+      loadInitialData()  
+    }, [loadInitialData])  
+  )  
   
   const handleClientSelect = (client: Client) => {  
     setSelectedClient(client)  
-    setFormData(prev => ({ ...prev, clientId: client.id }))  
       
     // Filtrar vehículos del cliente seleccionado  
-    const clientVehicles = vehicles.filter(v => v.clientId === client.id)  
-    setVehicles(clientVehicles)  
+    const clientVehicles = vehicles.filter(v => v.client_id === client.id)  
       
-    // Limpiar vehículo seleccionado si no pertenece al cliente  
-    if (selectedVehicle && selectedVehicle.clientId !== client.id) {  
+    // Si el vehículo seleccionado no pertenece al nuevo cliente, limpiarlo  
+    if (selectedVehicle && selectedVehicle.client_id !== client.id) {  
       setSelectedVehicle(null)  
-      setFormData(prev => ({ ...prev, vehicleId: "" }))  
     }  
-      
-    setClientModalVisible(false)  
   }  
   
   const handleVehicleSelect = (vehicle: Vehicle) => {  
     setSelectedVehicle(vehicle)  
-    setFormData(prev => ({ ...prev, vehicleId: vehicle.id }))  
-    setVehicleModalVisible(false)  
+      
+    // Si no hay cliente seleccionado, seleccionar el dueño del vehículo  
+    if (!selectedClient) {  
+      const client = clients.find(c => c.id === vehicle.client_id)  
+      if (client) {  
+        setSelectedClient(client)  
+      }  
+    }  
   }  
   
-  const validateForm = () => {  
-    if (!formData.clientId) {  
-      Alert.alert("Error", "Debe seleccionar un cliente")  
-      return false  
-    }  
-      
-    if (!formData.vehicleId) {  
-      Alert.alert("Error", "Debe seleccionar un vehículo")  
-      return false  
-    }  
-      
-    if (!formData.description.trim()) {  
-      Alert.alert("Error", "Debe ingresar una descripción del trabajo")  
-      return false  
-    }  
-      
-    return true  
-  }  
-  
-  const handleSaveOrder = async () => {  
-    if (!validateForm()) return  
-  
+  const handleCreateOrder = async () => {  
     try {  
-      setSaving(true)  
+      // Validaciones  
+      if (!selectedClient) {  
+        Alert.alert("Error", "Debe seleccionar un cliente")  
+        return  
+      }  
+        
+      if (!selectedVehicle) {  
+        Alert.alert("Error", "Debe seleccionar un vehículo")  
+        return  
+      }  
+        
+      if (!description.trim()) {  
+        Alert.alert("Error", "Debe ingresar una descripción del trabajo")  
+        return  
+      }  
   
-      const orderData = {  
-        clientId: formData.clientId,  
-        vehicleId: formData.vehicleId,  
-        description: formData.description.trim(),  
-        diagnosis: formData.diagnosis.trim(),  
-        priority: formData.priority,  
+      setLoading(true)  
+  
+      // Crear datos de la orden con todos los campos requeridos  
+      const orderData: CreateOrderData = {  
+        clientId: selectedClient.id,  
+        vehicleId: selectedVehicle.id,  
+        description: description.trim(),  
+        diagnosis: diagnosis.trim(),  
+        priority,  
         status: "reception" as OrderStatus,  
-        estimatedCompletionDate: formData.estimatedCompletionDate || null,  
-        notes: formData.notes.trim(),  
-        createdAt: new Date().toISOString(),  
-        updatedAt: new Date().toISOString(),  
-        total: 0,  
-        balance: 0,  
+        estimatedCompletionDate,  
+        notes: notes.trim(),  
+        technicianId: user?.id || "", // Asignar al usuario actual como técnico  
+        subtotal: 0, // Inicializar en 0  
+        tax: 0, // Inicializar en 0  
+        discount: 0, // Inicializar en 0  
+        total: 0, // Inicializar en 0  
         paymentStatus: "pending" as const,  
       }  
   
@@ -208,53 +167,18 @@ export default function NewOrderScreen() {
         [  
           {  
             text: "Ver Orden",  
-            onPress: () => navigation.navigate("OrderDetail", { orderId: newOrder.id })  
-          },  
-          {  
-            text: "Crear Otra",  
             onPress: () => {  
-              // Limpiar formulario  
-              setFormData({  
-                clientId: "",  
-                vehicleId: "",  
-                description: "",  
-                diagnosis: "",  
-                priority: "normal",  
-                estimatedCompletionDate: "",  
-                notes: "",  
-              })  
-              setSelectedClient(null)  
-              setSelectedVehicle(null)  
+              navigation.replace("OrderDetail", { orderId: newOrder.id })  
             }  
           }  
         ]  
       )  
-  
+        
     } catch (error) {  
       console.error("Error creating order:", error)  
       Alert.alert("Error", "No se pudo crear la orden")  
     } finally {  
-      setSaving(false)  
-    }  
-  }  
-  
-  const getPriorityColor = (priority: string) => {  
-    switch (priority) {  
-      case "low": return "#4caf50"  
-      case "normal": return "#2196f3"  
-      case "high": return "#ff9800"  
-      case "urgent": return "#f44336"  
-      default: return "#666"  
-    }  
-  }  
-  
-  const getPriorityText = (priority: string) => {  
-    switch (priority) {  
-      case "low": return "Baja"  
-      case "normal": return "Normal"  
-      case "high": return "Alta"  
-      case "urgent": return "Urgente"  
-      default: return "Normal"  
+      setLoading(false)  
     }  
   }  
   
@@ -262,248 +186,164 @@ export default function NewOrderScreen() {
     return (  
       <View style={styles.loadingContainer}>  
         <ActivityIndicator size="large" color="#1a73e8" />  
-        <Text style={styles.loadingText}>Cargando datos...</Text>  
-      </View>  
-    )  
-  }  
-  
-  if (error) {  
-    return (  
-      <View style={styles.errorContainer}>  
-        <MaterialIcons name="error" size={64} color="#f44336" />  
-        <Text style={styles.errorText}>{error}</Text>  
-        <TouchableOpacity style={styles.retryButton} onPress={loadInitialData}>  
-          <Text style={styles.retryButtonText}>Reintentar</Text>  
-        </TouchableOpacity>  
+        <Text style={styles.loadingText}>Cargando...</Text>  
       </View>  
     )  
   }  
   
   return (  
-    <View style={styles.container}>  
-      <View style={styles.header}>  
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
-          <Feather name="arrow-left" size={24} color="#333" />  
-        </TouchableOpacity>  
-        <Text style={styles.headerTitle}>Nueva Orden</Text>  
+    <ScrollView style={styles.container}>  
+      {/* Selección de Cliente */}  
+      <View style={styles.section}>  
+        <Text style={styles.sectionTitle}>Cliente</Text>  
         <TouchableOpacity   
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}  
-          onPress={handleSaveOrder}  
-          disabled={saving}  
+          style={styles.selector}  
+          onPress={() => {  
+            // Aquí iría la navegación a selector de cliente  
+            Alert.alert("Info", "Selector de cliente pendiente de implementar")  
+          }}  
         >  
-          {saving ? (  
+          <Text style={styles.selectorText}>  
+            {selectedClient ? selectedClient.name : "Seleccionar cliente"}  
+          </Text>  
+          <Feather name="chevron-down" size={20} color="#666" />  
+        </TouchableOpacity>  
+      </View>  
+  
+      {/* Selección de Vehículo */}  
+      <View style={styles.section}>  
+        <Text style={styles.sectionTitle}>Vehículo</Text>  
+        <TouchableOpacity   
+          style={styles.selector}  
+          onPress={() => {  
+            if (!selectedClient) {  
+              Alert.alert("Error", "Primero debe seleccionar un cliente")  
+              return  
+            }  
+            // Aquí iría la navegación a selector de vehículo  
+            Alert.alert("Info", "Selector de vehículo pendiente de implementar")  
+          }}  
+        >  
+          <Text style={styles.selectorText}>  
+            {selectedVehicle ? `${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.license_plate})` : "Seleccionar vehículo"}  
+          </Text>  
+          <Feather name="chevron-down" size={20} color="#666" />  
+        </TouchableOpacity>  
+      </View>  
+  
+      {/* Descripción del Trabajo */}  
+      <View style={styles.section}>  
+        <Text style={styles.sectionTitle}>Descripción del Trabajo *</Text>  
+        <TextInput  
+          style={styles.textArea}  
+          placeholder="Describa el trabajo a realizar..."  
+          value={description}  
+          onChangeText={setDescription}  
+          multiline  
+          numberOfLines={4}  
+          textAlignVertical="top"  
+        />  
+      </View>  
+  
+      {/* Diagnóstico */}  
+      <View style={styles.section}>  
+        <Text style={styles.sectionTitle}>Diagnóstico Inicial</Text>  
+        <TextInput  
+          style={styles.textArea}  
+          placeholder="Diagnóstico inicial del problema..."  
+          value={diagnosis}  
+          onChangeText={setDiagnosis}  
+          multiline  
+          numberOfLines={3}  
+          textAlignVertical="top"  
+        />  
+      </View>  
+  
+      {/* Prioridad */}  
+      <View style={styles.section}>  
+        <Text style={styles.sectionTitle}>Prioridad</Text>  
+        <View style={styles.priorityContainer}>  
+          {[  
+            { key: "low", label: "Baja", color: "#4caf50" },  
+            { key: "normal", label: "Normal", color: "#2196f3" },  
+            { key: "high", label: "Alta", color: "#ff9800" },  
+            { key: "urgent", label: "Urgente", color: "#f44336" },  
+          ].map((item) => (  
+            <TouchableOpacity  
+              key={item.key}  
+              style={[  
+                styles.priorityButton,  
+                priority === item.key && { backgroundColor: item.color }  
+              ]}  
+              onPress={() => setPriority(item.key as any)}  
+            >  
+              <Text style={[  
+                styles.priorityButtonText,  
+                priority === item.key && { color: "#fff" }  
+              ]}>  
+                {item.label}  
+              </Text>  
+            </TouchableOpacity>  
+          ))}  
+        </View>  
+      </View>  
+  
+      {/* Notas Adicionales */}  
+      <View style={styles.section}>  
+        <Text style={styles.sectionTitle}>Notas Adicionales</Text>  
+        <TextInput  
+          style={styles.textArea}  
+          placeholder="Notas adicionales..."  
+          value={notes}  
+          onChangeText={setNotes}  
+          multiline  
+          numberOfLines={3}  
+          textAlignVertical="top"  
+        />  
+      </View>  
+  
+           {/* Botón de Crear Orden */}  
+           <View style={styles.buttonContainer}>  
+        <TouchableOpacity  
+          style={[styles.createButton, loading && styles.createButtonDisabled]}  
+          onPress={handleCreateOrder}  
+          disabled={loading}  
+        >  
+          {loading ? (  
             <ActivityIndicator size="small" color="#fff" />  
           ) : (  
-            <Feather name="check" size={24} color="#fff" />  
+            <Text style={styles.createButtonText}>Crear Orden</Text>  
           )}  
         </TouchableOpacity>  
       </View>  
   
-      <ScrollView style={styles.content}>  
-        {/* Selección de Cliente */}  
+      {/* Lista de vehículos del cliente seleccionado */}  
+      {selectedClient && (  
         <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Cliente</Text>  
-          <TouchableOpacity  
-            style={styles.selectionButton}  
-            onPress={() => setClientModalVisible(true)}  
-          >  
-            <View style={styles.selectionContent}>  
-              <Feather name="user" size={20} color="#1a73e8" />  
-              <Text style={[styles.selectionText, !selectedClient && styles.placeholderText]}>  
-                {selectedClient ? selectedClient.name : "Seleccionar cliente"}  
-              </Text>  
-            </View>  
-            <Feather name="chevron-right" size={20} color="#ccc" />  
-          </TouchableOpacity>  
-        </View>  
-  
-        {/* Selección de Vehículo */}  
-                {/* Selección de Vehículo */}  
-                <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Vehículo</Text>  
-          <TouchableOpacity  
-            style={[styles.selectionButton, !selectedClient && styles.disabledButton]}  
-            onPress={() => selectedClient && setVehicleModalVisible(true)}  
-            disabled={!selectedClient}  
-          >  
-            <View style={styles.selectionContent}>  
-              <Feather name="truck" size={20} color={selectedClient ? "#1a73e8" : "#ccc"} />  
-              <Text style={[styles.selectionText, !selectedVehicle && styles.placeholderText]}>  
-                {selectedVehicle ? `${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.licensePlate})` : "Seleccionar vehículo"}  
-              </Text>  
-            </View>  
-            <Feather name="chevron-right" size={20} color="#ccc" />  
-          </TouchableOpacity>  
-          {!selectedClient && (  
-            <Text style={styles.helperText}>Primero selecciona un cliente</Text>  
-          )}  
-        </View>  
-  
-        {/* Descripción del trabajo */}  
-        <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Descripción del Trabajo *</Text>  
-          <TextInput  
-            style={styles.textArea}  
-            placeholder="Describe el problema o servicio requerido..."  
-            value={formData.description}  
-            onChangeText={(text) => setFormData(prev => ({ ...prev, description: text }))}  
-            multiline  
-            numberOfLines={4}  
-            textAlignVertical="top"  
-          />  
-        </View>  
-  
-        {/* Diagnóstico inicial */}  
-        <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Diagnóstico Inicial</Text>  
-          <TextInput  
-            style={styles.textArea}  
-            placeholder="Diagnóstico preliminar (opcional)..."  
-            value={formData.diagnosis}  
-            onChangeText={(text) => setFormData(prev => ({ ...prev, diagnosis: text }))}  
-            multiline  
-            numberOfLines={3}  
-            textAlignVertical="top"  
-          />  
-        </View>  
-  
-        {/* Prioridad */}  
-        <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Prioridad</Text>  
-          <View style={styles.priorityContainer}>  
-            {["low", "normal", "high", "urgent"].map((priority) => (  
-              <TouchableOpacity  
-                key={priority}  
-                style={[  
-                  styles.priorityOption,  
-                  formData.priority === priority && styles.priorityOptionSelected,  
-                  { borderColor: getPriorityColor(priority) }  
-                ]}  
-                onPress={() => setFormData(prev => ({ ...prev, priority: priority as any }))}  
-              >  
-                <View style={[  
-                  styles.priorityIndicator,  
-                  { backgroundColor: getPriorityColor(priority) },  
-                  formData.priority === priority && styles.priorityIndicatorSelected  
-                ]} />  
-                <Text style={[  
-                  styles.priorityText,  
-                  formData.priority === priority && { color: getPriorityColor(priority) }  
-                ]}>  
-                  {getPriorityText(priority)}  
+          <Text style={styles.sectionTitle}>Vehículos del Cliente</Text>  
+          {vehicles.filter(v => v.client_id === selectedClient?.id).map((vehicle) => (  
+            <TouchableOpacity  
+              key={vehicle.id}  
+              style={[  
+                styles.vehicleItem,  
+                selectedVehicle?.id === vehicle.id && styles.vehicleItemSelected  
+              ]}  
+              onPress={() => handleVehicleSelect(vehicle)}  
+            >  
+              <View style={styles.vehicleInfo}>  
+                <Text style={styles.vehicleName}>  
+                  {vehicle.make} {vehicle.model}  
                 </Text>  
-              </TouchableOpacity>  
-            ))}  
-          </View>  
-        </View>  
-  
-        {/* Fecha estimada de finalización */}  
-        <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Fecha Estimada de Finalización</Text>  
-          <TextInput  
-            style={styles.input}  
-            placeholder="YYYY-MM-DD (opcional)"  
-            value={formData.estimatedCompletionDate}  
-            onChangeText={(text) => setFormData(prev => ({ ...prev, estimatedCompletionDate: text }))}  
-          />  
-        </View>  
-  
-        {/* Notas adicionales */}  
-        <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Notas Adicionales</Text>  
-          <TextInput  
-            style={styles.textArea}  
-            placeholder="Notas adicionales, instrucciones especiales..."  
-            value={formData.notes}  
-            onChangeText={(text) => setFormData(prev => ({ ...prev, notes: text }))}  
-            multiline  
-            numberOfLines={3}  
-            textAlignVertical="top"  
-          />  
-        </View>  
-      </ScrollView>  
-  
-      {/* Modal de selección de cliente */}  
-      <Modal  
-        visible={clientModalVisible}  
-        animationType="slide"  
-        presentationStyle="pageSheet"  
-      >  
-        <View style={styles.modalContainer}>  
-          <View style={styles.modalHeader}>  
-            <Text style={styles.modalTitle}>Seleccionar Cliente</Text>  
-            <TouchableOpacity  
-              onPress={() => setClientModalVisible(false)}  
-              style={styles.closeButton}  
-            >  
-              <Feather name="x" size={24} color="#666" />  
+                <Text style={styles.vehicleDetails}>{vehicle.year} • {vehicle.license_plate}</Text>  
+              </View>  
+              {selectedVehicle?.id === vehicle.id && (  
+                <Feather name="check-circle" size={20} color="#4caf50" />  
+              )}  
             </TouchableOpacity>  
-          </View>  
-  
-          <ScrollView style={styles.modalContent}>  
-            {clients.map((client) => (  
-              <TouchableOpacity  
-                key={client.id}  
-                style={[  
-                  styles.clientOption,  
-                  selectedClient?.id === client.id && styles.clientOptionSelected  
-                ]}  
-                onPress={() => handleClientSelect(client)}  
-              >  
-                <View style={styles.clientInfo}>  
-                  <Text style={styles.clientName}>{client.name}</Text>  
-                  <Text style={styles.clientDetails}>{client.email}</Text>  
-                  <Text style={styles.clientDetails}>{client.phone}</Text>  
-                </View>  
-                {selectedClient?.id === client.id && (  
-                  <Feather name="check" size={20} color="#1a73e8" />  
-                )}  
-              </TouchableOpacity>  
-            ))}  
-          </ScrollView>  
+          ))}  
         </View>  
-      </Modal>  
-  
-      {/* Modal de selección de vehículo */}  
-      <Modal  
-        visible={vehicleModalVisible}  
-        animationType="slide"  
-        presentationStyle="pageSheet"  
-      >  
-        <View style={styles.modalContainer}>  
-          <View style={styles.modalHeader}>  
-            <Text style={styles.modalTitle}>Seleccionar Vehículo</Text>  
-            <TouchableOpacity  
-              onPress={() => setVehicleModalVisible(false)}  
-              style={styles.closeButton}  
-            >  
-              <Feather name="x" size={24} color="#666" />  
-            </TouchableOpacity>  
-          </View>  
-  
-          <ScrollView style={styles.modalContent}>  
-            {vehicles.filter(v => v.clientId === selectedClient?.id).map((vehicle) => (  
-              <TouchableOpacity  
-                key={vehicle.id}  
-                style={[  
-                  styles.vehicleOption,  
-                  selectedVehicle?.id === vehicle.id && styles.vehicleOptionSelected  
-                ]}  
-                onPress={() => handleVehicleSelect(vehicle)}  
-              >  
-                <View style={styles.vehicleInfo}>  
-                  <Text style={styles.vehicleName}>{vehicle.make} {vehicle.model}</Text>  
-                  <Text style={styles.vehicleDetails}>{vehicle.year} • {vehicle.licensePlate}</Text>  
-                </View>  
-                {selectedVehicle?.id === vehicle.id && (  
-                  <Feather name="check" size={20} color="#1a73e8" />  
-                )}  
-              </TouchableOpacity>  
-            ))}  
-          </ScrollView>  
-        </View>  
-      </Modal>  
-    </View>  
+      )}  
+    </ScrollView>  
   )  
 }  
   
@@ -523,226 +363,98 @@ const styles = StyleSheet.create({
     fontSize: 16,  
     color: "#666",  
   },  
-  errorContainer: {  
-    flex: 1,  
-    justifyContent: "center",  
-    alignItems: "center",  
-    padding: 20,  
-  },  
-  errorText: {  
-    fontSize: 16,  
-    color: "#f44336",  
-    textAlign: "center",  
-    marginTop: 16,  
-    marginBottom: 20,  
-  },  
-  retryButton: {  
-    backgroundColor: "#1a73e8",  
-    paddingHorizontal: 20,  
-    paddingVertical: 10,  
-    borderRadius: 8,  
-  },  
-  retryButtonText: {  
-    color: "#fff",  
-    fontWeight: "bold",  
-  },  
-  header: {  
-    flexDirection: "row",  
-    alignItems: "center",  
-    justifyContent: "space-between",  
-    paddingHorizontal: 16,  
-    paddingVertical: 12,  
-    backgroundColor: "#fff",  
-    borderBottomWidth: 1,  
-    borderBottomColor: "#e1e4e8",  
-  },  
-  backButton: {  
-    padding: 8,  
-  },  
-  headerTitle: {  
-    fontSize: 18,  
-    fontWeight: "bold",  
-    color: "#333",  
-    flex: 1,  
-    textAlign: "center",  
-  },  
-  saveButton: {  
-    width: 40,  
-    height: 40,  
-    borderRadius: 20,  
-    backgroundColor: "#1a73e8",  
-    justifyContent: "center",  
-    alignItems: "center",  
-  },  
-  saveButtonDisabled: {  
-    backgroundColor: "#ccc",  
-  },  
-  content: {  
-    flex: 1,  
-    padding: 16,  
-  },  
   section: {  
-    marginBottom: 24,  
+    backgroundColor: "#fff",  
+    margin: 16,  
+    borderRadius: 8,  
+    padding: 16,  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 1 },  
+    shadowOpacity: 0.1,  
+    shadowRadius: 2,  
+    elevation: 2,  
   },  
   sectionTitle: {  
     fontSize: 16,  
-    fontWeight: "600",  
+    fontWeight: "bold",  
     color: "#333",  
-    marginBottom: 8,  
+    marginBottom: 12,  
   },  
-  selectionButton: {  
+  selector: {  
     flexDirection: "row",  
     alignItems: "center",  
     justifyContent: "space-between",  
-    backgroundColor: "#fff",  
+    paddingVertical: 12,  
+    paddingHorizontal: 16,  
+    backgroundColor: "#f5f5f5",  
     borderRadius: 8,  
-    padding: 16,  
     borderWidth: 1,  
     borderColor: "#e1e4e8",  
   },  
-  disabledButton: {  
-    backgroundColor: "#f5f5f5",  
-    borderColor: "#e1e4e8",  
-  },  
-  selectionContent: {  
-    flexDirection: "row",  
-    alignItems: "center",  
+  selectorText: {  
+    fontSize: 16,  
+    color: "#333",  
     flex: 1,  
   },  
-  selectionText: {  
-    fontSize: 16,  
-    color: "#333",  
-    marginLeft: 12,  
-  },  
-  placeholderText: {  
-    color: "#999",  
-  },  
-  helperText: {  
-    fontSize: 12,  
-    color: "#999",  
-    marginTop: 4,  
-  },  
-  input: {  
-    backgroundColor: "#fff",  
-    borderWidth: 1,  
-    borderColor: "#e1e4e8",  
-    borderRadius: 8,  
-    paddingHorizontal: 16,  
-    paddingVertical: 12,  
-    fontSize: 16,  
-    color: "#333",  
-  },  
   textArea: {  
-    backgroundColor: "#fff",  
     borderWidth: 1,  
     borderColor: "#e1e4e8",  
     borderRadius: 8,  
-    paddingHorizontal: 16,  
-    paddingVertical: 12,  
+    padding: 12,  
     fontSize: 16,  
     color: "#333",  
+    backgroundColor: "#fff",  
     minHeight: 100,  
   },  
   priorityContainer: {  
     flexDirection: "row",  
     flexWrap: "wrap",  
-    gap: 12,  
+    gap: 8,  
   },  
-  priorityOption: {  
-    flexDirection: "row",  
-    alignItems: "center",  
+  priorityButton: {  
     paddingHorizontal: 16,  
-    paddingVertical: 12,  
-    borderRadius: 8,  
-    borderWidth: 2,  
-    backgroundColor: "#fff",  
-    minWidth: 100,  
+    paddingVertical: 8,  
+    borderRadius: 20,  
+    backgroundColor: "#f5f5f5",  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
   },  
-  priorityOptionSelected: {  
-    backgroundColor: "#f8f9fa",  
-  },  
-  priorityIndicator: {  
-    width: 12,  
-    height: 12,  
-    borderRadius: 6,  
-    marginRight: 8,  
-  },  
-  priorityIndicatorSelected: {  
-    width: 16,  
-    height: 16,  
-    borderRadius: 8,  
-  },  
-  priorityText: {  
+  priorityButtonText: {  
     fontSize: 14,  
+    color: "#666",  
     fontWeight: "500",  
-    color: "#666",  
   },  
-  modalContainer: {  
-    flex: 1,  
-    backgroundColor: "#fff",  
-  },  
-  modalHeader: {  
-    flexDirection: "row",  
-    justifyContent: "space-between",  
-    alignItems: "center",  
+  buttonContainer: {  
     padding: 16,  
-    borderBottomWidth: 1,  
-    borderBottomColor: "#e1e4e8",  
   },  
-  modalTitle: {  
-    fontSize: 20,  
+  createButton: {  
+    backgroundColor: "#1a73e8",  
+    paddingVertical: 16,  
+    borderRadius: 8,  
+    alignItems: "center",  
+  },  
+  createButtonDisabled: {  
+    backgroundColor: "#ccc",  
+  },  
+  createButtonText: {  
+    color: "#fff",  
+    fontSize: 18,  
     fontWeight: "bold",  
-    color: "#333",  
   },  
-  closeButton: {  
-    padding: 8,  
-  },  
-  modalContent: {  
-    flex: 1,  
-    padding: 16,  
-  },  
-  clientOption: {  
+  vehicleItem: {  
     flexDirection: "row",  
     alignItems: "center",  
     justifyContent: "space-between",  
-    paddingVertical: 16,  
+    paddingVertical: 12,  
     paddingHorizontal: 16,  
+    backgroundColor: "#f8f9fa",  
     borderRadius: 8,  
     marginBottom: 8,  
-    backgroundColor: "#f8f9fa",  
-  },  
-  clientOptionSelected: {  
-    backgroundColor: "#e8f0fe",  
     borderWidth: 1,  
-    borderColor: "#1a73e8",  
+    borderColor: "#e1e4e8",  
   },  
-  clientInfo: {  
-    flex: 1,  
-  },  
-  clientName: {  
-    fontSize: 16,  
-    fontWeight: "600",  
-    color: "#333",  
-    marginBottom: 4,  
-  },  
-  clientDetails: {  
-    fontSize: 14,  
-    color: "#666",  
-    marginBottom: 2,  
-  },  
-  vehicleOption: {  
-    flexDirection: "row",  
-    alignItems: "center",  
-    justifyContent: "space-between",  
-    paddingVertical: 16,  
-    paddingHorizontal: 16,  
-    borderRadius: 8,  
-    marginBottom: 8,  
-    backgroundColor: "#f8f9fa",  
-  },  
-  vehicleOptionSelected: {  
+  vehicleItemSelected: {  
     backgroundColor: "#e8f0fe",  
-    borderWidth: 1,  
     borderColor: "#1a73e8",  
   },  
   vehicleInfo: {  
@@ -752,7 +464,7 @@ const styles = StyleSheet.create({
     fontSize: 16,  
     fontWeight: "600",  
     color: "#333",  
-    marginBottom: 4,  
+    marginBottom: 2,  
   },  
   vehicleDetails: {  
     fontSize: 14,  

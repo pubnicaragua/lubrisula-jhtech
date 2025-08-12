@@ -1,6 +1,6 @@
 "use client"  
   
-import { useState, useCallback, useEffect } from "react"  
+import { useState, useCallback } from "react"  
 import {  
   View,  
   Text,  
@@ -14,69 +14,74 @@ import {
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
+import { StackNavigationProp } from '@react-navigation/stack'  
+import { RouteProp } from '@react-navigation/native'  
 import { useAuth } from "../context/auth-context"  
-// Importaciones corregidas para usar servicios de Supabase  
 import { orderService } from "../services/supabase/order-service"  
 import { clientService } from "../services/supabase/client-service"  
 import { vehicleService } from "../services/supabase/vehicle-service"  
-import { getAllServices } from "../services/supabase/services-service"  
-import { userService } from "../services/supabase/user-service"  
-import { accessService } from "../services/supabase/access-service"  
-import { UiScreenProps } from "../types"
-import { Order } from "../types/order"
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service"  
+import { RootStackParamList } from '../types/navigation'  
+import { Order, OrderStatus } from '../types/order'  
+import { Client } from '../types/client'  
+import { Vehicle } from '../types/vehicle'  
   
-interface TechnicianType {  
-  id: string  
-  nombre: string  
+type UpdateOrderNavigationProp = StackNavigationProp<RootStackParamList, 'UpdateOrder'>  
+type UpdateOrderRouteProp = RouteProp<RootStackParamList, 'UpdateOrder'>  
+  
+interface Props {  
+  navigation: UpdateOrderNavigationProp  
+  route: UpdateOrderRouteProp  
 }  
   
-interface ServiceType {  
-  id: string  
-  nombre: string  
-  precio?: number  
+interface OrderFormData {  
+  description: string  
+  diagnosis: string  
+  estimatedCompletionDate: string  
+  status: OrderStatus  
+  notes: string  
+  subtotal: number  
+  tax: number  
+  discount: number  
+  total: number  
 }  
   
-export default function UpdateOrderScreen({ route, navigation }: UiScreenProps) {  
+export default function UpdateOrderScreen({ navigation, route }: Props) {  
   const { orderId } = route.params  
   const { user } = useAuth()  
     
-  const [order, setOrder] = useState<Order | null>(null)  
   const [loading, setLoading] = useState(true)  
   const [saving, setSaving] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
+  const [order, setOrder] = useState<Order | null>(null)  
+  const [client, setClient] = useState<Client | null>(null)  
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null)  
     
-  // Form fields  
-  const [descripcion, setDescripcion] = useState("")  
-  const [observacion, setObservacion] = useState("")  
-  const [prioridad, setPrioridad] = useState("normal")  
-  const [estado, setEstado] = useState("Pendiente")  
-  const [costo, setCosto] = useState("")  
-  const [tecnicoId, setTecnicoId] = useState("")  
-  const [servicioId, setServicioId] = useState("")  
-    
-  // Data for dropdowns  
-  const [technicians, setTechnicians] = useState<TechnicianType[]>([])  
-  const [services, setServices] = useState<ServiceType[]>([])  
-  const [showTechnicianModal, setShowTechnicianModal] = useState(false)  
-  const [showServiceModal, setShowServiceModal] = useState(false)  
+  const [formData, setFormData] = useState<OrderFormData>({  
+    description: '',  
+    diagnosis: '',  
+    estimatedCompletionDate: '',  
+    status: 'reception',  
+    notes: '',  
+    subtotal: 0,  
+    tax: 0,  
+    discount: 0,  
+    total: 0,  
+  })  
+  
   const [showStatusModal, setShowStatusModal] = useState(false)  
   
-  const PRIORITY_OPTIONS = [  
-    { value: "low", label: "Baja", color: "#607d8b" },  
-    { value: "normal", label: "Normal", color: "#4caf50" },  
-    { value: "high", label: "Alta", color: "#f44336" },  
-  ]  
-  
-  const STATUS_OPTIONS = [  
-    { value: "Pendiente", label: "Pendiente", color: "#1a73e8" },  
-    { value: "En Diagnóstico", label: "En Diagnóstico", color: "#f5a623" },  
-    { value: "Esperando Repuestos", label: "Esperando Repuestos", color: "#9c27b0" },  
-    { value: "En Proceso", label: "En Proceso", color: "#ff9800" },  
-    { value: "Control Calidad", label: "Control Calidad", color: "#607d8b" },  
-    { value: "Completada", label: "Completada", color: "#4caf50" },  
-    { value: "Entregada", label: "Entregada", color: "#607d8b" },  
-    { value: "Cancelada", label: "Cancelada", color: "#e53935" },  
+  const ORDER_STATUSES = [  
+    { id: 'reception', label: 'Recepción', color: '#ff9800' },  
+    { id: 'diagnosis', label: 'Diagnóstico', color: '#2196f3' },  
+    { id: 'waiting_parts', label: 'Esperando Repuestos', color: '#9c27b0' },  
+    { id: 'in_progress', label: 'En Proceso', color: '#ff5722' },  
+    { id: 'quality_check', label: 'Control de Calidad', color: '#607d8b' },  
+    { id: 'completed', label: 'Completada', color: '#4caf50' },  
+    { id: 'delivered', label: 'Entregada', color: '#8bc34a' },  
+    { id: 'cancelled', label: 'Cancelada', color: '#f44336' },  
   ]  
   
   const loadOrderData = useCallback(async () => {  
@@ -86,15 +91,19 @@ export default function UpdateOrderScreen({ route, navigation }: UiScreenProps) 
   
       if (!user?.id) return  
   
-      // Validar permisos del usuario  
-      const userTallerId = await userService.getTallerId(user.id)  
-      if (!userTallerId) {
-        setError("No se pudo obtener la información del taller")
-        return
-      }
-      const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      // ✅ CORREGIDO: Usar user.id en lugar de user.userId  
+      const userId = user.id as string  
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(userId)  
+        
+      if (!userTallerId) {  
+        setError("No se pudo obtener la información del taller")  
+        return  
+      }  
+        
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
+      // Solo staff puede editar órdenes  
       if (userPermissions?.rol === 'client') {  
         setError("No tienes permisos para editar órdenes")  
         return  
@@ -106,35 +115,33 @@ export default function UpdateOrderScreen({ route, navigation }: UiScreenProps) 
         setError("Orden no encontrada")  
         return  
       }  
-  
       setOrder(orderData)  
-        
-      // Llenar formulario con datos existentes  
-      setDescripcion(orderData.description || "")  
-      setObservacion(orderData.notes || "")  
-      setPrioridad(orderData.priority || "normal")  
-      setEstado(orderData.status || "reception")  
-      setCosto(orderData.total?.toString() || "")  
-      setTecnicoId(orderData.technicianId || "")  
-      setServicioId("") // Order type doesn't have serviceId, we'll handle this separately
-
-      // Cargar técnicos y servicios para los dropdowns  
-      const [allTechnicians, allServices] = await Promise.all([  
-        userService.getAllTechnicians(),  
-        getAllServices()  
-      ])  
   
-      // Map UserProfile to TechnicianType
-      const mappedTechnicians = allTechnicians.map(tech => ({
-        id: tech.id,
-        nombre: tech.fullName || `${tech.firstName} ${tech.lastName}`.trim()
-      }))
-      setTechnicians(mappedTechnicians)  
-      setServices(allServices)  
+      // Cargar datos relacionados  
+      const [clientData, vehicleData] = await Promise.all([  
+        clientService.getClientById(orderData.clientId),  
+        vehicleService.getVehicleById(orderData.vehicleId)  
+      ])  
+        
+      setClient(clientData)  
+      setVehicle(vehicleData)  
+  
+      // ✅ CORREGIDO: Usar campos reales del schema en lugar de campos inexistentes  
+      setFormData({  
+        description: orderData.description || '',  
+        diagnosis: orderData.diagnosis || '',  
+        estimatedCompletionDate: orderData.estimatedCompletionDate || '',  
+        status: orderData.status,  
+        notes: orderData.notes || '',  
+        subtotal: orderData.subtotal || 0,  
+        tax: orderData.tax || 0,  
+        discount: orderData.discount || 0,  
+        total: orderData.total || 0,  
+      })  
   
     } catch (error) {  
       console.error("Error loading order data:", error)  
-      setError("No se pudo cargar la información de la orden")  
+      setError("No se pudieron cargar los datos de la orden")  
     } finally {  
       setLoading(false)  
     }  
@@ -146,43 +153,72 @@ export default function UpdateOrderScreen({ route, navigation }: UiScreenProps) 
     }, [loadOrderData])  
   )  
   
-  const validateForm = () => {  
-    if (!descripcion.trim()) {  
-      Alert.alert("Error", "La descripción es obligatoria")  
+  const handleFormChange = (field: keyof OrderFormData, value: string | number) => {  
+    setFormData(prev => {  
+      const updated = { ...prev, [field]: value }  
+        
+      // Recalcular total automáticamente  
+      if (field === 'subtotal' || field === 'tax' || field === 'discount') {  
+        const subtotal = field === 'subtotal' ? Number(value) : updated.subtotal  
+        const tax = field === 'tax' ? Number(value) : updated.tax  
+        const discount = field === 'discount' ? Number(value) : updated.discount  
+          
+        updated.total = subtotal + tax - discount  
+      }  
+        
+      return updated  
+    })  
+  }  
+  
+  const validateForm = (): boolean => {  
+    if (!formData.description.trim()) {  
+      Alert.alert("Error", "La descripción es requerida")  
       return false  
     }  
   
-    if (costo && (isNaN(parseFloat(costo)) || parseFloat(costo) < 0)) {  
-      Alert.alert("Error", "El costo debe ser un número válido")  
+    if (formData.subtotal < 0) {  
+      Alert.alert("Error", "El subtotal no puede ser negativo")  
+      return false  
+    }  
+  
+    if (formData.tax < 0) {  
+      Alert.alert("Error", "Los impuestos no pueden ser negativos")  
+      return false  
+    }  
+  
+    if (formData.discount < 0) {  
+      Alert.alert("Error", "El descuento no puede ser negativo")  
       return false  
     }  
   
     return true  
   }  
   
-  const handleUpdateOrder = async () => {  
+  const handleSaveOrder = async () => {  
     if (!validateForm()) return  
   
     try {  
       setSaving(true)  
   
-      const updatedOrder = {  
-        description: descripcion.trim(),  
-        notes: observacion.trim(),  
-        priority: prioridad as any,  
-        status: estado as any,  
-        total: costo ? parseFloat(costo) : 0,  
-        technicianId: tecnicoId || undefined,  
-        updatedAt: new Date().toISOString()  
+      const updateData = {  
+        description: formData.description,  
+        diagnosis: formData.diagnosis,  
+        estimatedCompletionDate: formData.estimatedCompletionDate || undefined,  
+        status: formData.status,  
+        notes: formData.notes,  
+        subtotal: formData.subtotal,  
+        tax: formData.tax,  
+        discount: formData.discount,  
+        total: formData.total,  
+        // ✅ CORREGIDO: Usar user.id en lugar de user.userId  
+        updated_by: user?.id,  
+        updated_at: new Date().toISOString(),  
       }  
   
-      await orderService.updateOrder(orderId, updatedOrder)  
-  
+      await orderService.updateOrder(orderId, updateData)  
+        
       Alert.alert("Éxito", "Orden actualizada correctamente", [  
-        {  
-          text: "OK",  
-          onPress: () => navigation.goBack()  
-        }  
+        { text: "OK", onPress: () => navigation.goBack() }  
       ])  
   
     } catch (error) {  
@@ -193,148 +229,17 @@ export default function UpdateOrderScreen({ route, navigation }: UiScreenProps) 
     }  
   }  
   
-  const getPriorityColor = (priority: string) => {  
-    const option = PRIORITY_OPTIONS.find(p => p.value === priority)  
-    return option?.color || "#666"  
+  const getStatusInfo = (statusId: string) => {  
+    return ORDER_STATUSES.find(s => s.id === statusId) || ORDER_STATUSES[0]  
   }  
   
-  const getStatusColor = (status: string) => {  
-    const option = STATUS_OPTIONS.find(s => s.value === status)  
-    return option?.color || "#666"  
+  const formatCurrency = (amount: number) => {  
+    return amount.toLocaleString("es-ES", {  
+      style: "currency",  
+      currency: "USD",  
+      minimumFractionDigits: 2,  
+    })  
   }  
-  
-  const renderTechnicianModal = () => (  
-    <Modal  
-      visible={showTechnicianModal}  
-      animationType="slide"  
-      transparent={true}  
-    >  
-      <View style={styles.modalOverlay}>  
-        <View style={styles.modalContainer}>  
-          <View style={styles.modalHeader}>  
-            <Text style={styles.modalTitle}>Seleccionar Técnico</Text>  
-            <TouchableOpacity onPress={() => setShowTechnicianModal(false)}>  
-              <Feather name="x" size={24} color="#333" />  
-            </TouchableOpacity>  
-          </View>  
-            
-          <ScrollView style={styles.modalContent}>  
-            <TouchableOpacity  
-              style={styles.optionItem}  
-              onPress={() => {  
-                setTecnicoId("")  
-                setShowTechnicianModal(false)  
-              }}  
-            >  
-              <Text style={styles.optionText}>Sin asignar</Text>  
-              {!tecnicoId && <Feather name="check" size={20} color="#1a73e8" />}  
-            </TouchableOpacity>  
-              
-            {technicians.map((tech) => (  
-              <TouchableOpacity  
-                key={tech.id}  
-                style={styles.optionItem}  
-                onPress={() => {  
-                  setTecnicoId(tech.id)  
-                  setShowTechnicianModal(false)  
-                }}  
-              >  
-                <Text style={styles.optionText}>{tech.nombre}</Text>  
-                {tecnicoId === tech.id && <Feather name="check" size={20} color="#1a73e8" />}  
-              </TouchableOpacity>  
-            ))}  
-          </ScrollView>  
-        </View>  
-      </View>  
-    </Modal>  
-  )  
-  
-  const renderServiceModal = () => (  
-    <Modal  
-      visible={showServiceModal}  
-      animationType="slide"  
-      transparent={true}  
-    >  
-      <View style={styles.modalOverlay}>  
-        <View style={styles.modalContainer}>  
-          <View style={styles.modalHeader}>  
-            <Text style={styles.modalTitle}>Seleccionar Servicio</Text>  
-            <TouchableOpacity onPress={() => setShowServiceModal(false)}>  
-              <Feather name="x" size={24} color="#333" />  
-            </TouchableOpacity>  
-          </View>  
-            
-          <ScrollView style={styles.modalContent}>  
-            <TouchableOpacity  
-              style={styles.optionItem}  
-              onPress={() => {  
-                setServicioId("")  
-                setShowServiceModal(false)  
-              }}  
-            >  
-              <Text style={styles.optionText}>Sin servicio específico</Text>  
-              {!servicioId && <Feather name="check" size={20} color="#1a73e8" />}  
-            </TouchableOpacity>  
-              
-            {services.map((service) => (  
-              <TouchableOpacity  
-                key={service.id}  
-                style={styles.optionItem}  
-                onPress={() => {  
-                  setServicioId(service.id)  
-                  setShowServiceModal(false)  
-                }}  
-              >  
-                <View style={styles.serviceOption}>  
-                  <Text style={styles.optionText}>{service.nombre}</Text>  
-                  <Text style={styles.servicePrice}>${service.precio?.toFixed(2)}</Text>  
-                </View>  
-                {servicioId === service.id && <Feather name="check" size={20} color="#1a73e8" />}  
-              </TouchableOpacity>  
-            ))}  
-          </ScrollView>  
-        </View>  
-      </View>  
-    </Modal>  
-  )  
-  
-  const renderStatusModal = () => (  
-    <Modal  
-      visible={showStatusModal}  
-      animationType="slide"  
-      transparent={true}  
-    >  
-      <View style={styles.modalOverlay}>  
-        <View style={styles.modalContainer}>  
-          <View style={styles.modalHeader}>  
-            <Text style={styles.modalTitle}>Cambiar Estado</Text>  
-            <TouchableOpacity onPress={() => setShowStatusModal(false)}>  
-              <Feather name="x" size={24} color="#333" />  
-            </TouchableOpacity>  
-          </View>  
-            
-          <ScrollView style={styles.modalContent}>  
-            {STATUS_OPTIONS.map((status) => (  
-              <TouchableOpacity  
-                key={status.value}  
-                style={styles.optionItem}  
-                onPress={() => {  
-                  setEstado(status.value)  
-                  setShowStatusModal(false)  
-                }}  
-              >  
-                <View style={styles.statusOption}>  
-                  <View style={[styles.statusIndicator, { backgroundColor: status.color }]} />  
-                  <Text style={styles.optionText}>{status.label}</Text>  
-                </View>  
-                {estado === status.value && <Feather name="check" size={20} color="#1a73e8" />}  
-              </TouchableOpacity>  
-            ))}  
-          </ScrollView>  
-        </View>  
-      </View>  
-    </Modal>  
-  )  
   
   if (loading) {  
     return (  
@@ -359,20 +264,19 @@ export default function UpdateOrderScreen({ route, navigation }: UiScreenProps) 
   
   if (!order) return null  
   
-  const selectedTechnician = technicians.find(t => t.id === tecnicoId)  
-  const selectedService = services.find(s => s.id === servicioId)  
-  const selectedStatus = STATUS_OPTIONS.find(s => s.value === estado)  
+  const statusInfo = getStatusInfo(formData.status)  
   
   return (  
-    <View style={styles.container}>  
+    <ScrollView style={styles.container}>  
+      {/* Header */}  
       <View style={styles.header}>  
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
           <Feather name="arrow-left" size={24} color="#333" />  
         </TouchableOpacity>  
-        <Text style={styles.headerTitle}>Editar Orden #{order.number}</Text>  
+        <Text style={styles.headerTitle}>Editar Orden</Text>  
         <TouchableOpacity   
-          style={styles.saveButton}  
-          onPress={handleUpdateOrder}  
+          style={styles.saveButton}   
+          onPress={handleSaveOrder}  
           disabled={saving}  
         >  
           {saving ? (  
@@ -383,398 +287,389 @@ export default function UpdateOrderScreen({ route, navigation }: UiScreenProps) 
         </TouchableOpacity>  
       </View>  
   
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>  
-        <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Información Básica</Text>  
+      {/* Información de la orden */}  
+      <View style={styles.section}>  
+        <Text style={styles.sectionTitle}>Información de la Orden</Text>  
+        <Text style={styles.orderNumber}>#{order.orderNumber || order.id.slice(0, 8)}</Text>  
+        <Text style={styles.orderClient}>Cliente: {client?.name || 'No especificado'}</Text>  
+        <Text style={styles.orderVehicle}>  
+          Vehículo: {vehicle ? `${vehicle.make} ${vehicle.model}` : 'No especificado'}  
+        </Text>  
+      </View>  
+  
+      {/* Estado de la orden */}  
+      <View style={styles.section}>  
+        <Text style={styles.sectionTitle}>Estado de la Orden</Text>        
+        
+        <TouchableOpacity  
+          style={styles.statusSelector}  
+          onPress={() => setShowStatusModal(true)}  
+        >  
+          <View style={styles.statusInfo}>  
+            <View style={[styles.statusDot, { backgroundColor: statusInfo.color }]} />  
+            <Text style={styles.statusText}>{statusInfo.label}</Text>  
+          </View>  
+          <Feather name="chevron-down" size={20} color="#666" />  
+        </TouchableOpacity>  
+      </View>  
+  
+      {/* Formulario de edición */}  
+      <View style={styles.section}>  
+        <Text style={styles.sectionTitle}>Detalles de la Orden</Text>  
+          
+        <View style={styles.formGroup}>  
+          <Text style={styles.formLabel}>Descripción del Trabajo *</Text>  
+          <TextInput  
+            style={[styles.formInput, styles.textArea]}  
+            value={formData.description}  
+            onChangeText={(text) => handleFormChange('description', text)}  
+            placeholder="Describe el trabajo a realizar..."  
+            multiline  
+            numberOfLines={3}  
+            textAlignVertical="top"  
+          />  
+        </View>  
+  
+        <View style={styles.formGroup}>  
+          <Text style={styles.formLabel}>Diagnóstico</Text>  
+          <TextInput  
+            style={[styles.formInput, styles.textArea]}  
+            value={formData.diagnosis}  
+            onChangeText={(text) => handleFormChange('diagnosis', text)}  
+            placeholder="Diagnóstico del problema..."  
+            multiline  
+            numberOfLines={3}  
+            textAlignVertical="top"  
+          />  
+        </View>  
+  
+        <View style={styles.formGroup}>  
+          <Text style={styles.formLabel}>Fecha Estimada de Finalización</Text>  
+          <TextInput  
+            style={styles.formInput}  
+            value={formData.estimatedCompletionDate}  
+            onChangeText={(text) => handleFormChange('estimatedCompletionDate', text)}  
+            placeholder="YYYY-MM-DD"  
+          />  
+        </View>  
+  
+        <View style={styles.formGroup}>  
+          <Text style={styles.formLabel}>Notas Adicionales</Text>  
+          <TextInput  
+            style={[styles.formInput, styles.textArea]}  
+            value={formData.notes}  
+            onChangeText={(text) => handleFormChange('notes', text)}  
+            placeholder="Notas adicionales..."  
+            multiline  
+            numberOfLines={2}  
+            textAlignVertical="top"  
+          />  
+        </View>  
+      </View>  
+  
+      {/* Información financiera */}  
+      <View style={styles.section}>  
+        <Text style={styles.sectionTitle}>Información Financiera</Text>  
+          
+        <View style={styles.formRow}>  
+          <View style={styles.formGroupHalf}>  
+            <Text style={styles.formLabel}>Subtotal</Text>  
+            <TextInput  
+              style={styles.formInput}  
+              value={formData.subtotal.toString()}  
+              onChangeText={(text) => handleFormChange('subtotal', parseFloat(text) || 0)}  
+              placeholder="0.00"  
+              keyboardType="numeric"  
+            />  
+          </View>  
             
-          <View style={styles.inputGroup}>  
-            <Text style={styles.inputLabel}>Descripción *</Text>  
+          <View style={styles.formGroupHalf}>  
+            <Text style={styles.formLabel}>Impuestos</Text>  
             <TextInput  
-              style={styles.textArea}  
-              value={descripcion}  
-              onChangeText={setDescripcion}  
-              placeholder="Describe el trabajo a realizar..."  
-              multiline  
-              numberOfLines={4}  
-              textAlignVertical="top"  
-            />  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.inputLabel}>Observaciones</Text>  
-            <TextInput  
-              style={styles.textArea}  
-              value={observacion}  
-              onChangeText={setObservacion}  
-              placeholder="Observaciones adicionales..."  
-              multiline  
-              numberOfLines={3}  
-              textAlignVertical="top"  
-            />  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.inputLabel}>Costo Estimado</Text>  
-            <TextInput  
-              style={styles.input}  
-              value={costo}  
-              onChangeText={setCosto}  
+              style={styles.formInput}  
+              value={formData.tax.toString()}  
+              onChangeText={(text) => handleFormChange('tax', parseFloat(text) || 0)}  
               placeholder="0.00"  
               keyboardType="numeric"  
             />  
           </View>  
         </View>  
   
-        <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Asignación</Text>  
-            
-          <View style={styles.inputGroup}>  
-            <Text style={styles.inputLabel}>Técnico Asignado</Text>  
-            <TouchableOpacity  
-              style={styles.selectButton}  
-              onPress={() => setShowTechnicianModal(true)}  
-            >  
-              <Text style={styles.selectButtonText}>  
-                {selectedTechnician ? selectedTechnician.nombre : "Sin asignar"}  
-              </Text>  
-              <Feather name="chevron-down" size={20} color="#666" />  
-            </TouchableOpacity>  
+        <View style={styles.formRow}>  
+          <View style={styles.formGroupHalf}>  
+            <Text style={styles.formLabel}>Descuento</Text>  
+            <TextInput  
+              style={styles.formInput}  
+              value={formData.discount.toString()}  
+              onChangeText={(text) => handleFormChange('discount', parseFloat(text) || 0)}  
+              placeholder="0.00"  
+              keyboardType="numeric"  
+            />  
           </View>  
+            
+          <View style={styles.formGroupHalf}>  
+            <Text style={styles.formLabel}>Total</Text>  
+            <Text style={styles.totalDisplay}>{formatCurrency(formData.total)}</Text>  
+          </View>  
+        </View>  
+      </View>  
   
-          <View style={styles.inputGroup}>  
-            <Text style={styles.inputLabel}>Servicio</Text>  
+      {/* Modal de selección de estado */}  
+      <Modal  
+        visible={showStatusModal}  
+        animationType="slide"  
+        transparent={true}  
+      >  
+        <View style={styles.modalOverlay}>  
+          <View style={styles.statusModal}>  
+            <Text style={styles.modalTitle}>Seleccionar Estado</Text>  
+              
+            {ORDER_STATUSES.map((status) => (  
+              <TouchableOpacity  
+                key={status.id}  
+                style={[  
+                  styles.statusOption,  
+                  formData.status === status.id && styles.statusOptionSelected  
+                ]}  
+                onPress={() => {  
+                  handleFormChange('status', status.id as OrderStatus)  
+                  setShowStatusModal(false)  
+                }}  
+              >  
+                <View style={styles.statusOptionContent}>  
+                  <View style={[styles.statusDot, { backgroundColor: status.color }]} />  
+                  <Text style={styles.statusOptionText}>{status.label}</Text>  
+                </View>  
+                {formData.status === status.id && (  
+                  <Feather name="check" size={20} color="#1a73e8" />  
+                )}  
+              </TouchableOpacity>  
+            ))}  
+  
             <TouchableOpacity  
-              style={styles.selectButton}  
-              onPress={() => setShowServiceModal(true)}  
+              style={styles.closeStatusModal}  
+              onPress={() => setShowStatusModal(false)}  
             >  
-              <Text style={styles.selectButtonText}>  
-                {selectedService ? selectedService.nombre : "Sin servicio específico"}  
-              </Text>  
-              <Feather name="chevron-down" size={20} color="#666" />  
+              <Text style={styles.closeStatusModalText}>Cerrar</Text>  
             </TouchableOpacity>  
           </View>  
         </View>  
-  
-        <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Estado y Prioridad</Text>  
-            
-          <View style={styles.inputGroup}>  
-            <Text style={styles.inputLabel}>Estado</Text>  
-            <TouchableOpacity  
-              style={styles.selectButton}  
-              onPress={() => setShowStatusModal(true)}  
-            >  
-              <View style={styles.statusDisplay}>  
-                <View style={[styles.statusIndicator, { backgroundColor: getStatusColor(estado) }]} />  
-                <Text style={styles.selectButtonText}>  
-                  {selectedStatus ? selectedStatus.label : estado}  
-                </Text>  
-              </View>  
-              <Feather name="chevron-down" size={20} color="#666" />  
-            </TouchableOpacity>  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.inputLabel}>Prioridad</Text>  
-            <View style={styles.priorityContainer}>  
-              {PRIORITY_OPTIONS.map((option) => (  
-                <TouchableOpacity  
-                  key={option.value}  
-                  style={[  
-                    styles.priorityButton,  
-                    { borderColor: option.color },  
-                    prioridad === option.value && { backgroundColor: option.color }  
-                  ]}  
-                  onPress={() => setPrioridad(option.value)}  
-                >  
-                  <Text style={[  
-                    styles.priorityButtonText,  
-                    prioridad === option.value && { color: "#fff" }  
-                  ]}>  
-                    {option.label}  
-                  </Text>  
-                </TouchableOpacity>  
-              ))}  
-            </View>  
-          </View>  
-        </View>  
-  
-        <View style={styles.actionButtons}>  
-          <TouchableOpacity  
-            style={styles.cancelButton}  
-            onPress={() => navigation.goBack()}  
-            disabled={saving}  
-          >  
-            <Text style={styles.cancelButtonText}>Cancelar</Text>  
-          </TouchableOpacity>  
-  
-          <TouchableOpacity  
-            style={styles.updateButton}  
-            onPress={handleUpdateOrder}  
-            disabled={saving}  
-          >  
-            {saving ? (  
-              <ActivityIndicator size="small" color="#fff" />  
-            ) : (  
-              <>  
-                <Feather name="save" size={20} color="#fff" />  
-                <Text style={styles.updateButtonText}>Actualizar</Text>  
-              </>  
-            )}  
-          </TouchableOpacity>  
-        </View>
-        </ScrollView>  
-  
-  {renderTechnicianModal()}  
-  {renderServiceModal()}  
-  {renderStatusModal()}  
-</View>  
-)  
+      </Modal>  
+    </ScrollView>  
+  )  
 }  
-
+  
 const styles = StyleSheet.create({  
-container: {  
-flex: 1,  
-backgroundColor: "#f8f9fa",  
-},  
-loadingContainer: {  
-flex: 1,  
-justifyContent: "center",  
-alignItems: "center",  
-backgroundColor: "#f8f9fa",  
-},  
-loadingText: {  
-marginTop: 10,  
-fontSize: 16,  
-color: "#666",  
-},  
-errorContainer: {  
-flex: 1,  
-justifyContent: "center",  
-alignItems: "center",  
-padding: 20,  
-},  
-errorText: {  
-fontSize: 16,  
-color: "#f44336",  
-textAlign: "center",  
-marginTop: 16,  
-marginBottom: 20,  
-},  
-retryButton: {  
-backgroundColor: "#1a73e8",  
-paddingHorizontal: 20,  
-paddingVertical: 10,  
-borderRadius: 8,  
-},  
-retryButtonText: {  
-color: "#fff",  
-fontWeight: "bold",  
-},  
-header: {  
-flexDirection: "row",  
-alignItems: "center",  
-justifyContent: "space-between",  
-paddingHorizontal: 16,  
-paddingVertical: 12,  
-backgroundColor: "#fff",  
-borderBottomWidth: 1,  
-borderBottomColor: "#e1e4e8",  
-},  
-backButton: {  
-padding: 8,  
-},  
-headerTitle: {  
-fontSize: 18,  
-fontWeight: "bold",  
-color: "#333",  
-flex: 1,  
-textAlign: "center",  
-},  
-saveButton: {  
-padding: 8,  
-},  
-content: {  
-flex: 1,  
-padding: 16,  
-},  
-section: {  
-backgroundColor: "#fff",  
-borderRadius: 8,  
-padding: 16,  
-marginBottom: 16,  
-shadowColor: "#000",  
-shadowOffset: { width: 0, height: 1 },  
-shadowOpacity: 0.1,  
-shadowRadius: 2,  
-elevation: 2,  
-},  
-sectionTitle: {  
-fontSize: 18,  
-fontWeight: "bold",  
-color: "#333",  
-marginBottom: 16,  
-},  
-inputGroup: {  
-marginBottom: 16,  
-},  
-inputLabel: {  
-fontSize: 16,  
-fontWeight: "500",  
-color: "#333",  
-marginBottom: 8,  
-},  
-input: {  
-backgroundColor: "#f8f9fa",  
-borderWidth: 1,  
-borderColor: "#e1e4e8",  
-borderRadius: 8,  
-paddingHorizontal: 16,  
-paddingVertical: 12,  
-fontSize: 16,  
-color: "#333",  
-},  
-textArea: {  
-backgroundColor: "#f8f9fa",  
-borderWidth: 1,  
-borderColor: "#e1e4e8",  
-borderRadius: 8,  
-paddingHorizontal: 16,  
-paddingVertical: 12,  
-fontSize: 16,  
-color: "#333",  
-height: 100,  
-textAlignVertical: "top",  
-},  
-selectButton: {  
-backgroundColor: "#f8f9fa",  
-borderWidth: 1,  
-borderColor: "#e1e4e8",  
-borderRadius: 8,  
-paddingHorizontal: 16,  
-paddingVertical: 12,  
-flexDirection: "row",  
-justifyContent: "space-between",  
-alignItems: "center",  
-},  
-selectButtonText: {  
-fontSize: 16,  
-color: "#333",  
-},  
-statusDisplay: {  
-flexDirection: "row",  
-alignItems: "center",  
-},  
-statusIndicator: {  
-width: 12,  
-height: 12,  
-borderRadius: 6,  
-marginRight: 8,  
-},  
-priorityContainer: {  
-flexDirection: "row",  
-gap: 8,  
-},  
-priorityButton: {  
-flex: 1,  
-paddingVertical: 8,  
-paddingHorizontal: 12,  
-borderRadius: 8,  
-borderWidth: 1,  
-alignItems: "center",  
-},  
-priorityButtonText: {  
-fontSize: 14,  
-fontWeight: "500",  
-},  
-actionButtons: {  
-flexDirection: "row",  
-gap: 12,  
-marginTop: 16,  
-},  
-cancelButton: {  
-flex: 1,  
-backgroundColor: "transparent",  
-borderWidth: 1,  
-borderColor: "#e1e4e8",  
-borderRadius: 8,  
-paddingVertical: 12,  
-alignItems: "center",  
-},  
-cancelButtonText: {  
-fontSize: 16,  
-fontWeight: "500",  
-color: "#666",  
-},  
-updateButton: {  
-flex: 1,  
-backgroundColor: "#1a73e8",  
-borderRadius: 8,  
-paddingVertical: 12,  
-flexDirection: "row",  
-alignItems: "center",  
-justifyContent: "center",  
-gap: 8,  
-},  
-updateButtonText: {  
-fontSize: 16,  
-fontWeight: "bold",  
-color: "#fff",  
-},  
-modalOverlay: {  
-flex: 1,  
-backgroundColor: "rgba(0, 0, 0, 0.5)",  
-justifyContent: "center",  
-alignItems: "center",  
-},  
-modalContainer: {  
-backgroundColor: "#fff",  
-borderRadius: 12,  
-padding: 20,  
-margin: 20,  
-maxHeight: "80%",  
-width: "90%",  
-},  
-modalHeader: {  
-flexDirection: "row",  
-justifyContent: "space-between",  
-alignItems: "center",  
-marginBottom: 16,  
-},  
-modalTitle: {  
-fontSize: 18,  
-fontWeight: "bold",  
-color: "#333",  
-},  
-modalContent: {  
-maxHeight: 300,  
-},  
-optionItem: {  
-flexDirection: "row",  
-justifyContent: "space-between",  
-alignItems: "center",  
-paddingVertical: 12,  
-borderBottomWidth: 1,  
-borderBottomColor: "#f0f0f0",  
-},  
-optionText: {  
-fontSize: 16,  
-color: "#333",  
-},  
-serviceOption: {  
-flex: 1,  
-flexDirection: "row",  
-justifyContent: "space-between",  
-alignItems: "center",  
-},  
-servicePrice: {  
-fontSize: 14,  
-color: "#4caf50",  
-fontWeight: "500",  
-},  
-statusOption: {  
-flexDirection: "row",  
-alignItems: "center",  
-flex: 1,  
-},  
+  container: {  
+    flex: 1,  
+    backgroundColor: "#f8f9fa",  
+  },  
+  loadingContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    backgroundColor: "#f8f9fa",  
+  },  
+  loadingText: {  
+    marginTop: 10,  
+    fontSize: 16,  
+    color: "#666",  
+  },  
+  errorContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    padding: 20,  
+  },  
+  errorText: {  
+    fontSize: 16,  
+    color: "#f44336",  
+    textAlign: "center",  
+    marginTop: 16,  
+    marginBottom: 20,  
+  },  
+  retryButton: {  
+    backgroundColor: "#1a73e8",  
+    paddingHorizontal: 20,  
+    paddingVertical: 10,  
+    borderRadius: 8,  
+  },  
+  retryButtonText: {  
+    color: "#fff",  
+    fontWeight: "bold",  
+  },  
+  header: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    justifyContent: "space-between",  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    backgroundColor: "#fff",  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  backButton: {  
+    padding: 8,  
+  },  
+  headerTitle: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+    flex: 1,  
+    textAlign: "center",  
+  },  
+  saveButton: {  
+    padding: 8,  
+  },  
+  section: {  
+    backgroundColor: "#fff",  
+    margin: 16,  
+    borderRadius: 8,  
+    padding: 16,  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 1 },  
+    shadowOpacity: 0.1,  
+    shadowRadius: 2,  
+    elevation: 2,  
+  },  
+  sectionTitle: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 12,  
+  },  
+  orderNumber: {  
+    fontSize: 20,  
+    fontWeight: "bold",  
+    color: "#1a73e8",  
+    marginBottom: 4,  
+  },  
+  orderClient: {  
+    fontSize: 14,  
+    color: "#666",  
+    marginBottom: 2,  
+  },  
+  orderVehicle: {  
+    fontSize: 14,  
+    color: "#666",  
+  },  
+  statusSelector: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    justifyContent: "space-between",  
+    paddingVertical: 12,  
+    paddingHorizontal: 16,  
+    backgroundColor: "#f8f9fa",  
+    borderRadius: 8,  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  statusInfo: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+  },  
+  statusDot: {  
+    width: 12,  
+    height: 12,  
+    borderRadius: 6,  
+    marginRight: 8,  
+  },  
+  statusText: {  
+    fontSize: 16,  
+    color: "#333",  
+    fontWeight: "500",  
+  },  
+  formGroup: {  
+    marginBottom: 16,  
+  },  
+  formGroupHalf: {  
+    flex: 1,  
+    marginHorizontal: 4,  
+  },  
+  formRow: {  
+    flexDirection: "row",  
+    marginHorizontal: -4,  
+  },  
+  formLabel: {  
+    fontSize: 14,  
+    fontWeight: "600",  
+    color: "#333",  
+    marginBottom: 8,  
+  },  
+  formInput: {  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+    borderRadius: 8,  
+    paddingHorizontal: 12,  
+    paddingVertical: 10,  
+    fontSize: 16,  
+    color: "#333",  
+    backgroundColor: "#fff",  
+  },  
+  textArea: {  
+    minHeight: 80,  
+    textAlignVertical: "top",  
+  },  
+  totalDisplay: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#1a73e8",  
+    paddingVertical: 10,  
+    paddingHorizontal: 12,  
+    backgroundColor: "#e8f0fe",  
+    borderRadius: 8,  
+    textAlign: "center",  
+  },  
+  modalOverlay: {  
+    flex: 1,  
+    backgroundColor: "rgba(0, 0, 0, 0.5)",  
+    justifyContent: "center",  
+    alignItems: "center",  
+  },  
+  statusModal: {  
+    backgroundColor: "#fff",  
+    borderRadius: 12,  
+    padding: 20,  
+    margin: 20,  
+    minWidth: 300,  
+    maxHeight: "80%",  
+  },  
+  modalTitle: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 16,  
+    textAlign: "center",  
+  },  
+  statusOption: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    justifyContent: "space-between",  
+    paddingVertical: 12,  
+    paddingHorizontal: 16,  
+    borderRadius: 8,  
+    marginVertical: 4,  
+  },  
+  statusOptionSelected: {  
+    backgroundColor: "#e8f0fe",  
+  },  
+  statusOptionContent: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+  },  
+  statusOptionText: {  
+    fontSize: 16,  
+    color: "#333",  
+    marginLeft: 8,  
+  },  
+  closeStatusModal: {  
+    marginTop: 16,  
+    paddingVertical: 12,  
+    alignItems: "center",  
+  },  
+  closeStatusModalText: {  
+    fontSize: 16,  
+    color: "#1a73e8",  
+    fontWeight: "500",  
+  },  
 })

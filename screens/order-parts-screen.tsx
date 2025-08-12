@@ -1,6 +1,6 @@
 "use client"  
   
-import { useState, useCallback, useEffect } from "react"  
+import { useState, useCallback } from "react"  
 import {  
   StyleSheet,  
   View,  
@@ -17,49 +17,39 @@ import {
 } from "react-native"  
 import { Feather } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
+import { StackNavigationProp } from '@react-navigation/stack'  
+import { RouteProp } from '@react-navigation/native'  
 import { useAuth } from "../context/auth-context"  
-// Usar los servicios que realmente existen  
-import * as orderService from "../services/supabase/order-service"  
-import * as inventoryService from "../services/supabase/inventory-service"  
-// Importar tipos consolidados
-import type { Order, OrderItem, OrderType, OrderPartType } from "../types"
-
-// Tipos TypeScript para resolver errores  
-interface OrderPartsScreenProps {  
-  route: any  
-  navigation: any  
+import { orderService } from "../services/supabase/order-service"  
+import { inventoryService } from "../services/supabase/inventory-service"  
+import { RootStackParamList } from '../types/navigation'  
+import { Order, OrderItem } from '../types/order'  
+import { InventoryItem, mapLegacyFields } from '../types/inventory'  
+  
+type OrderPartsNavigationProp = StackNavigationProp<RootStackParamList, 'OrderParts'>  
+type OrderPartsRouteProp = RouteProp<RootStackParamList, 'OrderParts'>  
+  
+interface Props {  
+  navigation: OrderPartsNavigationProp  
+  route: OrderPartsRouteProp  
 }  
-
-// Usar tipos consolidados en lugar de interfaces locales
-// interface OrderType { ... } - ELIMINADO
-// interface OrderPartType { ... } - ELIMINADO
-
-interface InventoryItemType {  
-  id: string  
-  name: string  
-  sku: string  
-  description?: string  
-  stock: number  
-  priceUSD?: number  
-  category?: string  
-}  
-
-export default function OrderPartsScreen({ route, navigation }: OrderPartsScreenProps) {  
+  
+export default function OrderPartsScreen({ navigation, route }: Props) {  
   const { orderId } = route.params  
   const { user } = useAuth()  
     
   const [order, setOrder] = useState<Order | null>(null)  
   const [orderParts, setOrderParts] = useState<OrderItem[]>([])  
-  const [inventory, setInventory] = useState<InventoryItemType[]>([])  
+  const [inventory, setInventory] = useState<InventoryItem[]>([])  
   const [loading, setLoading] = useState(true)  
   const [saving, setSaving] = useState(false)  
   const [refreshing, setRefreshing] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
-  
+    
   // Estados del modal  
   const [showAddPartModal, setShowAddPartModal] = useState(false)  
   const [searchQuery, setSearchQuery] = useState("")  
-  const [filteredInventory, setFilteredInventory] = useState<InventoryItemType[]>([])  
+  const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>([])  
   
   // Cargar datos de la orden y repuestos  
   const loadOrderData = useCallback(async () => {  
@@ -76,8 +66,8 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
         return  
       }  
   
-      // Cargar datos de la orden usando el servicio existente  
-      const orderData = await orderService.orderService.getOrderById(orderId)  
+      // Cargar datos de la orden  
+      const orderData = await orderService.getOrderById(orderId)  
       if (!orderData) {  
         setError("Orden no encontrada")  
         return  
@@ -85,12 +75,13 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
       setOrder(orderData)  
   
       // Cargar repuestos de la orden  
-      const parts = await orderService.orderService.getOrderParts(orderId)  
+      const parts = await orderService.getOrderParts(orderId)  
       setOrderParts(parts)  
   
-      // Cargar inventario disponible usando el servicio existente  
-      const inventoryItems = await inventoryService.inventoryService.getInventoryItems()  
-      const availableItems = inventoryItems.filter((item: InventoryItemType) => item.stock > 0)  
+      // Cargar inventario disponible  
+      const inventoryItems = await inventoryService.getAllInventory()  
+      const mappedItems = inventoryItems.map(mapLegacyFields)  
+      const availableItems = mappedItems.filter((item) => (item.cantidad || item.stock || 0) > 0)  
       setInventory(availableItems)  
       setFilteredInventory(availableItems)  
   
@@ -115,47 +106,46 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
     if (!query.trim()) {  
       setFilteredInventory(inventory)  
     } else {  
-      const filtered = inventory.filter((item: InventoryItemType) =>  
-        item.name.toLowerCase().includes(query.toLowerCase()) ||  
-        item.sku.toLowerCase().includes(query.toLowerCase()) ||  
-        (item.category && item.category.toLowerCase().includes(query.toLowerCase()))  
+      const filtered = inventory.filter((item) =>  
+        (item.producto || item.name || '').toLowerCase().includes(query.toLowerCase()) ||  
+        (item.id || item.sku || '').toLowerCase().includes(query.toLowerCase()) ||  
+        (item.categoria_nombre || item.category || '').toLowerCase().includes(query.toLowerCase())  
       )  
       setFilteredInventory(filtered)  
     }  
   }  
   
   // Agregar repuesto a la orden  
-  const addPartToOrder = async (inventoryItem: InventoryItemType) => {  
+  const addPartToOrder = async (inventoryItem: InventoryItem) => {  
     try {  
       setSaving(true)  
         
       const quantity = 1  
-      const unitPrice = inventoryItem.priceUSD || 0  
+      const unitPrice = inventoryItem.precio_unitario || inventoryItem.priceUSD || 0  
         
       // Verificar stock disponible  
-      if (quantity > inventoryItem.stock) {  
+      const availableStock = inventoryItem.cantidad || inventoryItem.stock || 0  
+      if (quantity > availableStock) {  
         Alert.alert("Error", "No hay suficiente stock disponible")  
         return  
       }  
   
       // Agregar repuesto a la orden  
-      await orderService.orderService.addPartToOrder(orderId, {  
-        name: inventoryItem.name,
+      await orderService.addPartToOrder(orderId, {  
+        name: inventoryItem.producto || inventoryItem.name || '',  
         quantity: quantity,  
-        unitPrice: unitPrice,
-        total: quantity * unitPrice,
-        status: 'pending',
-        partNumber: inventoryItem.sku,
-        inventoryItemId: inventoryItem.id,
-        sku: inventoryItem.sku,
-        category: inventoryItem.category,
-        stock: inventoryItem.stock
+        unitPrice: unitPrice,  
+        total: quantity * unitPrice,  
+        status: 'pending',  
+        partNumber: inventoryItem.id || inventoryItem.sku || '',  
+        inventoryItemId: inventoryItem.id,  
+        sku: inventoryItem.id || inventoryItem.sku || '',  
+        category: inventoryItem.categoria_nombre || inventoryItem.category || '',  
+        stock: availableStock  
       })  
   
       // Actualizar inventario  
-      await inventoryService.inventoryService.updateInventoryItem(inventoryItem.id, {  
-        stock: inventoryItem.stock - quantity,  
-      })  
+      await inventoryService.updateStock(inventoryItem.id, availableStock - quantity)  
   
       // Recargar datos  
       loadOrderData()  
@@ -186,14 +176,15 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
       // Verificar stock disponible si se aumenta la cantidad  
       if (quantityDiff > 0) {  
         const inventoryItem = inventory.find(item => item.id === part.inventoryItemId)  
-        if (!inventoryItem || quantityDiff > inventoryItem.stock) {  
+        const availableStock = inventoryItem ? (inventoryItem.cantidad || inventoryItem.stock || 0) : 0  
+        if (quantityDiff > availableStock) {  
           Alert.alert("Error", "No hay suficiente stock disponible")  
           return  
         }  
       }  
   
       // Actualizar repuesto en la orden  
-      await orderService.orderService.updateOrderPart(partId, {  
+      await orderService.updateOrderPart(partId, {  
         quantity: newQuantity,  
         total: newQuantity * part.unitPrice,  
       })  
@@ -202,9 +193,8 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
       if (quantityDiff !== 0) {  
         const inventoryItem = inventory.find(item => item.id === part.inventoryItemId)  
         if (inventoryItem) {  
-          await inventoryService.inventoryService.updateInventoryItem(inventoryItem.id, {  
-            stock: inventoryItem.stock - quantityDiff,  
-          })  
+          const currentStock = inventoryItem.cantidad || inventoryItem.stock || 0  
+          await inventoryService.updateStock(inventoryItem.id, currentStock - quantityDiff)  
         }  
       }  
   
@@ -237,14 +227,13 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
               if (!part) return  
   
               // Remover repuesto de la orden  
-              await orderService.orderService.removePartFromOrder(partId)  
+              await orderService.removePartFromOrder(partId)  
   
               // Devolver stock al inventario  
               const inventoryItem = inventory.find(item => item.id === part.inventoryItemId)  
               if (inventoryItem) {  
-                await inventoryService.inventoryService.updateInventoryItem(inventoryItem.id, {  
-                  stock: inventoryItem.stock + part.quantity,  
-                })  
+                const currentStock = inventoryItem.cantidad || inventoryItem.stock || 0  
+                await inventoryService.updateStock(inventoryItem.id, currentStock + part.quantity)  
               }  
   
               // Recargar datos  
@@ -324,25 +313,25 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
   )  
   
   // Renderizar item de inventario disponible  
-  const renderInventoryItem = ({ item }: { item: InventoryItemType }) => (  
+  const renderInventoryItem = ({ item }: { item: InventoryItem }) => (  
     <TouchableOpacity  
       style={styles.inventoryItem}  
       onPress={() => addPartToOrder(item)}  
     >  
       <View style={styles.inventoryItemInfo}>  
-        <Text style={styles.inventoryItemName}>{item.name}</Text>  
-        <Text style={styles.inventoryItemCode}>Código: {item.sku}</Text>  
+        <Text style={styles.inventoryItemName}>{item.producto || item.name || 'Sin nombre'}</Text>  
+        <Text style={styles.inventoryItemCode}>Código: {item.id || item.sku || 'N/A'}</Text>  
         <View style={styles.inventoryItemDetails}>  
-          <Text style={styles.inventoryItemCategory}>{item.category}</Text>  
+          <Text style={styles.inventoryItemCategory}>{item.categoria_nombre || item.category || 'Sin categoría'}</Text>  
           <Text style={styles.inventoryItemStock}>  
-            Stock: <Text style={item.stock <= 5 ? styles.lowStock : styles.normalStock}>  
-              {item.stock}  
+            Stock: <Text style={(item.cantidad || item.stock || 0) <= 5 ? styles.lowStock : styles.normalStock}>  
+              {item.cantidad || item.stock || 0}  
             </Text>  
           </Text>  
         </View>  
       </View>  
       <View style={styles.inventoryItemPrice}>  
-        <Text style={styles.priceText}>${(item.priceUSD || 0).toFixed(2)}</Text>  
+        <Text style={styles.priceText}>${(item.precio_unitario || item.priceUSD || 0).toFixed(2)}</Text>  
         <Feather name="plus-circle" size={20} color="#1a73e8" />  
       </View>  
     </TouchableOpacity>  
@@ -406,11 +395,8 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
         <Feather name="alert-circle" size={64} color="#f44336" />  
         <Text style={styles.errorText}>{error}</Text>  
         <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>  
-          <Text style={styles.retryButtonText}>Reintentar</Text>          
-        </TouchableOpacity>  
-        <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>  
           <Text style={styles.retryButtonText}>Reintentar</Text>  
-        </TouchableOpacity>
+        </TouchableOpacity>  
       </View>  
     )  
   }  
@@ -432,7 +418,7 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
   
       {order && (  
         <View style={styles.orderInfo}>  
-          <Text style={styles.orderNumber}>Orden #{order.number}</Text>  
+          <Text style={styles.orderNumber}>Orden #{order.orderNumber || order.id.slice(0, 8)}</Text>  
           <Text style={styles.orderDescription}>{order.description}</Text>  
         </View>  
       )}  

@@ -1,6 +1,6 @@
 "use client"  
   
-import { useState, useCallback, useEffect } from "react"  
+import { useState, useCallback } from "react"  
 import {  
   View,  
   Text,  
@@ -10,56 +10,69 @@ import {
   ActivityIndicator,  
   Alert,  
   Switch,  
-  Modal,  
   TextInput,  
+  Modal,  
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
+import { useFocusEffect } from "@react-navigation/native"  
+import { StackNavigationProp } from '@react-navigation/stack'  
+import { RouteProp } from '@react-navigation/native'  
 import { useAuth } from "../context/auth-context"  
-import { userService } from "../services/supabase/user-service"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service"  
-import AsyncStorage from '@react-native-async-storage/async-storage'  
+import { RootStackParamList } from '../types/navigation'  
   
-export default function SettingsScreen() {  
-  const { user } = useAuth()  
+type SettingsNavigationProp = StackNavigationProp<RootStackParamList, 'Settings'>  
+type SettingsRouteProp = RouteProp<RootStackParamList, 'Settings'>  
+  
+interface Props {  
+  navigation: SettingsNavigationProp  
+  route: SettingsRouteProp  
+}  
+  
+interface UserSettings {  
+  notifications: boolean  
+  darkMode: boolean  
+  language: string  
+  autoBackup: boolean  
+  biometricAuth: boolean  
+}  
+  
+interface CompanySettings {  
+  name: string  
+  address: string  
+  phone: string  
+  email: string  
+  taxId: string  
+  currency: string  
+}  
+  
+export default function SettingsScreen({ navigation, route }: Props) {  
+  const { user, signOut } = useAuth()  
   const [loading, setLoading] = useState(true)  
   const [saving, setSaving] = useState(false)  
-  const [userRole, setUserRole] = useState<string | null>(null)  
   const [error, setError] = useState<string | null>(null)  
-  
-  // Estados de configuración  
-  const [settings, setSettings] = useState({  
-    notifications: {  
-      push: true,  
-      email: true,  
-      orderUpdates: true,  
-      inventoryAlerts: true,  
-      clientMessages: true,  
-    },  
-    display: {  
-      darkMode: false,  
-      language: "es",  
-      currency: "USD",  
-      dateFormat: "DD/MM/YYYY",  
-    },  
-    privacy: {  
-      shareAnalytics: false,  
-      autoBackup: true,  
-      dataRetention: "1year",  
-    },  
-    business: {  
-      autoOrderNumbers: true,  
-      requireApproval: false,  
-      defaultTax: "15",  
-      workingHours: "8:00-17:00",  
-    }  
+  const [userRole, setUserRole] = useState<string | null>(null)  
+    
+  const [userSettings, setUserSettings] = useState<UserSettings>({  
+    notifications: true,  
+    darkMode: false,  
+    language: 'es',  
+    autoBackup: true,  
+    biometricAuth: false,  
   })  
-  
-  // Estados para modales  
-  const [languageModalVisible, setLanguageModalVisible] = useState(false)  
-  const [currencyModalVisible, setCurrencyModalVisible] = useState(false)  
-  const [taxModalVisible, setTaxModalVisible] = useState(false)  
-  const [hoursModalVisible, setHoursModalVisible] = useState(false)  
+    
+  const [companySettings, setCompanySettings] = useState<CompanySettings>({  
+    name: '',  
+    address: '',  
+    phone: '',  
+    email: '',  
+    taxId: '',  
+    currency: 'USD',  
+  })  
+    
+  const [showCompanyModal, setShowCompanyModal] = useState(false)  
+  const [showLanguageModal, setShowLanguageModal] = useState(false)  
   
   const loadSettings = useCallback(async () => {  
     try {  
@@ -80,10 +93,26 @@ export default function SettingsScreen() {
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
-      // Cargar configuraciones guardadas  
-      const savedSettings = await AsyncStorage.getItem('userSettings')  
-      if (savedSettings) {  
-        setSettings(JSON.parse(savedSettings))  
+      // Cargar configuraciones del usuario (simulado por ahora)  
+      // En una implementación real, estas vendrían de la base de datos  
+      setUserSettings({  
+        notifications: true,  
+        darkMode: false,  
+        language: 'es',  
+        autoBackup: true,  
+        biometricAuth: false,  
+      })  
+  
+      // Solo admin puede ver configuraciones de empresa  
+      if (userPermissions?.rol === 'admin') {  
+        setCompanySettings({  
+          name: 'AutoFlowX Taller',  
+          address: 'Dirección del taller',  
+          phone: '+505 1234-5678',  
+          email: 'info@autoflowx.com',  
+          taxId: 'J0310000000000',  
+          currency: 'USD',  
+        })  
       }  
   
     } catch (error) {  
@@ -94,174 +123,123 @@ export default function SettingsScreen() {
     }  
   }, [user])  
   
-  useEffect(() => {  
-    loadSettings()  
-  }, [loadSettings])  
+  useFocusEffect(  
+    useCallback(() => {  
+      loadSettings()  
+    }, [loadSettings])  
+  )  
   
-  const saveSettings = async () => {  
+  const handleUserSettingChange = (key: keyof UserSettings, value: boolean | string) => {  
+    setUserSettings(prev => ({  
+      ...prev,  
+      [key]: value  
+    }))  
+  }  
+  
+  const handleCompanySettingChange = (key: keyof CompanySettings, value: string) => {  
+    setCompanySettings(prev => ({  
+      ...prev,  
+      [key]: value  
+    }))  
+  }  
+  
+  const saveUserSettings = async () => {  
     try {  
       setSaving(true)  
-      await AsyncStorage.setItem('userSettings', JSON.stringify(settings))  
+      // En una implementación real, aquí se guardarían las configuraciones en la base de datos  
       Alert.alert("Éxito", "Configuraciones guardadas correctamente")  
     } catch (error) {  
-      console.error("Error saving settings:", error)  
+      console.error("Error saving user settings:", error)  
       Alert.alert("Error", "No se pudieron guardar las configuraciones")  
     } finally {  
       setSaving(false)  
     }  
   }  
   
-  const updateSetting = (category: string, key: string, value: any) => {  
-    setSettings(prev => ({  
-      ...prev,  
-      [category]: {  
-        ...prev[category],  
-        [key]: value  
-      }  
-    }))  
+  const saveCompanySettings = async () => {  
+    try {  
+      setSaving(true)  
+      // En una implementación real, aquí se guardarían las configuraciones de empresa  
+      setShowCompanyModal(false)  
+      Alert.alert("Éxito", "Configuraciones de empresa guardadas correctamente")  
+    } catch (error) {  
+      console.error("Error saving company settings:", error)  
+      Alert.alert("Error", "No se pudieron guardar las configuraciones de empresa")  
+    } finally {  
+      setSaving(false)  
+    }  
   }  
   
-  const resetSettings = () => {  
+  const handleSignOut = () => {  
     Alert.alert(  
-      "Restablecer Configuraciones",  
-      "¿Estás seguro de que quieres restablecer todas las configuraciones a sus valores predeterminados?",  
+      "Cerrar Sesión",  
+      "¿Estás seguro de que quieres cerrar sesión?",  
       [  
         { text: "Cancelar", style: "cancel" },  
         {  
-          text: "Restablecer",  
+          text: "Cerrar Sesión",  
           style: "destructive",  
-          onPress: () => {  
-            setSettings({  
-              notifications: {  
-                push: true,  
-                email: true,  
-                orderUpdates: true,  
-                inventoryAlerts: true,  
-                clientMessages: true,  
-              },  
-              display: {  
-                darkMode: false,  
-                language: "es",  
-                currency: "USD",  
-                dateFormat: "DD/MM/YYYY",  
-              },  
-              privacy: {  
-                shareAnalytics: false,  
-                autoBackup: true,  
-                dataRetention: "1year",  
-              },  
-              business: {  
-                autoOrderNumbers: true,  
-                requireApproval: false,  
-                defaultTax: "15",  
-                workingHours: "8:00-17:00",  
-              }  
-            })  
-            Alert.alert("Éxito", "Configuraciones restablecidas")  
-          }  
+          onPress: () => signOut()  
         }  
       ]  
     )  
   }  
   
-  const renderLanguageModal = () => (  
-    <Modal  
-      visible={languageModalVisible}  
-      animationType="slide"  
-      presentationStyle="pageSheet"  
-    >  
-      <View style={styles.modalContainer}>  
-        <View style={styles.modalHeader}>  
-          <Text style={styles.modalTitle}>Seleccionar Idioma</Text>  
-          <TouchableOpacity  
-            onPress={() => setLanguageModalVisible(false)}  
-            style={styles.closeButton}  
-          >  
-            <Feather name="x" size={24} color="#666" />  
-          </TouchableOpacity>  
-        </View>  
+  // ✅ CORREGIDO: Usar keyof para indexación segura  
+  const getLanguageName = (code: string): string => {  
+    const languages: Record<string, string> = {  
+      'es': 'Español',  
+      'en': 'English',  
+      'fr': 'Français'  
+    }  
+    return languages[code] || 'Español'  
+  }  
   
-        <View style={styles.modalContent}>  
-          {[  
-            { code: "es", name: "Español" },  
-            { code: "en", name: "English" },  
-            { code: "pt", name: "Português" }  
-          ].map((language) => (  
-            <TouchableOpacity  
-              key={language.code}  
-              style={[  
-                styles.optionItem,  
-                settings.display.language === language.code && styles.optionItemSelected  
-              ]}  
-              onPress={() => {  
-                updateSetting('display', 'language', language.code)  
-                setLanguageModalVisible(false)  
-              }}  
-            >  
-              <Text style={[  
-                styles.optionText,  
-                settings.display.language === language.code && styles.optionTextSelected  
-              ]}>  
-                {language.name}  
-              </Text>  
-              {settings.display.language === language.code && (  
-                <Feather name="check" size={20} color="#1a73e8" />  
-              )}  
-            </TouchableOpacity>  
-          ))}  
-        </View>  
+  const renderSettingItem = (  
+    title: string,  
+    subtitle: string,  
+    value: boolean,  
+    onValueChange: (value: boolean) => void,  
+    icon: string  
+  ) => (  
+    <View style={styles.settingItem}>  
+      <View style={styles.settingIcon}>  
+        <Feather name={icon as any} size={20} color="#1a73e8" />  
       </View>  
-    </Modal>  
+      <View style={styles.settingContent}>  
+        <Text style={styles.settingTitle}>{title}</Text>  
+        <Text style={styles.settingSubtitle}>{subtitle}</Text>  
+      </View>  
+      <Switch  
+        value={value}  
+        onValueChange={onValueChange}  
+        trackColor={{ false: "#e1e4e8", true: "#1a73e8" }}  
+        thumbColor={value ? "#fff" : "#f4f3f4"}  
+      />  
+    </View>  
   )  
   
-  const renderCurrencyModal = () => (  
-    <Modal  
-      visible={currencyModalVisible}  
-      animationType="slide"  
-      presentationStyle="pageSheet"  
-    >  
-      <View style={styles.modalContainer}>  
-        <View style={styles.modalHeader}>  
-          <Text style={styles.modalTitle}>Seleccionar Moneda</Text>  
-          <TouchableOpacity  
-            onPress={() => setCurrencyModalVisible(false)}  
-            style={styles.closeButton}  
-          >  
-            <Feather name="x" size={24} color="#666" />  
-          </TouchableOpacity>  
-        </View>  
-  
-        <View style={styles.modalContent}>  
-          {[  
-            { code: "USD", name: "Dólar Estadounidense (USD)" },  
-            { code: "EUR", name: "Euro (EUR)" },  
-            { code: "NIO", name: "Córdoba Nicaragüense (NIO)" }  
-          ].map((currency) => (  
-            <TouchableOpacity  
-              key={currency.code}  
-              style={[  
-                styles.optionItem,  
-                settings.display.currency === currency.code && styles.optionItemSelected  
-              ]}  
-              onPress={() => {  
-                updateSetting('display', 'currency', currency.code)  
-                setCurrencyModalVisible(false)  
-              }}  
-            >  
-              <Text style={[  
-                styles.optionText,  
-                settings.display.currency === currency.code && styles.optionTextSelected  
-              ]}>  
-                {currency.name}  
-              </Text>  
-              {settings.display.currency === currency.code && (  
-                <Feather name="check" size={20} color="#1a73e8" />  
-              )}  
-            </TouchableOpacity>  
-          ))}  
-        </View>  
+  const renderActionItem = (  
+    title: string,  
+    subtitle: string,  
+    onPress: () => void,  
+    icon: string,  
+    rightText?: string,  
+    danger?: boolean  
+  ) => (  
+    <TouchableOpacity style={styles.settingItem} onPress={onPress}>  
+      <View style={[styles.settingIcon, danger && { backgroundColor: '#ffebee' }]}>  
+        <Feather name={icon as any} size={20} color={danger ? "#f44336" : "#1a73e8"} />  
       </View>  
-    </Modal>  
+      <View style={styles.settingContent}>  
+        <Text style={[styles.settingTitle, danger && { color: '#f44336' }]}>{title}</Text>  
+        <Text style={styles.settingSubtitle}>{subtitle}</Text>  
+      </View>  
+      {rightText && (  
+        <Text style={styles.rightText}>{rightText}</Text>  
+      )}  
+      <Feather name="chevron-right" size={20} color="#ccc" />  
+    </TouchableOpacity>  
   )  
   
   if (loading) {  
@@ -287,230 +265,238 @@ export default function SettingsScreen() {
   
   return (  
     <ScrollView style={styles.container}>  
-      <View style={styles.header}>  
-        <Text style={styles.headerTitle}>Configuraciones</Text>  
-        <TouchableOpacity style={styles.saveButton} onPress={saveSettings} disabled={saving}>  
-          {saving ? (  
-            <ActivityIndicator size="small" color="#1a73e8" />  
-          ) : (  
-            <Feather name="save" size={20} color="#1a73e8" />  
-          )}  
-        </TouchableOpacity>  
+      {/* Información del usuario */}  
+      <View style={styles.section}>  
+        <Text style={styles.sectionTitle}>Información del Usuario</Text>  
+        <View style={styles.userInfo}>  
+          <View style={styles.userAvatar}>  
+            <Feather name="user" size={32} color="#1a73e8" />  
+          </View>  
+          <View style={styles.userDetails}>  
+            <Text style={styles.userName}>{user?.email || 'Usuario'}</Text>  
+            <Text style={styles.userRole}>Rol: {userRole || 'Cliente'}</Text>  
+          </View>  
+        </View>  
       </View>  
   
-      {/* Notificaciones */}  
+      {/* Configuraciones de usuario */}  
       <View style={styles.section}>  
-        <Text style={styles.sectionTitle}>Notificaciones</Text>  
+        <Text style={styles.sectionTitle}>Preferencias</Text>  
           
-        <View style={styles.settingItem}>  
-          <View style={styles.settingInfo}>  
-            <Text style={styles.settingLabel}>Notificaciones Push</Text>  
-            <Text style={styles.settingDescription}>Recibir notificaciones en el dispositivo</Text>  
-          </View>  
-          <Switch  
-            value={settings.notifications.push}  
-            onValueChange={(value) => updateSetting('notifications', 'push', value)}  
-            trackColor={{ false: "#e1e4e8", true: "#1a73e8" }}  
-            thumbColor={settings.notifications.push ? "#fff" : "#f4f3f4"}  
-          />  
-        </View>  
+        {renderSettingItem(  
+          "Notificaciones",  
+          "Recibir notificaciones push",  
+          userSettings.notifications,  
+          (value) => handleUserSettingChange('notifications', value),  
+          "bell"  
+        )}  
   
-        <View style={styles.settingItem}>  
-          <View style={styles.settingInfo}>  
-            <Text style={styles.settingLabel}>Notificaciones por Email</Text>  
-            <Text style={styles.settingDescription}>Recibir notificaciones por correo electrónico</Text>  
-          </View>  
-          <Switch  
-            value={settings.notifications.email}  
-            onValueChange={(value) => updateSetting('notifications', 'email', value)}  
-            trackColor={{ false: "#e1e4e8", true: "#1a73e8" }}  
-            thumbColor={settings.notifications.email ? "#fff" : "#f4f3f4"}  
-          />  
-        </View>  
+        {renderSettingItem(  
+          "Modo Oscuro",  
+          "Usar tema oscuro en la aplicación",  
+          userSettings.darkMode,  
+          (value) => handleUserSettingChange('darkMode', value),  
+          "moon"  
+        )}  
   
-        <View style={styles.settingItem}>  
-          <View style={styles.settingInfo}>  
-            <Text style={styles.settingLabel}>Actualizaciones de Órdenes</Text>  
-            <Text style={styles.settingDescription}>Notificar cambios en el estado de órdenes</Text>  
-          </View>  
-          <Switch  
-            value={settings.notifications.orderUpdates}  
-            onValueChange={(value) => updateSetting('notifications', 'orderUpdates', value)}  
-            trackColor={{ false: "#e1e4e8", true: "#1a73e8" }}  
-            thumbColor={settings.notifications.orderUpdates ? "#fff" : "#f4f3f4"}  
-          />  
-        </View>  
+        {renderSettingItem(  
+          "Respaldo Automático",  
+          "Sincronizar datos automáticamente",  
+          userSettings.autoBackup,  
+          (value) => handleUserSettingChange('autoBackup', value),  
+          "cloud"  
+        )}  
   
-        {userRole !== 'client' && (  
-          <>  
-            <View style={styles.settingItem}>  
-              <View style={styles.settingInfo}>  
-                <Text style={styles.settingLabel}>Alertas de Inventario</Text>  
-                <Text style={styles.settingDescription}>Notificar cuando el stock esté bajo</Text>  
-              </View>  
-              <Switch  
-                value={settings.notifications.inventoryAlerts}  
-                onValueChange={(value) => updateSetting('notifications', 'inventoryAlerts', value)}  
-                trackColor={{ false: "#e1e4e8", true: "#1a73e8" }}  
-                thumbColor={settings.notifications.inventoryAlerts ? "#fff" : "#f4f3f4"}  
-              />  
-            </View>  
+        {renderSettingItem(  
+          "Autenticación Biométrica",  
+          "Usar huella dactilar o Face ID",  
+          userSettings.biometricAuth,  
+          (value) => handleUserSettingChange('biometricAuth', value),  
+          "shield"  
+        )}  
   
-            <View style={styles.settingItem}>  
-              <View style={styles.settingInfo}>  
-                <Text style={styles.settingLabel}>Mensajes de Clientes</Text>  
-                <Text style={styles.settingDescription}>Notificar nuevos mensajes de clientes</Text>  
-              </View>  
-              <Switch  
-                value={settings.notifications.clientMessages}  
-                onValueChange={(value) => updateSetting('notifications', 'clientMessages', value)}  
-                trackColor={{ false: "#e1e4e8", true: "#1a73e8" }}  
-                thumbColor={settings.notifications.clientMessages ? "#fff" : "#f4f3f4"}  
-              />  
-            </View>  
-          </>  
+        {renderActionItem(  
+          "Idioma",  
+          "Cambiar idioma de la aplicación",  
+          () => setShowLanguageModal(true),  
+          "globe",  
+          getLanguageName(userSettings.language)  
         )}  
       </View>  
   
-      {/* Pantalla y Apariencia */}  
-      <View style={styles.section}>  
-        <Text style={styles.sectionTitle}>Pantalla y Apariencia</Text>  
-          
-        <View style={styles.settingItem}>  
-          <View style={styles.settingInfo}>  
-            <Text style={styles.settingLabel}>Modo Oscuro</Text>  
-            <Text style={styles.settingDescription}>Usar tema oscuro en la aplicación</Text>  
-          </View>  
-          <Switch  
-            value={settings.display.darkMode}  
-            onValueChange={(value) => updateSetting('display', 'darkMode', value)}  
-            trackColor={{ false: "#e1e4e8", true: "#1a73e8" }}  
-            thumbColor={settings.display.darkMode ? "#fff" : "#f4f3f4"}  
-          />  
-        </View>  
-  
-        <TouchableOpacity  
-          style={styles.settingItem}  
-          onPress={() => setLanguageModalVisible(true)}  
-        >  
-          <View style={styles.settingInfo}>  
-            <Text style={styles.settingLabel}>Idioma</Text>  
-            <Text style={styles.settingDescription}>  
-              {settings.display.language === 'es' ? 'Español' :   
-               settings.display.language === 'en' ? 'English' : 'Português'}  
-            </Text>  
-          </View>  
-          <Feather name="chevron-right" size={20} color="#666" />  
-        </TouchableOpacity>  
-  
-        <TouchableOpacity  
-          style={styles.settingItem}  
-          onPress={() => setCurrencyModalVisible(true)}  
-        >  
-          <View style={styles.settingInfo}>  
-            <Text style={styles.settingLabel}>Moneda</Text>  
-            <Text style={styles.settingDescription}>{settings.display.currency}</Text>  
-          </View>  
-          <Feather name="chevron-right" size={20} color="#666" />  
-        </TouchableOpacity>  
-      </View>  
-  
-      {/* Privacidad y Seguridad */}  
-      <View style={styles.section}>  
-        <Text style={styles.sectionTitle}>Privacidad y Seguridad</Text>  
-          
-        <View style={styles.settingItem}>  
-          <View style={styles.settingInfo}>  
-            <Text style={styles.settingLabel}>Compartir Analíticas</Text>  
-            <Text style={styles.settingDescription}>Ayudar a mejorar la aplicación compartiendo datos de uso</Text>  
-          </View>  
-          <Switch  
-            value={settings.privacy.shareAnalytics}  
-            onValueChange={(value) => updateSetting('privacy', 'shareAnalytics', value)}  
-            trackColor={{ false: "#e1e4e8", true: "#1a73e8" }}  
-            thumbColor={settings.privacy.shareAnalytics ? "#fff" : "#f4f3f4"}  
-          />  
-        </View>  
-  
-        <View style={styles.settingItem}>  
-          <View style={styles.settingInfo}>  
-            <Text style={styles.settingLabel}>Respaldo Automático</Text>  
-            <Text style={styles.settingDescription}>Respaldar datos automáticamente en la nube</Text>  
-          </View>  
-          <Switch  
-            value={settings.privacy.autoBackup}  
-            onValueChange={(value) => updateSetting('privacy', 'autoBackup', value)}  
-            trackColor={{ false: "#e1e4e8", true: "#1a73e8" }}  
-            thumbColor={settings.privacy.autoBackup ? "#fff" : "#f4f3f4"}  
-          />  
-        </View>  
-      </View>  
-  
-      {/* Configuraciones de Negocio (solo para staff) */}  
-      {userRole !== 'client' && (  
+      {/* Configuraciones de empresa (solo admin) */}  
+      {userRole === 'admin' && (  
         <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Configuraciones de Negocio</Text>  
+          <Text style={styles.sectionTitle}>Configuración de Empresa</Text>  
             
-          <View style={styles.settingItem}>  
-            <View style={styles.settingInfo}>  
-              <Text style={styles.settingLabel}>Numeración Automática de Órdenes</Text>  
-              <Text style={styles.settingDescription}>Generar números de orden automáticamente</Text>  
-            </View>  
-            <Switch  
-              value={settings.business.autoOrderNumbers}  
-              onValueChange={(value) => updateSetting('business', 'autoOrderNumbers', value)}  
-              trackColor={{ false: "#e1e4e8", true: "#1a73e8" }}  
-              thumbColor={settings.business.autoOrderNumbers ? "#fff" : "#f4f3f4"}  
-            />  
-          </View>  
-  
-          <View style={styles.settingItem}>  
-            <View style={styles.settingInfo}>  
-              <Text style={styles.settingLabel}>Requerir Aprobación</Text>  
-              <Text style={styles.settingDescription}>Requerir aprobación para órdenes grandes</Text>  
-            </View>  
-            <Switch  
-              value={settings.business.requireApproval}  
-              onValueChange={(value) => updateSetting('business', 'requireApproval', value)}  
-              trackColor={{ false: "#e1e4e8", true: "#1a73e8" }}  
-              thumbColor={settings.business.requireApproval ? "#fff" : "#f4f3f4"}  
-            />  
-          </View>  
-  
-          <TouchableOpacity  
-            style={styles.settingItem}  
-            onPress={() => setTaxModalVisible(true)}  
-          >  
-            <View style={styles.settingInfo}>  
-              <Text style={styles.settingLabel}>Impuesto por Defecto</Text>  
-              <Text style={styles.settingDescription}>{settings.business.defaultTax}%</Text>  
-            </View>  
-            <Feather name="chevron-right" size={20} color="#666" />  
-          </TouchableOpacity>  
-  
-          <TouchableOpacity  
-            style={styles.settingItem}  
-            onPress={() => setHoursModalVisible(true)}  
-          >  
-            <View style={styles.settingInfo}>  
-              <Text style={styles.settingLabel}>Horario de Trabajo</Text>  
-              <Text style={styles.settingDescription}>{settings.business.workingHours}</Text>  
-            </View>  
-            <Feather name="chevron-right" size={20} color="#666" />  
-          </TouchableOpacity>  
+          {renderActionItem(  
+            "Información de la Empresa",  
+            "Editar datos de la empresa",  
+            () => setShowCompanyModal(true),  
+            "building"  
+          )}  
         </View>  
       )}  
   
       {/* Acciones */}  
       <View style={styles.section}>  
-        <TouchableOpacity style={styles.resetButton} onPress={resetSettings}>  
-          <Feather name="refresh-cw" size={20} color="#f44336" />  
-          <Text style={styles.resetButtonText}>Restablecer Configuraciones</Text>  
-        </TouchableOpacity>  
+        <Text style={styles.sectionTitle}>Acciones</Text>  
+          
+        {renderActionItem(  
+          "Guardar Configuraciones",  
+          "Aplicar cambios realizados",  
+          saveUserSettings,  
+          "save"  
+        )}  
+  
+        {renderActionItem(  
+          "Cerrar Sesión",  
+          "Salir de la aplicación",  
+          handleSignOut,  
+          "log-out",  
+          undefined,  
+          true  
+        )}  
       </View>  
   
-      {renderLanguageModal()}  
-      {renderCurrencyModal()}  
+      {/* Modal de configuración de empresa */}  
+      <Modal  
+        visible={showCompanyModal}  
+        animationType="slide"  
+        presentationStyle="pageSheet"  
+      >  
+        <View style={styles.modalContainer}>  
+          <View style={styles.modalHeader}>  
+            <Text style={styles.modalTitle}>Configuración de Empresa</Text>  
+            <TouchableOpacity onPress={() => setShowCompanyModal(false)}>  
+              <Feather name="x" size={24} color="#666" />  
+            </TouchableOpacity>  
+          </View>  
+  
+          <ScrollView style={styles.modalContent}>  
+            <View style={styles.formGroup}>  
+              <Text style={styles.formLabel}>Nombre de la Empresa</Text>  
+              <TextInput  
+                style={styles.formInput}  
+                value={companySettings.name}  
+                onChangeText={(value) => handleCompanySettingChange('name', value)}  
+                placeholder="Nombre de la empresa"  
+              />  
+            </View>  
+  
+            <View style={styles.formGroup}>  
+              <Text style={styles.formLabel}>Dirección</Text>  
+              <TextInput  
+                style={styles.formInput}  
+                value={companySettings.address}  
+                onChangeText={(value) => handleCompanySettingChange('address', value)}  
+                placeholder="Dirección completa"  
+                multiline  
+              />  
+            </View>  
+  
+            <View style={styles.formGroup}>  
+              <Text style={styles.formLabel}>Teléfono</Text>  
+              <TextInput  
+                style={styles.formInput}  
+                value={companySettings.phone}  
+                onChangeText={(value) => handleCompanySettingChange('phone', value)}  
+                placeholder="+505 1234-5678"  
+                keyboardType="phone-pad"  
+              />  
+            </View>  
+  
+            <View style={styles.formGroup}>  
+              <Text style={styles.formLabel}>Email</Text>  
+              <TextInput  
+                style={styles.formInput}  
+                value={companySettings.email}  
+                onChangeText={(value) => handleCompanySettingChange('email', value)}  
+                placeholder="info@empresa.com"  
+                keyboardType="email-address"  
+              />  
+            </View>  
+  
+            <View style={styles.formGroup}>  
+              <Text style={styles.formLabel}>RUC/Tax ID</Text>  
+              <TextInput  
+                style={styles.formInput}  
+                value={companySettings.taxId}  
+                onChangeText={(value) => handleCompanySettingChange('taxId', value)}  
+                placeholder="J0310000000000"  
+              />  
+            </View>  
+          </ScrollView>  
+  
+          <View style={styles.modalFooter}>  
+            <TouchableOpacity  
+              style={styles.cancelButton}  
+              onPress={() => setShowCompanyModal(false)}  
+            >  
+              <Text style={styles.cancelButtonText}>Cancelar</Text>  
+            </TouchableOpacity>  
+            <TouchableOpacity  
+              style={styles.saveButton}  
+              onPress={saveCompanySettings}  
+              disabled={saving}  
+            >  
+              {saving ? (  
+                <ActivityIndicator size="small" color="#fff" />  
+              ) : (  
+                <Text style={styles.saveButtonText}>Guardar</Text>  
+              )}  
+            </TouchableOpacity>  
+          </View>  
+        </View>  
+      </Modal>  
+  
+      {/* Modal de selección de idioma */}  
+      <Modal  
+        visible={showLanguageModal}  
+        animationType="slide"  
+        transparent={true}  
+      >  
+        <View style={styles.modalOverlay}>  
+          <View style={styles.languageModal}>  
+            <Text style={styles.modalTitle}>Seleccionar Idioma</Text>  
+              
+            {[  
+              { code: 'es', name: 'Español' },  
+              { code: 'en', name: 'English' },  
+              { code: 'fr', name: 'Français' }  
+            ].map((language) => (  
+              <TouchableOpacity  
+                key={language.code}  
+                style={[  
+                  styles.languageOption,  
+                  userSettings.language === language.code && styles.languageOptionSelected  
+                ]}  
+                onPress={() => {  
+                  handleUserSettingChange('language', language.code)  
+                  setShowLanguageModal(false)  
+                }}  
+              >  
+                <Text style={[  
+                  styles.languageOptionText,  
+                  userSettings.language === language.code && styles.languageOptionTextSelected  
+                ]}>  
+                  {language.name}  
+                </Text>  
+                {userSettings.language === language.code && (  
+                  <Feather name="check" size={20} color="#1a73e8" />  
+                )}  
+              </TouchableOpacity>  
+            ))}  
+  
+            <TouchableOpacity  
+              style={styles.closeLanguageModal}  
+              onPress={() => setShowLanguageModal(false)}  
+            >  
+              <Text style={styles.closeLanguageModalText}>Cerrar</Text>  
+            </TouchableOpacity>  
+          </View>  
+        </View>  
+      </Modal>  
     </ScrollView>  
   )  
 }  
@@ -554,76 +540,79 @@ const styles = StyleSheet.create({
     color: "#fff",  
     fontWeight: "bold",  
   },  
-  header: {  
-    flexDirection: "row",  
-    alignItems: "center",  
-    justifyContent: "space-between",  
-    paddingHorizontal: 16,  
-    paddingVertical: 12,  
+  section: {  
     backgroundColor: "#fff",  
-    borderBottomWidth: 1,  
-    borderBottomColor: "#e1e4e8",  
+    marginBottom: 16,  
+    paddingVertical: 16,  
   },  
-  headerTitle: {  
+  sectionTitle: {  
     fontSize: 18,  
     fontWeight: "bold",  
     color: "#333",  
+    paddingHorizontal: 16,  
+    marginBottom: 16,  
   },  
-  saveButton: {  
-    padding: 8,  
+  userInfo: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    paddingHorizontal: 16,  
   },  
-  section: {  
-    backgroundColor: "#fff",  
-    marginTop: 16,  
-    paddingVertical: 8,  
+  userAvatar: {  
+    width: 64,  
+    height: 64,  
+    borderRadius: 32,  
+    backgroundColor: "#e8f0fe",  
+    justifyContent: "center",  
+    alignItems: "center",  
+    marginRight: 16,  
   },  
-  sectionTitle: {  
-    fontSize: 16,  
+  userDetails: {  
+    flex: 1,  
+  },  
+  userName: {  
+    fontSize: 18,  
     fontWeight: "bold",  
     color: "#333",  
-    paddingHorizontal: 16,  
-    paddingBottom: 8,  
+    marginBottom: 4,  
+  },  
+  userRole: {  
+    fontSize: 14,  
+    color: "#666",  
   },  
   settingItem: {  
     flexDirection: "row",  
     alignItems: "center",  
-    justifyContent: "space-between",  
     paddingHorizontal: 16,  
     paddingVertical: 12,  
     borderBottomWidth: 1,  
     borderBottomColor: "#f0f0f0",  
   },  
-  settingInfo: {  
-    flex: 1,  
-    marginRight: 16,  
+  settingIcon: {  
+    width: 40,  
+    height: 40,  
+    borderRadius: 20,  
+    backgroundColor: "#e8f0fe",  
+    justifyContent: "center",  
+    alignItems: "center",  
+    marginRight: 12,  
   },  
-  settingLabel: {  
+  settingContent: {  
+    flex: 1,  
+  },  
+  settingTitle: {  
     fontSize: 16,  
     fontWeight: "500",  
     color: "#333",  
     marginBottom: 2,  
   },  
-  settingDescription: {  
+  settingSubtitle: {  
     fontSize: 14,  
     color: "#666",  
   },  
-  resetButton: {  
-    flexDirection: "row",  
-    alignItems: "center",  
-    justifyContent: "center",  
-    paddingVertical: 12,  
-    paddingHorizontal: 16,  
-    marginHorizontal: 16,  
-    borderRadius: 8,  
-    backgroundColor: "#fff",  
-    borderWidth: 1,  
-    borderColor: "#f44336",  
-  },  
-  resetButtonText: {  
-    fontSize: 16,  
-    color: "#f44336",  
-    fontWeight: "500",  
-    marginLeft: 8,  
+  rightText: {  
+    fontSize: 14,  
+    color: "#1a73e8",  
+    marginRight: 8,  
   },  
   modalContainer: {  
     flex: 1,  
@@ -631,45 +620,114 @@ const styles = StyleSheet.create({
   },  
   modalHeader: {  
     flexDirection: "row",  
-    justifyContent: "space-between",  
     alignItems: "center",  
-    padding: 16,  
+    justifyContent: "space-between",  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
     borderBottomWidth: 1,  
     borderBottomColor: "#e1e4e8",  
   },  
   modalTitle: {  
-    fontSize: 20,  
+    fontSize: 18,  
     fontWeight: "bold",  
     color: "#333",  
-  },  
-  closeButton: {  
-    padding: 8,  
   },  
   modalContent: {  
     flex: 1,  
     padding: 16,  
   },  
-  optionItem: {  
+  formGroup: {  
+    marginBottom: 16,  
+  },  
+  formLabel: {  
+    fontSize: 14,  
+    fontWeight: "600",  
+    color: "#333",  
+    marginBottom: 8,  
+  },  
+  formInput: {  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+    borderRadius: 8,  
+    paddingHorizontal: 12,  
+    paddingVertical: 10,  
+    fontSize: 16,  
+    color: "#333",  
+    backgroundColor: "#fff",  
+  },  
+  modalFooter: {  
+    flexDirection: "row",  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    borderTopWidth: 1,  
+    borderTopColor: "#e1e4e8",  
+    gap: 12,  
+  },  
+  cancelButton: {  
+    flex: 1,  
+    paddingVertical: 12,  
+    borderRadius: 8,  
+    backgroundColor: "#f5f5f5",  
+    alignItems: "center",  
+  },  
+  cancelButtonText: {  
+    fontSize: 16,  
+    color: "#666",  
+    fontWeight: "500",  
+  },  
+  saveButton: {  
+    flex: 1,  
+    paddingVertical: 12,  
+    borderRadius: 8,  
+    backgroundColor: "#1a73e8",  
+    alignItems: "center",  
+  },  
+  saveButtonText: {  
+    fontSize: 16,  
+    color: "#fff",  
+    fontWeight: "bold",  
+  },  
+  modalOverlay: {  
+    flex: 1,  
+    backgroundColor: "rgba(0, 0, 0, 0.5)",  
+    justifyContent: "center",  
+    alignItems: "center",  
+  },  
+  languageModal: {  
+    backgroundColor: "#fff",  
+    borderRadius: 12,  
+    padding: 20,  
+    margin: 20,  
+    minWidth: 280,  
+  },  
+  languageOption: {  
     flexDirection: "row",  
     alignItems: "center",  
     justifyContent: "space-between",  
-    paddingVertical: 16,  
+    paddingVertical: 12,  
     paddingHorizontal: 16,  
     borderRadius: 8,  
-    marginBottom: 8,  
-    backgroundColor: "#f8f9fa",  
+    marginVertical: 4,  
   },  
-  optionItemSelected: {  
+  languageOptionSelected: {  
     backgroundColor: "#e8f0fe",  
-    borderWidth: 1,  
-    borderColor: "#1a73e8",  
   },  
-  optionText: {  
+  languageOptionText: {  
     fontSize: 16,  
     color: "#333",  
   },  
-  optionTextSelected: {  
+  languageOptionTextSelected: {  
     color: "#1a73e8",  
     fontWeight: "600",  
+  },  
+  closeLanguageModal: {  
+    marginTop: 16,  
+    paddingVertical: 12,  
+    alignItems: "center",  
+  },  
+  closeLanguageModalText: {  
+    fontSize: 16,  
+    color: "#1a73e8",  
+    fontWeight: "500",  
   },  
 })

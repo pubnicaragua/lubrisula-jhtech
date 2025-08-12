@@ -15,13 +15,25 @@ import {
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
+import { StackNavigationProp } from '@react-navigation/stack'  
+import { RouteProp } from '@react-navigation/native'  
 import { useAuth } from "../context/auth-context"  
-import { getAllServices } from "../services/supabase/services-service"
-import { accessService } from "../services/supabase/access-service"  
-import { userService } from "../services/supabase/user-service" 
-import { UiScreenProps, ServicioType } from "../types"
+import { getAllServices } from "../services/supabase/services-service"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service"  
+import { RootStackParamList, ServiceSelectionParams } from '../types/navigation'  
+import { ServicioType } from '../types/services'  
   
-export default function ServiceSelectionScreen({ navigation, route }: UiScreenProps) {  
+// ✅ CORREGIDO: Tipado estricto de navegación  
+type ServiceSelectionNavigationProp = StackNavigationProp<RootStackParamList, 'ServiceSelection'>  
+type ServiceSelectionRouteProp = RouteProp<RootStackParamList, 'ServiceSelection'>  
+  
+interface Props {  
+  navigation: ServiceSelectionNavigationProp  
+  route: ServiceSelectionRouteProp  
+}  
+  
+export default function ServiceSelectionScreen({ navigation, route }: Props) {  
   const { onServiceSelect, selectedService = null, multiSelect = false } = route.params || {}  
   const { user } = useAuth()  
   
@@ -49,15 +61,19 @@ export default function ServiceSelectionScreen({ navigation, route }: UiScreenPr
   
       if (!user?.id) return  
   
-            // Validar permisos del usuario  
-      const userTallerId = await userService.GET_TALLER_ID(user.id)  
-      if (!userTallerId) return
-      const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      // Validar permisos del usuario  
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {  
+        setError("No se pudo obtener la información del taller")  
+        return  
+      }  
+  
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
-
+  
       // Cargar servicios desde Supabase  
       const allServices = await getAllServices()  
-        
+  
       setServices(allServices)  
       setFilteredServices(allServices)  
     } catch (error) {  
@@ -187,7 +203,7 @@ export default function ServiceSelectionScreen({ navigation, route }: UiScreenPr
                   {item.duracion_estimada ? getDurationText(item.duracion_estimada) : "No especificado"}  
                 </Text>  
               </View>  
-                
+  
               {item.categoria && (  
                 <View style={styles.categoryBadge}>  
                   <Text style={styles.categoryText}>{item.categoria}</Text>  
@@ -211,86 +227,70 @@ export default function ServiceSelectionScreen({ navigation, route }: UiScreenPr
     return (  
       <Modal  
         visible={serviceDetailModalVisible}  
-        transparent={true}  
         animationType="slide"  
-        onRequestClose={() => setServiceDetailModalVisible(false)}  
+        presentationStyle="pageSheet"  
       >  
-        <View style={styles.modalOverlay}>  
-          <View style={styles.modalContainer}>  
-            <View style={styles.modalHeader}>  
-              <Text style={styles.modalTitle}>Detalles del Servicio</Text>  
-              <TouchableOpacity  
-                style={styles.modalCloseButton}  
-                onPress={() => setServiceDetailModalVisible(false)}  
-              >  
-                <Feather name="x" size={24} color="#333" />  
-              </TouchableOpacity>  
-            </View>  
+        <View style={styles.modalContainer}>  
+          <View style={styles.modalHeader}>  
+            <Text style={styles.modalTitle}>Detalle del Servicio</Text>  
+            <TouchableOpacity  
+              style={styles.closeButton}  
+              onPress={() => setServiceDetailModalVisible(false)}  
+            >  
+              <Feather name="x" size={24} color="#666" />  
+            </TouchableOpacity>  
+          </View>  
   
-            <ScrollView style={styles.modalContent}>  
-              <Text style={styles.modalServiceName}>{selectedServiceDetail.nombre}</Text>  
-                
-              {selectedServiceDetail.descripcion && (  
-                <Text style={styles.modalServiceDescription}>{selectedServiceDetail.descripcion}</Text>  
-              )}  
+          <ScrollView style={styles.modalContent}>  
+            <Text style={styles.modalServiceName}>{selectedServiceDetail.nombre}</Text>  
   
-              <View style={styles.modalServiceDetails}>  
-                <View style={styles.modalDetailRow}>  
-                  <Text style={styles.modalDetailLabel}>Precio:</Text>  
-                  <Text style={styles.modalDetailValue}>{formattedPrice}</Text>  
-                </View>  
+            {selectedServiceDetail.descripcion && (  
+              <Text style={styles.modalServiceDescription}>  
+                {selectedServiceDetail.descripcion}  
+              </Text>  
+            )}  
   
-                <View style={styles.modalDetailRow}>  
-                  <Text style={styles.modalDetailLabel}>Duración estimada:</Text>  
-                  <Text style={styles.modalDetailValue}>  
-                    {selectedServiceDetail.duracion_estimada   
-                      ? getDurationText(selectedServiceDetail.duracion_estimada)  
-                      : "No especificado"  
-                    }  
-                  </Text>  
-                </View>  
-  
-                {selectedServiceDetail.categoria && (  
-                  <View style={styles.modalDetailRow}>  
-                    <Text style={styles.modalDetailLabel}>Categoría:</Text>  
-                    <Text style={styles.modalDetailValue}>{selectedServiceDetail.categoria}</Text>  
-                  </View>  
-                )}  
-  
-                {selectedServiceDetail.requiere_cita && (  
-                  <View style={styles.modalDetailRow}>  
-                    <Text style={styles.modalDetailLabel}>Requiere cita:</Text>  
-                    <Text style={styles.modalDetailValue}>Sí</Text>  
-                  </View>  
-                )}  
+            <View style={styles.modalServiceDetails}>  
+              <View style={styles.modalDetailRow}>  
+                <Text style={styles.modalDetailLabel}>Categoría:</Text>  
+                <Text style={styles.modalDetailValue}>  
+                  {selectedServiceDetail.categoria || "Sin categoría"}  
+                </Text>  
               </View>  
   
-              {selectedServiceDetail.notas && (  
-                <View style={styles.notesSection}>  
-                  <Text style={styles.notesLabel}>Notas adicionales:</Text>  
-                  <Text style={styles.notesText}>{selectedServiceDetail.notas}</Text>  
-                </View>  
-              )}  
-            </ScrollView>  
+              <View style={styles.modalDetailRow}>  
+                <Text style={styles.modalDetailLabel}>Duración estimada:</Text>  
+                <Text style={styles.modalDetailValue}>  
+                  {selectedServiceDetail.duracion_estimada   
+                    ? getDurationText(selectedServiceDetail.duracion_estimada)   
+                    : "No especificada"}  
+                </Text>  
+              </View>  
   
-            <View style={styles.modalFooter}>  
-              <TouchableOpacity  
-                style={[styles.button, styles.cancelButton]}  
-                onPress={() => setServiceDetailModalVisible(false)}  
-              >  
-                <Text style={styles.buttonText}>Cancelar</Text>  
-              </TouchableOpacity>  
-  
-              <TouchableOpacity  
-                style={[styles.button, styles.selectButton]}  
-                onPress={() => {  
-                  toggleServiceSelection(selectedServiceDetail)  
-                  setServiceDetailModalVisible(false)  
-                }}  
-              >  
-                <Text style={styles.buttonText}>{isSelected ? "Quitar" : "Seleccionar"}</Text>  
-              </TouchableOpacity>  
+              <View style={styles.modalDetailRow}>  
+                <Text style={styles.modalDetailLabel}>Precio:</Text>  
+                <Text style={styles.modalDetailValue}>{formattedPrice}</Text>  
+              </View>  
             </View>  
+          </ScrollView>  
+  
+          <View style={styles.modalFooter}>  
+            <TouchableOpacity  
+              style={[styles.button, styles.cancelButton]}  
+              onPress={() => setServiceDetailModalVisible(false)}  
+            >  
+              <Text style={styles.buttonText}>Cancelar</Text>  
+            </TouchableOpacity>  
+  
+            <TouchableOpacity  
+              style={[styles.button, styles.addButton]}  
+              onPress={() => {  
+                toggleServiceSelection(selectedServiceDetail)  
+                setServiceDetailModalVisible(false)  
+              }}  
+            >  
+              <Text style={styles.buttonText}>{isSelected ? "Quitar" : "Agregar"}</Text>  
+            </TouchableOpacity>  
           </View>  
         </View>  
       </Modal>  
@@ -476,8 +476,8 @@ const styles = StyleSheet.create({
     elevation: 2,  
   },  
   selectedServiceItem: {  
-    borderWidth: 2,  
     borderColor: "#1a73e8",  
+    borderWidth: 2,  
   },  
   serviceContent: {  
     flex: 1,  
@@ -529,18 +529,18 @@ const styles = StyleSheet.create({
   serviceDetailText: {  
     fontSize: 12,  
     color: "#666",  
-    marginLeft: 6,  
+    marginLeft: 4,  
   },  
   categoryBadge: {  
-    backgroundColor: "#f5f5f5",  
+    backgroundColor: "#f0f0f0",  
     paddingHorizontal: 8,  
     paddingVertical: 4,  
-    borderRadius: 4,  
+    borderRadius: 12,  
     alignSelf: "flex-start",  
   },  
   categoryText: {  
     fontSize: 12,  
-    color: "#333",  
+    color: "#666",  
   },  
   servicePrice: {  
     fontSize: 16,  
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
     padding: 40,  
   },  
   emptyText: {  
-    fontSize: 16,  
+    fontSize: 18,  
     color: "#999",  
     marginTop: 16,  
     textAlign: "center",  
@@ -600,26 +600,17 @@ const styles = StyleSheet.create({
   confirmButtonText: {  
     color: "#fff",  
     fontWeight: "bold",  
-    fontSize: 16,  
-  },  
-  modalOverlay: {  
-    flex: 1,  
-    backgroundColor: "rgba(0, 0, 0, 0.5)",  
-    justifyContent: "center",  
-    alignItems: "center",  
   },  
   modalContainer: {  
-    width: "90%",  
-    maxHeight: "80%",  
+    flex: 1,  
     backgroundColor: "#fff",  
-    borderRadius: 12,  
-    overflow: "hidden",  
   },  
   modalHeader: {  
     flexDirection: "row",  
-    justifyContent: "space-between",  
     alignItems: "center",  
-    padding: 16,  
+    justifyContent: "space-between",  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
     borderBottomWidth: 1,  
     borderBottomColor: "#e1e4e8",  
   },  
@@ -628,7 +619,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",  
     color: "#333",  
   },  
-  modalCloseButton: {  
+  closeButton: {  
     padding: 8,  
   },  
   modalContent: {  
@@ -668,26 +659,10 @@ const styles = StyleSheet.create({
     color: "#333",  
     fontWeight: "500",  
   },  
-  notesSection: {  
-    backgroundColor: "#fff3cd",  
-    borderRadius: 8,  
-    padding: 12,  
-    marginBottom: 16,  
-  },  
-  notesLabel: {  
-    fontSize: 14,  
-    fontWeight: "bold",  
-    color: "#856404",  
-    marginBottom: 4,  
-  },  
-  notesText: {  
-    fontSize: 14,  
-    color: "#856404",  
-    lineHeight: 18,  
-  },  
   modalFooter: {  
     flexDirection: "row",  
-    padding: 16,  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
     borderTopWidth: 1,  
     borderTopColor: "#e1e4e8",  
     gap: 12,  
@@ -696,20 +671,17 @@ const styles = StyleSheet.create({
     flex: 1,  
     paddingVertical: 12,  
     borderRadius: 8,  
-    justifyContent: "center",  
     alignItems: "center",  
   },  
   cancelButton: {  
-    backgroundColor: "transparent",  
-    borderWidth: 1,  
-    borderColor: "#e1e4e8",  
+    backgroundColor: "#f5f5f5",  
   },  
-  selectButton: {  
+  addButton: {  
     backgroundColor: "#1a73e8",  
   },  
   buttonText: {  
     fontSize: 16,  
     fontWeight: "bold",  
-    color: "#fff",  
+    color: "#333",  
   },  
-})  
+})

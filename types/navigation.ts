@@ -1,112 +1,117 @@
-import { StackNavigationProp } from "@react-navigation/stack"
-
-// Tipos para la navegación de la aplicación
-// Este archivo centraliza todas las definiciones de tipos relacionados con la navegación
-
-export type RootStackParamList = {
-  // Pantallas de órdenes
-  OrderDetail: { orderId: string }
-  NewOrder: undefined
-  UpdateOrder: { orderId: string }
-  OrderStatus: { orderId: string }
-  OrderParts: { orderId: string }
+import { StackNavigationProp } from "@react-navigation/stack"  
   
-  // Pantallas de clientes
-  ClientDetail: { clientId: string }
-  NewClient: undefined
-  ClientOrders: { clientId: string }
-  ClientVehicles: { clientId: string }
+// Tipos centralizados para la navegación de la aplicación  
+export type RootStackParamList = {  
+  // Dashboard  
+  Dashboard: undefined  
+    
+  // Órdenes  
+  Orders: undefined  
+  OrderDetail: { orderId: string }  
+  NewOrder: { clientId?: string; vehicleId?: string } | undefined  
+  UpdateOrder: { orderId: string }  
+  OrderStatus: { orderId: string }  
+  OrderParts: { orderId: string }  
+  OrderHistory: undefined  
+    
+  // Clientes  
+  Clients: undefined  
+  ClientDetail: { clientId: string }  
+  NewClient: undefined  
+  ClientOrders: { clientId: string }  
+  ClientVehicles: { clientId: string }  
+    
+  // Vehículos  
+  VehicleDetail: { vehicleId: string }  
+  NewVehicle: { clientId: string }  
+    
+  // Inventario  
+  Inventory: undefined  
+  InventoryItemDetail: { itemId: string }  
+  NewInventoryItem: undefined  
+    
+  // Citas  
+  Appointments: undefined  
+  AppointmentDetail: { appointmentId: string }  
+    
+  // Reportes  
+  Reports: undefined  
+  Analytics: undefined  
+  FinancialReports: undefined  
+    
+  // Perfil  
+  Profile: undefined  
+  Settings: undefined  
+  ChangePassword: undefined  
+    
+  // Selección  
+  ServiceSelection: { orderId: string }  
+  PartSelection: { orderId: string; onPartSelect?: (parts: any[]) => void }  
+    
+  // Kanban  
+  Kanban: undefined  
+    
+  // Notificaciones y ayuda  
+  Notifications: undefined  
+  Help: undefined  
+  About: undefined  
+}  
   
-  // Pantallas de inventario
-  Inventory: undefined
-  InventoryItemDetail: { itemId: string }
-  NewInventoryItem: undefined
+// Tipos específicos para cada stack  
+export type ClientStackParamList = Pick<RootStackParamList,   
+  'Clients' | 'ClientDetail' | 'NewClient' | 'OrderDetail' | 'NewOrder' | 'VehicleDetail'  
+>  
   
-  // Pantallas de citas
-  Appointments: undefined
-  AppointmentDetail: { appointmentId: string }
+export type ClientVehiclesStackParamList = Pick<RootStackParamList,  
+  'ClientVehicles' | 'VehicleDetail' | 'OrderDetail' | 'NewOrder' | 'NewVehicle'  
+>  
   
-  // Pantallas de reportes
-  Reports: undefined
+export type ClientOrdersStackParamList = Pick<RootStackParamList,  
+  'ClientOrders' | 'OrderDetail' | 'NewOrder'  
+>  
   
-  // Pantallas de perfil
-  Profile: undefined
+export type InventoryStackParamList = Pick<RootStackParamList,  
+  'Inventory' | 'InventoryItemDetail' | 'NewInventoryItem'  
+>  
   
-  // Pantallas de dashboard
-  Dashboard: undefined
+export type OrdersStackParamList = Pick<RootStackParamList,  
+  'Kanban' | 'OrderDetail' | 'UpdateOrder' | 'OrderParts' | 'VehicleDetail' | 'ServiceSelection' | 'PartSelection'  
+>  
   
-  // Pantallas de selección
-  ServiceSelection: { orderId: string }
-  PartSelection: { orderId: string }
-}
-
-// Tipo específico para el ClientStack
-export type ClientStackParamList = {
-  Clients: undefined
-  ClientDetail: { clientId: string }
-  NewClient: undefined
-  OrderDetail: { orderId: string }
-  NewOrder: undefined
-  VehicleDetail: { vehicleId: string }
-}
-
-export type ClientVehiclesStackParamList = {
-  ClientVehicles: undefined
-  VehicleDetail: { vehicleId: string }
-  OrderDetail: { orderId: string }
-  NewOrder: undefined
-  NewVehicle: { clientId: string }
-}
-
-export type ClientOrdersStackParamList = {
-  ClientOrders: undefined
-  OrderDetail: { orderId: string }
-  NewOrder: undefined
-}
-
-export type InventoryStackParamList = {
-  Inventory: undefined
-  InventoryItemDetail: { itemId: string }
-  NewInventoryItem: undefined
-}
-
-export type OrdersStackParamList = {
-  Kanban: undefined
-  OrderDetail: { orderId: string }
-  UpdateOrder: { orderId: string }
-  OrderParts: { orderId: string }
-  VehicleDetail: { vehicleId: string }
-}
-
-export type ProfileStackParamList = {
-  Profile: undefined
-}
-
-export type ReportsStackParamList = {
-  Reports: undefined
-}
-
-// Tipos para los parámetros de navegación específicos
-export type OrderDetailParams = {
-  orderId: string
-}
-
-export type ClientDetailParams = {
-  clientId: string
-}
-
-export type InventoryItemDetailParams = {
-  itemId: string
-}
-
-export type AppointmentDetailParams = {
-  appointmentId: string
-}
-
-export type ServiceSelectionParams = {
-  orderId: string
-}
-
-export type PartSelectionParams = {
-  orderId: string
-}
+export type ProfileStackParamList = Pick<RootStackParamList,  
+  'Profile' | 'Settings' | 'ChangePassword'  
+>  
+  
+export type ReportsStackParamList = Pick<RootStackParamList,  
+  'Reports' | 'Analytics' | 'FinancialReports'  
+>  
+  
+// Tipos para parámetros específicos  
+export type OrderDetailParams = {  
+  orderId: string  
+}  
+  
+export type ClientDetailParams = {  
+  clientId: string  
+}  
+  
+export type InventoryItemDetailParams = {  
+  itemId: string  
+}  
+  
+export type VehicleDetailParams = {  
+  vehicleId: string  
+}  
+  
+export type NewOrderParams = {  
+  clientId?: string  
+  vehicleId?: string  
+}  
+  
+export type PartSelectionParams = {  
+  orderId: string  
+  onPartSelect?: (parts: any[]) => void  
+}  
+  
+// Tipos de navegación para componentes  
+export type NavigationProp<T extends keyof RootStackParamList> = StackNavigationProp<RootStackParamList, T>

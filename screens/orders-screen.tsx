@@ -1,43 +1,55 @@
 "use client"  
   
-import { useState, useCallback, useEffect } from "react"  
+import { useState, useCallback } from "react"  
 import {  
   View,  
   Text,  
   FlatList,  
   TouchableOpacity,  
+  TextInput,  
   StyleSheet,  
   ActivityIndicator,  
   RefreshControl,  
   Alert,  
-  TextInput,  
-  Modal,  
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
-import { StackNavigationProp } from "@react-navigation/stack"  
+import { StackNavigationProp } from '@react-navigation/stack'  
+import { RouteProp } from '@react-navigation/native'  
 import { useAuth } from "../context/auth-context"  
 import { orderService } from "../services/supabase/order-service"  
+import { clientService } from "../services/supabase/client-service"  
+import { vehicleService } from "../services/supabase/vehicle-service"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service"  
-import { Order, OrderStatus } from '../types/order'  
 import { RootStackParamList } from '../types/navigation'  
+import { Order } from '../types/order'  
+import { Client } from '../types/client'  
+import { Vehicle } from '../types/vehicle'  
   
-interface OrdersScreenProps {  
-  navigation: StackNavigationProp<RootStackParamList>  
+type OrdersNavigationProp = StackNavigationProp<RootStackParamList, 'Orders'>  
+type OrdersRouteProp = RouteProp<RootStackParamList, 'Orders'>  
+  
+interface Props {  
+  navigation: OrdersNavigationProp  
+  route: OrdersRouteProp  
 }  
   
-export default function OrdersScreen({ navigation }: OrdersScreenProps) {  
+interface EnhancedOrder extends Order {  
+  clientName?: string  
+  vehicleInfo?: string  
+}  
+  
+export default function OrdersScreen({ navigation, route }: Props) {  
   const { user } = useAuth()  
-  const [orders, setOrders] = useState<Order[]>([])  
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([])  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
+  const [orders, setOrders] = useState<EnhancedOrder[]>([])  
+  const [filteredOrders, setFilteredOrders] = useState<EnhancedOrder[]>([])  
   const [searchTerm, setSearchTerm] = useState("")  
-  const [filterStatus, setFilterStatus] = useState<OrderStatus | "all">("all")  
-  const [filterModalVisible, setFilterModalVisible] = useState(false)  
+  const [selectedStatus, setSelectedStatus] = useState<string>("all")  
   
   const loadOrders = useCallback(async () => {  
     try {  
@@ -46,7 +58,7 @@ export default function OrdersScreen({ navigation }: OrdersScreenProps) {
   
       if (!user?.id) return  
   
-      // Validar permisos del usuario siguiendo el patrón establecido  
+      // Validar permisos del usuario  
       const userId = user.id as string  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(userId)  
         
@@ -58,18 +70,45 @@ export default function OrdersScreen({ navigation }: OrdersScreenProps) {
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
+      // Cargar órdenes según el rol  
       let ordersData: Order[] = []  
-  
+        
       if (userPermissions?.rol === 'client') {  
-        // Los clientes solo ven sus propias órdenes  
-        ordersData = await orderService.getOrdersByClientId(userId)  
+        // Cliente: solo sus órdenes  
+        const client = await clientService.getClientByUserId(userId)  
+        if (client) {  
+          ordersData = await orderService.getOrdersByClientId(client.id)  
+        }  
       } else {  
-        // Staff ve todas las órdenes del taller  
+        // Staff: todas las órdenes  
         ordersData = await orderService.getAllOrders()  
       }  
   
-      setOrders(ordersData)  
-      setFilteredOrders(ordersData)  
+      // Cargar datos relacionados para cada orden  
+      const [clients, vehicles] = await Promise.all([  
+        clientService.getAllClients(),  
+        vehicleService.getAllVehicles()  
+      ])  
+  
+      // Enriquecer órdenes con información de cliente y vehículo  
+      const enhancedOrders: EnhancedOrder[] = ordersData.map(order => {  
+        const client = clients.find(c => c.id === order.clientId)  
+        const vehicle = vehicles.find(v => v.id === order.vehicleId)  
+          
+        return {  
+          ...order,  
+          clientName: client?.name || "Cliente no especificado",  
+          vehicleInfo: vehicle ? `${vehicle.make} ${vehicle.model}` : "Vehículo no especificado"  
+        }  
+      })  
+  
+      // Ordenar por fecha de creación (más recientes primero)  
+      enhancedOrders.sort((a, b) =>   
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()  
+      )  
+  
+      setOrders(enhancedOrders)  
+      setFilteredOrders(enhancedOrders)  
   
     } catch (error) {  
       console.error("Error loading orders:", error)  
@@ -86,53 +125,72 @@ export default function OrdersScreen({ navigation }: OrdersScreenProps) {
     }, [loadOrders])  
   )  
   
-  const applyFilters = useCallback(() => {  
+  const filterOrders = useCallback(() => {  
     let filtered = orders  
   
-    if (filterStatus !== "all") {  
-      filtered = filtered.filter(order => order.status === filterStatus)  
-    }  
-  
-    if (searchTerm.trim() !== "") {  
+    // Filtrar por término de búsqueda  
+    if (searchTerm) {  
       filtered = filtered.filter(order =>  
-        order.number?.toLowerCase().includes(searchTerm.toLowerCase()) ||  
+        order.orderNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||  
         order.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||  
-        order.clientName?.toLowerCase().includes(searchTerm.toLowerCase())  
+        order.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||  
+        order.vehicleInfo?.toLowerCase().includes(searchTerm.toLowerCase())  
       )  
     }  
   
-    setFilteredOrders(filtered)  
-  }, [orders, filterStatus, searchTerm])  
+    // Filtrar por estado  
+    if (selectedStatus !== "all") {  
+      filtered = filtered.filter(order => order.status === selectedStatus)  
+    }  
   
-  useEffect(() => {  
-    applyFilters()  
-  }, [applyFilters])  
+    setFilteredOrders(filtered)  
+  }, [orders, searchTerm, selectedStatus])  
+  
+  // Aplicar filtros cuando cambien las dependencias  
+  useFocusEffect(  
+    useCallback(() => {  
+      filterOrders()  
+    }, [filterOrders])  
+  )  
+  
+  const handleOrderPress = (order: EnhancedOrder) => {  
+    navigation.navigate("OrderDetail", { orderId: order.id })  
+  }  
+  
+  const handleAddOrder = () => {  
+    navigation.navigate("NewOrder")  
+  }  
+  
+  const onRefresh = () => {  
+    setRefreshing(true)  
+    loadOrders()  
+  }  
   
   const getStatusColor = (status: string) => {  
     switch (status) {  
-      case "reception": return "#1a73e8"  
-      case "diagnosis": return "#9c27b0"  
-      case "waiting_parts": return "#ff9800"  
-      case "in_progress": return "#4caf50"  
-      case "quality_check": return "#2196f3"  
-      case "completed": return "#607d8b"  
-      case "delivered": return "#4caf50"  
-      case "cancelled": return "#f44336"  
-      default: return "#666"  
+      case 'reception': return '#ff9800'  
+      case 'diagnosis': return '#2196f3'  
+      case 'waiting_parts': return '#9c27b0'  
+      case 'in_progress': return '#ff5722'  
+      case 'quality_check': return '#607d8b'  
+      case 'completed': return '#4caf50'  
+      case 'delivered': return '#8bc34a'  
+      case 'cancelled': return '#f44336'  
+      default: return '#666'  
     }  
   }  
   
   const getStatusText = (status: string) => {  
     switch (status) {  
-      case "reception": return "Recepción"  
-      case "diagnosis": return "Diagnóstico"  
-      case "waiting_parts": return "Esperando Repuestos"  
-      case "in_progress": return "En Proceso"  
-      case "quality_check": return "Control de Calidad"  
-      case "completed": return "Completada"  
-      case "delivered": return "Entregada"  
-      case "cancelled": return "Cancelada"  
-      default: return "Desconocido"  
+      case 'reception': return 'Recepción'  
+      case 'diagnosis': return 'Diagnóstico'  
+      case 'waiting_parts': return 'Esperando Repuestos'  
+      case 'in_progress': return 'En Proceso'  
+      case 'quality_check': return 'Control de Calidad'  
+      case 'completed': return 'Completada'  
+      case 'delivered': return 'Entregada'  
+      case 'cancelled': return 'Cancelada'  
+      default: return status  
     }  
   }  
   
@@ -140,42 +198,41 @@ export default function OrdersScreen({ navigation }: OrdersScreenProps) {
     return amount.toLocaleString("es-ES", {  
       style: "currency",  
       currency: "USD",  
-      minimumFractionDigits: 2,  
+      minimumFractionDigits: 0,  
+      maximumFractionDigits: 0,  
     })  
   }  
   
-  const renderOrderItem = ({ item }: { item: Order }) => (  
+  const renderOrderItem = ({ item }: { item: EnhancedOrder }) => (  
     <TouchableOpacity  
       style={styles.orderCard}  
-      onPress={() => navigation.navigate("OrderDetail", { orderId: item.id })}  
+      onPress={() => handleOrderPress(item)}  
     >  
       <View style={styles.orderHeader}>  
-        <Text style={styles.orderNumber}>Orden #{item.number}</Text>  
+        <Text style={styles.orderNumber}>#{item.orderNumber || item.id.slice(0, 8)}</Text>  
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>  
           <Text style={styles.statusText}>{getStatusText(item.status)}</Text>  
         </View>  
       </View>  
   
       <Text style={styles.orderDescription} numberOfLines={2}>  
-        {item.description}  
+        {item.description || 'Sin descripción'}  
       </Text>  
   
       <View style={styles.orderDetails}>  
-        <View style={styles.orderDetailItem}>  
-          <Feather name="user" size={14} color="#666" />  
-          <Text style={styles.orderDetailText}>{item.clientName || "Cliente no especificado"}</Text>  
-        </View>  
-        <View style={styles.orderDetailItem}>  
-          <Feather name="truck" size={14} color="#666" />  
-          <Text style={styles.orderDetailText}>{item.vehicleInfo || "Vehículo no especificado"}</Text>  
-        </View>  
+        <Text style={styles.orderDetailText}>{item.clientName || "Cliente no especificado"}</Text>  
+        <Text style={styles.orderDetailText}>{item.vehicleInfo || "Vehículo no especificado"}</Text>  
       </View>  
   
       <View style={styles.orderFooter}>  
         <Text style={styles.orderDate}>  
-          {new Date(item.createdAt).toLocaleDateString("es-ES")}  
+          {new Date(item.created_at).toLocaleDateString('es-ES')}  
         </Text>  
-        <Text style={styles.orderAmount}>{formatCurrency(item.total || 0)}</Text>  
+        {item.total && (  
+          <Text style={styles.orderTotal}>  
+            {formatCurrency(item.total)}  
+          </Text>  
+        )}  
       </View>  
     </TouchableOpacity>  
   )  
@@ -203,20 +260,9 @@ export default function OrdersScreen({ navigation }: OrdersScreenProps) {
   
   return (  
     <View style={styles.container}>  
+      {/* Header con búsqueda */}  
       <View style={styles.header}>  
-        <Text style={styles.headerTitle}>Órdenes de Trabajo</Text>  
-        {userRole !== 'client' && (  
-          <TouchableOpacity  
-            style={styles.addButton}  
-            onPress={() => navigation.navigate("NewOrder")}  
-          >  
-            <Feather name="plus" size={24} color="#fff" />  
-          </TouchableOpacity>  
-        )}  
-      </View>  
-  
-      <View style={styles.searchContainer}>  
-        <View style={styles.searchInputContainer}>  
+        <View style={styles.searchContainer}>  
           <Feather name="search" size={20} color="#666" />  
           <TextInput  
             style={styles.searchInput}  
@@ -225,26 +271,67 @@ export default function OrdersScreen({ navigation }: OrdersScreenProps) {
             onChangeText={setSearchTerm}  
           />  
         </View>  
-        <TouchableOpacity  
-          style={styles.filterButton}  
-          onPress={() => setFilterModalVisible(true)}  
-        >  
-          <Feather name="filter" size={20} color="#1a73e8" />  
-        </TouchableOpacity>  
+          
+        {userRole !== 'client' && (  
+          <TouchableOpacity style={styles.addButton} onPress={handleAddOrder}>  
+            <Feather name="plus" size={24} color="#fff" />  
+          </TouchableOpacity>  
+        )}  
       </View>  
   
+      {/* Filtros de estado */}  
+      <View style={styles.filtersContainer}>  
+        <Text style={styles.filterLabel}>Filtrar por estado:</Text>  
+        <View style={styles.statusFilters}>  
+          {[  
+            { key: "all", label: "Todas" },  
+            { key: "reception", label: "Recepción" },  
+            { key: "diagnosis", label: "Diagnóstico" },  
+            { key: "in_progress", label: "En Proceso" },  
+            { key: "completed", label: "Completadas" },  
+            { key: "delivered", label: "Entregadas" },  
+          ].map((filter) => (  
+            <TouchableOpacity  
+              key={filter.key}  
+              style={[  
+                styles.filterButton,  
+                selectedStatus === filter.key && styles.filterButtonSelected  
+              ]}  
+              onPress={() => setSelectedStatus(filter.key)}  
+            >  
+              <Text style={[  
+                styles.filterButtonText,  
+                selectedStatus === filter.key && styles.filterButtonTextSelected  
+              ]}>  
+                {filter.label}  
+              </Text>  
+            </TouchableOpacity>  
+          ))}  
+        </View>  
+      </View>  
+  
+      {/* Lista de órdenes */}  
       <FlatList  
         data={filteredOrders}  
         renderItem={renderOrderItem}  
         keyExtractor={(item) => item.id}  
         contentContainerStyle={styles.listContainer}  
         refreshControl={  
-          <RefreshControl refreshing={refreshing} onRefresh={loadOrders} />  
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />  
         }  
         ListEmptyComponent={  
           <View style={styles.emptyContainer}>  
             <Feather name="clipboard" size={64} color="#ccc" />  
-            <Text style={styles.emptyText}>No hay órdenes disponibles</Text>  
+            <Text style={styles.emptyText}>  
+              {searchTerm || selectedStatus !== "all"  
+                ? "No se encontraron órdenes con los filtros aplicados"  
+                : "No hay órdenes disponibles"}  
+            </Text>  
+            {userRole !== 'client' && (  
+              <TouchableOpacity style={styles.emptyButton} onPress={handleAddOrder}>  
+                <Text style={styles.emptyButtonText}>Crear Primera Orden</Text>  
+              </TouchableOpacity>  
+            )}  
           </View>  
         }  
       />  
@@ -294,36 +381,13 @@ const styles = StyleSheet.create({
   header: {  
     flexDirection: "row",  
     alignItems: "center",  
-    justifyContent: "space-between",  
     paddingHorizontal: 16,  
     paddingVertical: 12,  
     backgroundColor: "#fff",  
     borderBottomWidth: 1,  
     borderBottomColor: "#e1e4e8",  
-  },  
-  headerTitle: {  
-    fontSize: 18,  
-    fontWeight: "bold",  
-    color: "#333",  
-  },  
-  addButton: {  
-    width: 40,  
-    height: 40,  
-    borderRadius: 20,  
-    backgroundColor: "#1a73e8",  
-    justifyContent: "center",  
-    alignItems: "center",  
   },  
   searchContainer: {  
-    flexDirection: "row",  
-    alignItems: "center",  
-    paddingHorizontal: 16,  
-    paddingVertical: 12,  
-    backgroundColor: "#fff",  
-    borderBottomWidth: 1,  
-    borderBottomColor: "#e1e4e8",  
-  },  
-  searchInputContainer: {  
     flex: 1,  
     flexDirection: "row",  
     alignItems: "center",  
@@ -339,27 +403,66 @@ const styles = StyleSheet.create({
     fontSize: 16,  
     color: "#333",  
   },  
-  filterButton: {  
-    width: 40,  
-    height: 40,  
-    borderRadius: 8,  
-    backgroundColor: "#e8f0fe",  
+  addButton: {  
+    backgroundColor: "#1a73e8",  
+    width: 48,  
+    height: 48,  
+    borderRadius: 24,  
     justifyContent: "center",  
     alignItems: "center",  
+  },  
+  filtersContainer: {  
+    backgroundColor: "#fff",  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  filterLabel: {  
+    fontSize: 14,  
+    fontWeight: "600",  
+    color: "#333",  
+    marginBottom: 8,  
+  },  
+  statusFilters: {  
+    flexDirection: "row",  
+    flexWrap: "wrap",  
+    gap: 8,  
+  },  
+  filterButton: {  
+    paddingHorizontal: 12,  
+    paddingVertical: 6,  
+    backgroundColor: "#f5f5f5",  
+    borderRadius: 16,  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  filterButtonSelected: {  
+    backgroundColor: "#1a73e8",  
+    borderColor: "#1a73e8",  
+  },  
+  filterButtonText: {  
+    fontSize: 14,  
+    color: "#666",  
+    fontWeight: "500",  
+  },  
+  filterButtonTextSelected: {  
+    color: "#fff",  
+    fontWeight: "600",  
   },  
   listContainer: {  
     padding: 16,  
   },  
   orderCard: {  
     backgroundColor: "#fff",  
-    borderRadius: 8,  
+    borderRadius: 12,  
     padding: 16,  
     marginBottom: 12,  
     shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 1 },  
+    shadowOffset: { width: 0, height: 2 },  
     shadowOpacity: 0.1,  
-    shadowRadius: 2,  
-    elevation: 2,  
+    shadowRadius: 4,  
+    elevation: 3,  
   },  
   orderHeader: {  
     flexDirection: "row",  
@@ -368,7 +471,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,  
   },  
   orderNumber: {  
-    fontSize: 16,  
+    fontSize: 18,  
     fontWeight: "bold",  
     color: "#333",  
   },  
@@ -378,27 +481,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,  
   },  
   statusText: {  
-    color: "#fff",  
     fontSize: 12,  
+    color: "#fff",  
     fontWeight: "bold",  
   },  
   orderDescription: {  
     fontSize: 14,  
     color: "#666",  
     marginBottom: 12,  
+    lineHeight: 20,  
   },  
   orderDetails: {  
     marginBottom: 12,  
   },  
-  orderDetailItem: {  
-    flexDirection: "row",  
-    alignItems: "center",  
-    marginBottom: 4,  
-  },  
   orderDetailText: {  
     fontSize: 14,  
-    color: "#666",  
-    marginLeft: 6,  
+    color: "#888",  
+    marginBottom: 4,  
   },  
   orderFooter: {  
     flexDirection: "row",  
@@ -409,7 +508,7 @@ const styles = StyleSheet.create({
     fontSize: 12,  
     color: "#999",  
   },  
-  orderAmount: {  
+  orderTotal: {  
     fontSize: 16,  
     fontWeight: "bold",  
     color: "#4caf50",  
@@ -424,54 +523,18 @@ const styles = StyleSheet.create({
     fontSize: 18,  
     color: "#999",  
     marginTop: 16,  
+    marginBottom: 20,  
     textAlign: "center",  
   },  
-  modalContainer: {  
-    flex: 1,  
-    backgroundColor: "#fff",  
-  },  
-  modalHeader: {  
-    flexDirection: "row",  
-    justifyContent: "space-between",  
-    alignItems: "center",  
-    padding: 16,  
-    borderBottomWidth: 1,  
-    borderBottomColor: "#e1e4e8",  
-  },  
-  modalTitle: {  
-    fontSize: 20,  
-    fontWeight: "bold",  
-    color: "#333",  
-  },  
-  closeButton: {  
-    padding: 8,  
-  },  
-  modalContent: {  
-    flex: 1,  
-    padding: 16,  
-  },  
-  filterSectionTitle: {  
-    fontSize: 18,  
-    fontWeight: "bold",  
-    color: "#333",  
-    marginBottom: 16,  
-  },  
-  filterOption: {  
-    paddingVertical: 12,  
-    paddingHorizontal: 16,  
-    borderRadius: 8,  
-    marginBottom: 8,  
-    backgroundColor: "#f5f5f5",  
-  },  
-  filterOptionSelected: {  
+  emptyButton: {  
     backgroundColor: "#1a73e8",  
+    paddingHorizontal: 20,  
+    paddingVertical: 12,  
+    borderRadius: 8,  
   },  
-  filterOptionText: {  
-    fontSize: 16,  
-    color: "#333",  
-  },  
-  filterOptionTextSelected: {  
+  emptyButtonText: {  
     color: "#fff",  
     fontWeight: "bold",  
+    fontSize: 16,  
   },  
 })

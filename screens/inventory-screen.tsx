@@ -11,49 +11,36 @@ import {
   ActivityIndicator,  
   RefreshControl,  
   Alert,  
-  Modal,  
-  ScrollView,  
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
+import { StackNavigationProp } from '@react-navigation/stack'  
 import { useAuth } from "../context/auth-context"  
 import { inventoryService } from "../services/supabase/inventory-service"  
-import { accessService} from "../services/supabase/access-service"  
-import { userService } from "../services/supabase/user-service"
-import { getSuppliers, getInventoryCategories } from "../services/supabase/services-service"
-import { InventoryItem } from "../types/inventory"
-import { InventoryScreenProps, UiScreenNavProp } from "../types"
-
-// Tipo personalizado para mapear los datos del inventario con las propiedades correctas
-type InventoryItemDisplay = {
-  id: string
-  name: string
-  sku: string
-  description: string
-  category: string
-  supplier: string
-  location: string
-  stock: number
-  minStock: number
-  cost: number
-  priceUSD: number
-}
-
-export default function InventoryScreen({ navigation }: InventoryScreenProps) {  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service"  
+import { InventoryStackParamList } from '../types/navigation'  
+import { InventoryItem, MaterialCategory, Supplier, mapLegacyFields } from '../types/inventory'  
+  
+type InventoryScreenNavigationProp = StackNavigationProp<InventoryStackParamList, 'Inventory'>  
+  
+interface Props {  
+  navigation: InventoryScreenNavigationProp  
+}  
+  
+export default function InventoryScreen({ navigation }: Props) {  
   const { user } = useAuth()  
-  const [inventory, setInventory] = useState<InventoryItem[]>([])  
-  const [categories, setCategories] = useState<any[]>([])  
-  const [suppliers, setSuppliers] = useState<any[]>([])  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
-  const [searchTerm, setSearchTerm] = useState("")  
-  const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>([])  
-  const [selectedCategory, setSelectedCategory] = useState<string>("all")  
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)  
-  const [itemDetailModalVisible, setItemDetailModalVisible] = useState(false)  
-  const [filterModalVisible, setFilterModalVisible] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])  
+  const [filteredItems, setFilteredItems] = useState<InventoryItem[]>([])  
+  const [categories, setCategories] = useState<MaterialCategory[]>([])  
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])  
+  const [searchTerm, setSearchTerm] = useState("")  
+  const [selectedCategory, setSelectedCategory] = useState<string>("all")  
+  const [showLowStock, setShowLowStock] = useState(false)  
   
   const loadInventoryData = useCallback(async () => {  
     try {  
@@ -63,16 +50,19 @@ export default function InventoryScreen({ navigation }: InventoryScreenProps) {
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await userService.GET_TALLER_ID(user.id)
-      if (!userTallerId) {
-        setError("No se pudo cargar la información del cliente")  
-        return
+      const userId = user.id as string  
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(userId)  
+        
+      if (!userTallerId) {  
+        setError("No se pudo obtener la información del taller")  
+        return  
       }  
-      const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+        
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
-      if (userPermissions?.rol === 'client') {
-        // Los clientes no tienen acceso al inventario  
+      // Solo staff puede ver inventario  
+      if (userPermissions?.rol === 'client') {  
         setError("No tienes permisos para ver el inventario")  
         return  
       }  
@@ -80,17 +70,20 @@ export default function InventoryScreen({ navigation }: InventoryScreenProps) {
       // Cargar datos del inventario  
       const [inventoryData, categoriesData, suppliersData] = await Promise.all([  
         inventoryService.getAllInventory(),  
-        getInventoryCategories(),  
-        getSuppliers()  
+        inventoryService.getInventoryCategories(),  
+        inventoryService.getSuppliers()  
       ])  
   
-      setInventory(inventoryData)  
+      // Mapear campos legacy para compatibilidad  
+      const mappedInventory = inventoryData.map(mapLegacyFields)  
+        
+      setInventoryItems(mappedInventory)  
+      setFilteredItems(mappedInventory)  
       setCategories(categoriesData)  
       setSuppliers(suppliersData)  
-      setFilteredInventory(inventoryData)  
   
     } catch (error) {  
-      console.error("Error loading inventory:", error)  
+      console.error("Error loading inventory data:", error)  
       setError("No se pudo cargar el inventario")  
     } finally {  
       setLoading(false)  
@@ -104,51 +97,48 @@ export default function InventoryScreen({ navigation }: InventoryScreenProps) {
     }, [loadInventoryData])  
   )  
   
-  const handleSearch = useCallback((text: string) => {  
-    setSearchTerm(text)  
-    applyFilters(text, selectedCategory)  
-  }, [selectedCategory, inventory])  
+  const filterItems = useCallback(() => {  
+    let filtered = inventoryItems  
   
-  const handleCategoryFilter = useCallback((categoryId: string) => {  
-    setSelectedCategory(categoryId)  
-    applyFilters(searchTerm, categoryId)  
-    setFilterModalVisible(false)  
-  }, [searchTerm, inventory])  
-  
-  const applyFilters = useCallback((search: string, category: string) => {  
-    let filtered = inventory  
-  
-    // Filtrar por categoría  
-    if (category !== "all") {  
-      filtered = filtered.filter(item => item.categoria_id === category)  
-    }  
-  
-    // Filtrar por búsqueda  
-    if (search.trim() !== "") {  
+    // Filtrar por término de búsqueda  
+    if (searchTerm) {  
       filtered = filtered.filter(item =>  
-        item.producto?.toLowerCase().includes(search.toLowerCase()) ||  
-        item.codigo?.toLowerCase().includes(search.toLowerCase()) ||  
-        item.descripcion?.toLowerCase().includes(search.toLowerCase()) ||  
-        item.categoria_nombre?.toLowerCase().includes(search.toLowerCase()) ||  
-        item.proveedor_nombre?.toLowerCase().includes(search.toLowerCase())  
+        (item.producto || item.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||  
+        (item.id || item.sku || '').toLowerCase().includes(searchTerm.toLowerCase())  
       )  
     }  
   
-    setFilteredInventory(filtered)  
-  }, [inventory])  
+    // Filtrar por categoría  
+    if (selectedCategory !== "all") {  
+      filtered = filtered.filter(item => item.categoria_id === selectedCategory)  
+    }  
+  
+    // Filtrar por stock bajo  
+    if (showLowStock) {  
+      filtered = filtered.filter(item => (item.cantidad || item.stock || 0) <= (item.minStock || 5))  
+    }  
+  
+    setFilteredItems(filtered)  
+  }, [inventoryItems, searchTerm, selectedCategory, showLowStock])  
+  
+  // Aplicar filtros cuando cambien las dependencias  
+  useFocusEffect(  
+    useCallback(() => {  
+      filterItems()  
+    }, [filterItems])  
+  )  
   
   const handleItemPress = (item: InventoryItem) => {  
-    setSelectedItem(item)  
-    setItemDetailModalVisible(true)  
+    navigation.navigate("InventoryItemDetail", { itemId: item.id })  
   }  
   
   const handleAddItem = () => {  
     navigation.navigate("NewInventoryItem")  
   }  
   
-  const handleEditItem = (item: InventoryItem) => {  
-    setItemDetailModalVisible(false)  
-    ;(navigation as any).navigate("InventoryItemDetail", { itemId: item.id })  
+  const onRefresh = () => {  
+    setRefreshing(true)  
+    loadInventoryData()  
   }  
   
   const formatCurrency = (amount: number) => {  
@@ -160,282 +150,68 @@ export default function InventoryScreen({ navigation }: InventoryScreenProps) {
   }  
   
   const getStockStatus = (item: InventoryItem) => {  
-    if ((item.stock_actual ?? 0) === 0) {  
-      return { status: "Sin Stock", color: "#f44336" }  
-    } else if (item.stock_minimo && (item.stock_actual ?? 0) <= item.stock_minimo) {  
-      return { status: "Stock Bajo", color: "#ff9800" }  
-    } else {  
-      return { status: "En Stock", color: "#4caf50" }  
-    }  
+    const stock = item.cantidad || item.stock || 0  
+    const minStock = item.minStock || 5  
+      
+    if (stock === 0) return { status: "out", color: "#f44336", text: "Agotado" }  
+    if (stock <= minStock) return { status: "low", color: "#ff9800", text: "Stock Bajo" }  
+    return { status: "ok", color: "#4caf50", text: "En Stock" }  
   }  
   
   const renderInventoryItem = ({ item }: { item: InventoryItem }) => {  
     const stockStatus = getStockStatus(item)  
-      
+    const stock = item.cantidad || item.stock || 0  
+    const price = item.precio_unitario || item.priceUSD || 0  
+  
     return (  
       <TouchableOpacity  
-        style={styles.inventoryCard}  
+        style={styles.itemCard}  
         onPress={() => handleItemPress(item)}  
       >  
-        <View style={styles.inventoryHeader}>  
-          <View style={styles.inventoryIconContainer}>  
-            <Feather name="package" size={24} color="#1a73e8" />  
-          </View>  
-          <View style={styles.inventoryInfo}>  
-            <Text style={styles.inventoryName}>{item.producto}</Text>  
-            <Text style={styles.inventoryCode}>Código: {item.codigo}</Text>  
-            <Text style={styles.inventoryCategory}>  
-              {item.categoria_nombre}  
-            </Text>  
-          </View>  
-          <View style={styles.inventoryStatus}>  
-            <View style={[  
-              styles.stockBadge,  
-              { backgroundColor: stockStatus.color }  
-            ]}>  
-              <Text style={styles.stockText}>{stockStatus.status}</Text>  
-            </View>  
+        <View style={styles.itemHeader}>  
+          <Text style={styles.itemName} numberOfLines={2}>  
+            {item.producto || item.name || 'Sin nombre'}  
+          </Text>  
+          <View style={[styles.stockBadge, { backgroundColor: stockStatus.color }]}>  
+            <Text style={styles.stockBadgeText}>{stockStatus.text}</Text>  
           </View>  
         </View>  
   
-        <View style={styles.inventoryDetails}>  
-          <View style={styles.inventoryDetail}>  
-            <MaterialIcons name="inventory" size={16} color="#666" />  
-                          <Text style={styles.inventoryStock}>  
-                Stock: {item.stock_actual ?? 0} / {item.stock_minimo ?? 0} mín.  
-              </Text>  
+        <Text style={styles.itemCode}>  
+          Código: {item.id || item.sku || 'N/A'}  
+        </Text>  
+  
+        {(item.proceso || item.description) && (  
+          <Text style={styles.itemDescription} numberOfLines={2}>  
+            {item.proceso || item.description}  
+          </Text>  
+        )}  
+  
+        <View style={styles.itemDetails}>  
+          <View style={styles.itemDetailRow}>  
+            <Feather name="package" size={16} color="#666" />  
+            <Text style={styles.itemDetailText}>  
+              Stock: {stock} {item.unidad_medida || 'unidades'}  
+            </Text>  
           </View>  
   
-          {item.proveedor_nombre && (  
-            <View style={styles.inventoryDetail}>  
-              <Feather name="truck" size={16} color="#666" />  
-              <Text style={styles.inventorySupplier}>{item.proveedor_nombre}</Text>  
+          <View style={styles.itemDetailRow}>  
+            <Feather name="dollar-sign" size={16} color="#666" />  
+            <Text style={styles.itemDetailText}>  
+              {formatCurrency(price)}  
+            </Text>  
+          </View>  
+  
+          {item.categoria_nombre && (  
+            <View style={styles.itemDetailRow}>  
+              <Feather name="tag" size={16} color="#666" />  
+              <Text style={styles.itemDetailText}>  
+                {item.categoria_nombre}  
+              </Text>  
             </View>  
           )}  
-  
-          <View style={styles.inventoryDetail}>  
-            <Feather name="map-pin" size={16} color="#666" />  
-            <Text style={styles.inventoryLocation}>{item.ubicacion_almacen}</Text>  
-          </View>  
-        </View>  
-  
-        <View style={styles.inventoryFooter}>  
-          <View style={styles.priceContainer}>  
-            <Text style={styles.priceLabel}>Compra:</Text>  
-            <Text style={styles.priceValue}>  
-              {formatCurrency(item.precio_compra ?? 0)}  
-            </Text>  
-          </View>  
-          <View style={styles.priceContainer}>  
-            <Text style={styles.priceLabel}>Venta:</Text>  
-            <Text style={styles.priceValue}>  
-              {formatCurrency(item.precio_venta ?? 0)}  
-            </Text>  
-          </View>  
         </View>  
       </TouchableOpacity>  
-    )  
-  }  
-  
-  const renderFilterModal = () => (  
-    <Modal  
-      visible={filterModalVisible}  
-      animationType="slide"  
-      presentationStyle="pageSheet"  
-    >  
-      <View style={styles.modalContainer}>  
-        <View style={styles.modalHeader}>  
-          <Text style={styles.modalTitle}>Filtros de Inventario</Text>  
-          <TouchableOpacity  
-            onPress={() => setFilterModalVisible(false)}  
-            style={styles.closeButton}  
-          >  
-            <Feather name="x" size={24} color="#666" />  
-          </TouchableOpacity>  
-        </View>  
-  
-        <ScrollView style={styles.modalContent}>  
-          <Text style={styles.filterLabel}>Categoría</Text>  
-          <TouchableOpacity  
-            style={[  
-              styles.filterOption,  
-              selectedCategory === "all" && styles.filterOptionSelected  
-            ]}  
-            onPress={() => handleCategoryFilter("all")}  
-          >  
-            <Text style={[  
-              styles.filterOptionText,  
-              selectedCategory === "all" && styles.filterOptionTextSelected  
-            ]}>  
-              Todas las categorías  
-            </Text>  
-            {selectedCategory === "all" && (  
-              <Feather name="check" size={20} color="#1a73e8" />  
-            )}  
-          </TouchableOpacity>  
-  
-          {categories.map((category) => (  
-            <TouchableOpacity  
-              key={category.id}  
-              style={[  
-                styles.filterOption,  
-                selectedCategory === category.id && styles.filterOptionSelected  
-              ]}  
-              onPress={() => handleCategoryFilter(category.id)}  
-            >  
-              <Text style={[  
-                styles.filterOptionText,  
-                selectedCategory === category.id && styles.filterOptionTextSelected  
-              ]}>  
-                {category.nombre}  
-              </Text>  
-              {selectedCategory === category.id && (  
-                <Feather name="check" size={20} color="#1a73e8" />  
-              )}  
-            </TouchableOpacity>  
-          ))}  
-        </ScrollView>  
-  
-        <View style={styles.modalFooter}>  
-          <TouchableOpacity  
-            style={[styles.modalButton, styles.resetButton]}  
-            onPress={() => {  
-              setSelectedCategory("all")  
-              setSearchTerm("")  
-              applyFilters("", "all")  
-              setFilterModalVisible(false)  
-            }}  
-          >  
-            <Text style={styles.buttonText}>Reiniciar</Text>  
-          </TouchableOpacity>  
-          <TouchableOpacity  
-            style={[styles.modalButton, styles.applyButton]}  
-            onPress={() => setFilterModalVisible(false)}  
-          >  
-            <Text style={styles.buttonText}>Aplicar</Text>  
-          </TouchableOpacity>  
-        </View>  
-      </View>  
-    </Modal>  
-  )  
-  
-  const renderItemDetailModal = () => {  
-    if (!selectedItem) return null  
-  
-    const stockStatus = getStockStatus(selectedItem)  
-  
-    return (  
-      <Modal  
-        visible={itemDetailModalVisible}  
-        animationType="slide"  
-        presentationStyle="pageSheet"  
-      >  
-        <View style={styles.modalContainer}>  
-          <View style={styles.modalHeader}>  
-            <Text style={styles.modalTitle}>Detalle del Artículo</Text>  
-            <TouchableOpacity  
-              onPress={() => setItemDetailModalVisible(false)}  
-              style={styles.closeButton}  
-            >  
-              <Feather name="x" size={24} color="#666" />  
-            </TouchableOpacity>  
-          </View>  
-  
-          <ScrollView style={styles.modalContent}>  
-            <View style={styles.itemDetailSection}>  
-              <Text style={styles.sectionTitle}>Información General</Text>  
-              <View style={styles.detailRow}>  
-                <Text style={styles.detailLabel}>Nombre:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.producto}</Text>  
-              </View>  
-              <View style={styles.detailRow}>  
-                <Text style={styles.detailLabel}>Código:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.codigo}</Text>  
-              </View>  
-              <View style={styles.detailRow}>  
-                <Text style={styles.detailLabel}>Categoría:</Text>  
-                <Text style={styles.detailValue}>  
-                  {selectedItem.categoria_nombre}  
-                </Text>  
-              </View>  
-              <View style={styles.detailRow}>  
-                <Text style={styles.detailLabel}>Descripción:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.descripcion}</Text>  
-              </View>  
-              <View style={styles.detailRow}>  
-                <Text style={styles.detailLabel}>Proveedor:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.proveedor_nombre}</Text>  
-              </View>  
-              <View style={styles.detailRow}>  
-                <Text style={styles.detailLabel}>Ubicación:</Text>  
-                <Text style={styles.detailValue}>{selectedItem.ubicacion_almacen}</Text>  
-              </View>  
-            </View>  
-  
-            <View style={styles.itemDetailSection}>  
-              <Text style={styles.sectionTitle}>Inventario</Text>  
-              <View style={styles.detailRow}>  
-                <Text style={styles.detailLabel}>Stock Actual:</Text>  
-                <Text style={[  
-                  styles.detailValue,  
-                  { color: stockStatus.color }  
-                ]}>  
-                  {selectedItem.stock_actual ?? 0} unidades  
-                </Text>  
-              </View>  
-              <View style={styles.detailRow}>  
-                <Text style={styles.detailLabel}>Stock Mínimo:</Text>  
-                <Text style={styles.detailValue}>  
-                  {selectedItem.stock_minimo ?? 0} unidades  
-                </Text>  
-              </View>  
-              <View style={styles.detailRow}>  
-                <Text style={styles.detailLabel}>Estado:</Text>  
-                <Text style={[  
-                  styles.detailValue,  
-                  { color: stockStatus.color }  
-                ]}>  
-                  {stockStatus.status}  
-                </Text>  
-              </View>  
-            </View>  
-  
-            <View style={styles.itemDetailSection}>  
-              <Text style={styles.sectionTitle}>Precios</Text>  
-              <View style={styles.detailRow}>  
-                <Text style={styles.detailLabel}>Precio de Compra:</Text>  
-                <Text style={styles.detailValue}>  
-                  {formatCurrency(selectedItem.precio_compra ?? 0)}  
-                </Text>  
-              </View>  
-              <View style={styles.detailRow}>  
-                <Text style={styles.detailLabel}>Precio de Venta:</Text>  
-                <Text style={styles.detailValue}>  
-                  {formatCurrency(selectedItem.precio_venta ?? 0)}  
-                </Text>  
-              </View>  
-              <View style={styles.detailRow}>  
-                <Text style={styles.detailLabel}>Margen:</Text>  
-                <Text style={styles.detailValue}>  
-                  {selectedItem.precio_compra ? (((selectedItem.precio_venta ?? 0) - selectedItem.precio_compra) / selectedItem.precio_compra * 100).toFixed(1) : '0.0'}%  
-                </Text>  
-              </View>  
-            </View>  
-          </ScrollView>  
-  
-          {userRole !== 'client' && (  
-            <View style={styles.modalFooter}>  
-              <TouchableOpacity  
-                style={[styles.modalButton, styles.editButton]}  
-                onPress={() => selectedItem && handleEditItem(selectedItem)}  
-              >  
-                <Feather name="edit" size={20} color="#fff" />  
-                <Text style={styles.buttonText}>Editar</Text>  
-              </TouchableOpacity>  
-            </View>  
-          )}  
-        </View>  
-      </Modal>  
     )  
   }  
   
@@ -448,79 +224,122 @@ export default function InventoryScreen({ navigation }: InventoryScreenProps) {
     )  
   }  
   
+  if (error) {  
+    return (  
+      <View style={styles.errorContainer}>  
+        <MaterialIcons name="error" size={64} color="#f44336" />  
+        <Text style={styles.errorText}>{error}</Text>  
+        <TouchableOpacity style={styles.retryButton} onPress={loadInventoryData}>  
+          <Text style={styles.retryButtonText}>Reintentar</Text>  
+        </TouchableOpacity>  
+      </View>  
+    )  
+  }  
+  
   return (  
     <View style={styles.container}>  
+      {/* Header con búsqueda */}  
       <View style={styles.header}>  
         <View style={styles.searchContainer}>  
-          <Feather name="search" size={20} color="#666" style={styles.searchIcon} />  
+          <Feather name="search" size={20} color="#666" />  
           <TextInput  
             style={styles.searchInput}  
-            placeholder="Buscar por nombre, código o descripción"  
+            placeholder="Buscar productos..."  
             value={searchTerm}  
-            onChangeText={handleSearch}  
-            returnKeyType="search"  
+            onChangeText={setSearchTerm}  
           />  
-          {searchTerm.length > 0 && (  
+        </View>  
+          
+        {userRole !== 'client' && (  
+          <TouchableOpacity style={styles.addButton} onPress={handleAddItem}>  
+            <Feather name="plus" size={24} color="#fff" />  
+          </TouchableOpacity>  
+        )}  
+      </View>  
+  
+      {/* Filtros */}  
+      <View style={styles.filtersContainer}>  
+        <View style={styles.categoryFilter}>  
+          <Text style={styles.filterLabel}>Categoría:</Text>  
+          <View style={styles.categoryButtons}>  
             <TouchableOpacity  
-              onPress={() => handleSearch("")}  
-              style={styles.clearButton}  
+              style={[  
+                styles.categoryButton,  
+                selectedCategory === "all" && styles.categoryButtonSelected  
+              ]}  
+              onPress={() => setSelectedCategory("all")}  
             >  
-              <Feather name="x-circle" size={20} color="#666" />  
+              <Text style={[  
+                styles.categoryButtonText,  
+                selectedCategory === "all" && styles.categoryButtonTextSelected  
+              ]}>  
+                Todas  
+              </Text>  
             </TouchableOpacity>  
-          )}  
+              
+            {categories.map((category) => (  
+              <TouchableOpacity  
+                key={category.id}  
+                style={[  
+                  styles.categoryButton,  
+                  selectedCategory === category.id && styles.categoryButtonSelected  
+                ]}  
+                onPress={() => setSelectedCategory(category.id)}  
+              >  
+                <Text style={[  
+                  styles.categoryButtonText,  
+                  selectedCategory === category.id && styles.categoryButtonTextSelected  
+                ]}>  
+                  {category.nombre}  
+                </Text>  
+              </TouchableOpacity>  
+            ))}  
+          </View>  
         </View>  
   
         <TouchableOpacity  
-          style={styles.filterButton}  
-          onPress={() => setFilterModalVisible(true)}  
+          style={[styles.filterToggle, showLowStock && styles.filterToggleActive]}  
+          onPress={() => setShowLowStock(!showLowStock)}  
         >  
-          <Feather name="filter" size={20} color="#fff" />  
+          <Feather   
+            name="alert-triangle"   
+            size={16}   
+            color={showLowStock ? "#fff" : "#ff9800"}   
+          />  
+          <Text style={[  
+            styles.filterToggleText,  
+            showLowStock && styles.filterToggleTextActive  
+          ]}>  
+            Solo Stock Bajo  
+          </Text>  
         </TouchableOpacity>  
       </View>  
   
-      {error ? (  
-        <View style={styles.errorContainer}>  
-          <MaterialIcons name="error" size={64} color="#f44336" />  
-          <Text style={styles.errorText}>{error}</Text>  
-          <TouchableOpacity style={styles.retryButton} onPress={loadInventoryData}>  
-            <Text style={styles.retryButtonText}>Reintentar</Text>  
-          </TouchableOpacity>  
-        </View>  
-      ) : (  
-        <>  
-          {filteredInventory.length === 0 ? (  
-            <View style={styles.emptyContainer}>  
-              <Feather name="package" size={64} color="#ccc" />  
-              <Text style={styles.emptyText}>No se encontraron artículos</Text>  
-              {userRole === 'client' && (  // cambiar a !client
-                <TouchableOpacity style={styles.addFirstItemButton} onPress={handleAddItem}>  
-                  <Text style={styles.addFirstItemText}>Agregar primer artículo</Text>  
-                </TouchableOpacity>  
-              )}  
-            </View>  
-          ) : (  
-            <FlatList  
-              data={filteredInventory}  
-              keyExtractor={(item) => item.id!.toString()}  
-              renderItem={renderInventoryItem}  
-              refreshControl={  
-                <RefreshControl refreshing={refreshing} onRefresh={loadInventoryData} colors={["#1a73e8"]} />  
-              }  
-              contentContainerStyle={styles.listContainer}  
-              showsVerticalScrollIndicator={false}  
-            />  
-          )}  
-  
-          {userRole !== 'client' && (  
-            <TouchableOpacity style={styles.fab} onPress={handleAddItem}>  
-              <Feather name="plus" size={24} color="#fff" />  
-            </TouchableOpacity>  
-          )}  
-        </>  
-      )}  
-  
-      {renderFilterModal()}  
-      {renderItemDetailModal()}  
+      {/* Lista de inventario */}  
+      <FlatList  
+        data={filteredItems}  
+        renderItem={renderInventoryItem}  
+        keyExtractor={(item) => item.id}  
+        contentContainerStyle={styles.listContainer}  
+        refreshControl={  
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />  
+        }  
+        ListEmptyComponent={  
+          <View style={styles.emptyContainer}>  
+            <Feather name="package" size={64} color="#ccc" />  
+            <Text style={styles.emptyText}>  
+              {searchTerm || selectedCategory !== "all" || showLowStock  
+                ? "No se encontraron productos con los filtros aplicados"  
+                : "No hay productos en el inventario"}  
+            </Text>  
+            {userRole !== 'client' && (  
+              <TouchableOpacity style={styles.emptyButton} onPress={handleAddItem}>  
+                <Text style={styles.emptyButtonText}>Agregar Primer Producto</Text>  
+              </TouchableOpacity>  
+            )}  
+          </View>  
+        }  
+      />  
     </View>  
   )  
 }  
@@ -540,40 +359,6 @@ const styles = StyleSheet.create({
     marginTop: 10,  
     fontSize: 16,  
     color: "#666",  
-  },  
-  header: {  
-    backgroundColor: "#fff",  
-    padding: 16,  
-    flexDirection: "row",  
-    alignItems: "center",  
-    borderBottomWidth: 1,  
-    borderBottomColor: "#e1e4e8",  
-  },  
-  searchContainer: {  
-    flex: 1,  
-    flexDirection: "row",  
-    alignItems: "center",  
-    backgroundColor: "#f5f5f5",  
-    borderRadius: 8,  
-    paddingHorizontal: 12,  
-    marginRight: 12,  
-  },  
-  searchIcon: {  
-    marginRight: 8,  
-  },  
-  searchInput: {  
-    flex: 1,  
-    height: 40,  
-    fontSize: 16,  
-    color: "#333",  
-  },  
-  clearButton: {  
-    padding: 4,  
-  },  
-  filterButton: {  
-    backgroundColor: "#1a73e8",  
-    padding: 10,  
-    borderRadius: 8,  
   },  
   errorContainer: {  
     flex: 1,  
@@ -598,6 +383,165 @@ const styles = StyleSheet.create({
     color: "#fff",  
     fontWeight: "bold",  
   },  
+  header: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    backgroundColor: "#fff",  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  searchContainer: {  
+    flex: 1,  
+    flexDirection: "row",  
+    alignItems: "center",  
+    backgroundColor: "#f5f5f5",  
+    borderRadius: 8,  
+    paddingHorizontal: 12,  
+    paddingVertical: 8,  
+    marginRight: 12,  
+  },  
+  searchInput: {  
+    flex: 1,  
+    marginLeft: 8,  
+    fontSize: 16,  
+    color: "#333",  
+  },  
+  addButton: {  
+    backgroundColor: "#1a73e8",  
+    width: 48,  
+    height: 48,  
+    borderRadius: 24,  
+    justifyContent: "center",  
+    alignItems: "center",  
+  },  
+  filtersContainer: {  
+    backgroundColor: "#fff",  
+    paddingHorizontal: 16,  
+    paddingVertical: 12,  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  categoryFilter: {  
+    marginBottom: 12,  
+  },  
+  filterLabel: {  
+    fontSize: 14,  
+    fontWeight: "600",  
+    color: "#333",  
+    marginBottom: 8,  
+  },  
+  categoryButtons: {  
+    flexDirection: "row",  
+    flexWrap: "wrap",  
+    gap: 8,  
+  },  
+  categoryButton: {  
+    paddingHorizontal: 12,  
+    paddingVertical: 6,  
+    backgroundColor: "#f5f5f5",  
+    borderRadius: 16,  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  categoryButtonSelected: {  
+    backgroundColor: "#1a73e8",  
+    borderColor: "#1a73e8",  
+  },  
+  categoryButtonText: {  
+    fontSize: 14,  
+    color: "#666",  
+    fontWeight: "500",  
+  },  
+  categoryButtonTextSelected: {  
+    color: "#fff",  
+    fontWeight: "600",  
+  },  
+  filterToggle: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    paddingHorizontal: 12,  
+    paddingVertical: 8,  
+    backgroundColor: "#fff3cd",  
+    borderRadius: 8,  
+    borderWidth: 1,  
+    borderColor: "#ffeaa7",  
+    gap: 8,  
+  },  
+  filterToggleActive: {  
+    backgroundColor: "#ff9800",  
+    borderColor: "#ff9800",  
+  },  
+  filterToggleText: {  
+    fontSize: 14,  
+    color: "#856404",  
+    fontWeight: "500",  
+  },  
+  filterToggleTextActive: {  
+    color: "#fff",  
+    fontWeight: "600",  
+  },  
+  listContainer: {  
+    padding: 16,  
+  },  
+  itemCard: {  
+    backgroundColor: "#fff",  
+    borderRadius: 12,  
+    padding: 16,  
+    marginBottom: 12,  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 2 },  
+    shadowOpacity: 0.1,  
+    shadowRadius: 4,  
+    elevation: 3,  
+  },  
+  itemHeader: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "flex-start",  
+    marginBottom: 8,  
+  },  
+  itemName: {  
+    flex: 1,  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginRight: 12,  
+  },  
+  stockBadge: {  
+    paddingHorizontal: 8,  
+    paddingVertical: 4,  
+    borderRadius: 12,  
+  },  
+  stockBadgeText: {  
+    color: "#fff",  
+    fontSize: 12,  
+    fontWeight: "bold",  
+  },  
+  itemCode: {  
+    fontSize: 14,  
+    color: "#666",  
+    marginBottom: 4,  
+  },  
+  itemDescription: {  
+    fontSize: 14,  
+    color: "#888",  
+    marginBottom: 12,  
+    lineHeight: 20,  
+  },  
+  itemDetails: {  
+    gap: 8,  
+  },  
+  itemDetailRow: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    gap: 8,  
+  },  
+  itemDetailText: {  
+    fontSize: 14,  
+    color: "#666",  
+  },  
   emptyContainer: {  
     flex: 1,  
     justifyContent: "center",  
@@ -611,242 +555,15 @@ const styles = StyleSheet.create({
     marginBottom: 20,  
     textAlign: "center",  
   },  
-  addFirstItemButton: {  
+  emptyButton: {  
     backgroundColor: "#1a73e8",  
     paddingHorizontal: 20,  
     paddingVertical: 12,  
     borderRadius: 8,  
   },  
-  addFirstItemText: {  
+  emptyButtonText: {  
     color: "#fff",  
     fontWeight: "bold",  
     fontSize: 16,  
-  },  
-  listContainer: {  
-    padding: 16,  
-  },  
-  inventoryCard: {  
-    backgroundColor: "#fff",  
-    borderRadius: 12,  
-    padding: 16,  
-    marginBottom: 12,  
-    shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 2 },  
-    shadowOpacity: 0.1,  
-    shadowRadius: 4,  
-    elevation: 3,  
-  },  
-  inventoryHeader: {  
-    flexDirection: "row",  
-    alignItems: "center",  
-    marginBottom: 12,  
-  },  
-  inventoryIconContainer: {  
-    width: 50,  
-    height: 50,  
-    borderRadius: 25,  
-    backgroundColor: "#f0f0f0",  
-    justifyContent: "center",  
-    alignItems: "center",  
-    marginRight: 12,  
-  },  
-  inventoryInfo: {  
-    flex: 1,  
-  },  
-  inventoryName: {  
-    fontSize: 18,  
-    fontWeight: "bold",  
-    color: "#333",  
-    marginBottom: 4,  
-  },  
-  inventoryCode: {  
-    fontSize: 14,  
-    color: "#666",  
-    marginBottom: 2,  
-  },  
-  inventoryCategory: {  
-    fontSize: 14,  
-    color: "#1a73e8",  
-    fontWeight: "500",  
-  },  
-  inventoryStatus: {  
-    alignItems: "flex-end",  
-  },  
-  stockBadge: {  
-    paddingHorizontal: 8,  
-    paddingVertical: 4,  
-    borderRadius: 12,  
-  },  
-  stockText: {  
-    color: "#fff",  
-    fontSize: 12,  
-    fontWeight: "bold",  
-  },  
-  inventoryDetails: {  
-    marginBottom: 12,  
-  },  
-  inventoryDetail: {  
-    flexDirection: "row",  
-    alignItems: "center",  
-    marginBottom: 4,  
-  },  
-  inventoryStock: {  
-    fontSize: 14,  
-    color: "#666",  
-    marginLeft: 8,  
-  },  
-  inventorySupplier: {  
-    fontSize: 14,  
-    color: "#666",  
-    marginLeft: 8,  
-  },  
-  inventoryLocation: {  
-    fontSize: 14,  
-    color: "#666",  
-    marginLeft: 8,  
-  },  
-  inventoryFooter: {  
-    flexDirection: "row",  
-    justifyContent: "space-between",  
-    borderTopWidth: 1,  
-    borderTopColor: "#f0f0f0",  
-    paddingTop: 8,  
-  },  
-  priceContainer: {  
-    alignItems: "center",  
-  },  
-  priceLabel: {  
-    fontSize: 12,  
-    color: "#666",  
-    marginBottom: 2,  
-  },  
-  priceValue: {  
-    fontSize: 16,  
-    fontWeight: "bold",  
-    color: "#333",  
-  },  
-  fab: {  
-    position: "absolute",  
-    bottom: 20,  
-    right: 20,  
-    width: 56,  
-    height: 56,  
-    borderRadius: 28,  
-    backgroundColor: "#1a73e8",  
-    justifyContent: "center",  
-    alignItems: "center",  
-    shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 4 },  
-    shadowOpacity: 0.3,  
-    shadowRadius: 8,  
-    elevation: 8,  
-  },  
-  modalContainer: {  
-    flex: 1,  
-    backgroundColor: "#fff",  
-  },  
-  modalHeader: {  
-    flexDirection: "row",  
-    justifyContent: "space-between",  
-    alignItems: "center",  
-    padding: 16,  
-    borderBottomWidth: 1,  
-    borderBottomColor: "#e1e4e8",  
-  },  
-  modalTitle: {  
-    fontSize: 20,  
-    fontWeight: "bold",  
-    color: "#333",  
-  },  
-  closeButton: {  
-    padding: 8,  
-  },  
-  modalContent: {  
-    flex: 1,  
-    padding: 16,  
-  },  
-  filterLabel: {  
-    fontSize: 18,  
-    fontWeight: "bold",  
-    color: "#333",  
-    marginBottom: 16,  
-  },  
-  filterOption: {  
-    flexDirection: "row",  
-    justifyContent: "space-between",  
-    alignItems: "center",  
-    paddingVertical: 12,  
-    paddingHorizontal: 16,  
-    borderRadius: 8,  
-    marginBottom: 8,  
-    backgroundColor: "#f8f9fa",  
-  },  
-  filterOptionSelected: {  
-    backgroundColor: "#e8f0fe",  
-  },  
-  filterOptionText: {  
-    fontSize: 16,  
-    color: "#333",  
-  },  
-  filterOptionTextSelected: {  
-    color: "#1a73e8",  
-    fontWeight: "500",  
-  },  
-  itemDetailSection: {  
-    marginBottom: 24,  
-  },  
-  sectionTitle: {  
-    fontSize: 18,  
-    fontWeight: "bold",  
-    color: "#333",  
-    marginBottom: 16,  
-  },  
-  detailRow: {  
-    flexDirection: "row",  
-    justifyContent: "space-between",  
-    alignItems: "center",  
-    paddingVertical: 8,  
-    borderBottomWidth: 1,  
-    borderBottomColor: "#f0f0f0",  
-  },  
-  detailLabel: {  
-    fontSize: 16,  
-    color: "#666",  
-    fontWeight: "500",  
-  },  
-  detailValue: {  
-    fontSize: 16,  
-    color: "#333",  
-    flex: 1,  
-    textAlign: "right",  
-  },  
-  modalFooter: {  
-    flexDirection: "row",  
-    padding: 16,  
-    borderTopWidth: 1,  
-    borderTopColor: "#e1e4e8",  
-  },  
-  modalButton: {  
-    flex: 1,  
-    flexDirection: "row",  
-    justifyContent: "center",  
-    alignItems: "center",  
-    paddingVertical: 12,  
-    borderRadius: 8,  
-    marginHorizontal: 8,  
-  },  
-  resetButton: {  
-    backgroundColor: "#666",  
-  },  
-  applyButton: {  
-    backgroundColor: "#1a73e8",  
-  },  
-  editButton: {  
-    backgroundColor: "#1a73e8",  
-  },  
-  buttonText: {  
-    color: "#fff",  
-    fontWeight: "bold",  
-    marginLeft: 8,  
   },  
 })
