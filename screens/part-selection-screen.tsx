@@ -16,23 +16,34 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import INVENTARIO_SERVICES, { InventarioType } from "../services/INVETARIO.SERVICE"  
-import CATEGORIA_MATERIALES_SERVICES from "../services/CATEGORIA_MATERIALES.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
+import { inventoryService } from "../services/supabase/inventory-service"  
+import { InventoryItem } from "../types/inventory"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service" 
   
-export default function PartSelectionScreen({ navigation, route }) {  
+interface PartSelectionScreenProps {
+  navigation: any
+  route: {
+    params: {
+      onPartSelect?: (parts: InventoryItem[]) => void
+      selectedParts?: InventoryItem[]
+      multiSelect?: boolean
+    }
+  }
+}
+
+export default function PartSelectionScreen({ navigation, route }: PartSelectionScreenProps) {  
   const { onPartSelect, selectedParts = [], multiSelect = true } = route.params || {}  
   const { user } = useAuth()  
   
-  const [inventoryItems, setInventoryItems] = useState<InventarioType[]>([])  
-  const [filteredItems, setFilteredItems] = useState<InventarioType[]>([])  
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])  
+  const [filteredItems, setFilteredItems] = useState<InventoryItem[]>([])  
   const [loading, setLoading] = useState(true)  
   const [searchTerm, setSearchTerm] = useState("")  
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>(undefined)  
-  const [selectedItems, setSelectedItems] = useState<InventarioType[]>(selectedParts)  
+  const [selectedItems, setSelectedItems] = useState<InventoryItem[]>(selectedParts)  
   const [itemDetailModalVisible, setItemDetailModalVisible] = useState(false)  
-  const [selectedItem, setSelectedItem] = useState<InventarioType | null>(null)  
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)  
   const [quantities, setQuantities] = useState<Record<string, number>>({})  
   const [categories, setCategories] = useState<string[]>([])  
   const [error, setError] = useState<string | null>(null)  
@@ -53,25 +64,30 @@ export default function PartSelectionScreen({ navigation, route }) {
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)
+
+      if (!userTallerId) {
+        setError("No se pudo obtener la información del taller")
+        return
+      }
+
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       // Inicializar cantidades para partes ya seleccionadas  
       const initialQuantities: Record<string, number> = {}  
-      selectedParts.forEach((part) => {  
-        initialQuantities[part.id] = part.cantidad || 1  
+            selectedParts.forEach((part) => {
+        initialQuantities[part.id] = 1
       })  
       setQuantities(initialQuantities)  
   
-      // Cargar categorías desde Supabase  
-      const allCategories = await CATEGORIA_MATERIALES_SERVICES.GET_ALL_CATEGORIAS()  
-      const categoryNames = allCategories.map(cat => cat.nombre)  
+            // Cargar categorías desde el inventario  
+      const allItems = await inventoryService.getAllInventory()  
+      const categoryNames = [...new Set(allItems.map(item => item.category))]  
       setCategories(categoryNames)  
-  
+
       // Cargar inventario desde Supabase (solo items con stock)  
-      const allItems = await INVENTARIO_SERVICES.GET_ALL_INVENTARIO()  
-      const inStockItems = allItems.filter(item => item.stock_actual > 0)  
+      const inStockItems = allItems.filter(item => item.stock > 0)  
         
       setInventoryItems(inStockItems)  
       setFilteredItems(inStockItems)  
@@ -91,17 +107,17 @@ export default function PartSelectionScreen({ navigation, route }) {
     // Filtrar por término de búsqueda  
     if (searchTerm.trim()) {  
       filtered = filtered.filter(item =>  
-        item.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||  
-        item.codigo.toLowerCase().includes(searchTerm.toLowerCase())  
+                item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.sku.toLowerCase().includes(searchTerm.toLowerCase())  
       )  
     }  
   
     // Filtrar por categoría  
-    if (selectedCategory) {  
-      filtered = filtered.filter(item =>   
-        item.categoria_materiales?.nombre === selectedCategory  
-      )  
-    }  
+          if (selectedCategory) {  
+        filtered = filtered.filter(item =>  
+          item.category === selectedCategory  
+        )  
+      }  
   
     setFilteredItems(filtered)  
   }, [inventoryItems, searchTerm, selectedCategory])  
@@ -121,19 +137,19 @@ export default function PartSelectionScreen({ navigation, route }) {
     setSelectedCategory(category)  
   }  
   
-  const handleItemPress = (item: InventarioType) => {  
+  const handleItemPress = (item: InventoryItem) => {  
     if (multiSelect) {  
       // Si es selección múltiple, mostrar detalles  
       setSelectedItem(item)  
       setItemDetailModalVisible(true)  
     } else {  
       // Si es selección única, seleccionar directamente  
-      onPartSelect && onPartSelect([{ ...item, cantidad: 1 }])  
+              onPartSelect && onPartSelect([{ ...item, stock: 1 }])  
       navigation.goBack()  
     }  
   }  
   
-  const toggleItemSelection = (item: InventarioType) => {  
+  const toggleItemSelection = (item: InventoryItem) => {  
     const isSelected = selectedItems.some((selectedItem) => selectedItem.id === item.id)  
   
     if (isSelected) {  
@@ -156,9 +172,9 @@ export default function PartSelectionScreen({ navigation, route }) {
     if (quantity < 1) return // No permitir cantidades menores a 1  
   
     const item = inventoryItems.find((i) => i.id === itemId)  
-    if (item && quantity > item.stock_actual) {  
-      Alert.alert("Cantidad no disponible", `Solo hay ${item.stock_actual} unidades disponibles en inventario.`)  
-      return  
+        if (item && quantity > item.stock) {
+      Alert.alert("Cantidad no disponible", `Solo hay ${item.stock} unidades disponibles en inventario.`)
+      return
     }  
   
     setQuantities((prev) => ({ ...prev, [itemId]: quantity }))  
@@ -168,7 +184,7 @@ export default function PartSelectionScreen({ navigation, route }) {
     // Preparar repuestos seleccionados con sus cantidades  
     const partsWithQuantities = selectedItems.map((item) => ({  
       ...item,  
-      cantidad: quantities[item.id!] || 1,  
+      stock: quantities[item.id!] || 1,  
     }))  
   
     onPartSelect && onPartSelect(partsWithQuantities)  
@@ -183,14 +199,14 @@ export default function PartSelectionScreen({ navigation, route }) {
     })  
   }  
   
-  const renderPartItem = ({ item }: { item: InventarioType }) => {  
+  const renderPartItem = ({ item }: { item: InventoryItem }) => {  
     const isSelected = selectedItems.some((selectedItem) => selectedItem.id === item.id)  
-    const formattedPrice = formatCurrency(item.precio_venta || 0)  
+          const formattedPrice = formatCurrency(item.priceUSD || 0)  
   
-    const stockColor =  
-      item.stock_actual === 0  
-        ? "#e53935"  
-        : item.stock_actual <= (item.stock_minimo || 0)  
+          const stockColor =  
+        item.stock === 0  
+          ? "#e53935"  
+          : item.stock <= (item.minStock || 0)  
           ? "#f5a623"  
           : "#4caf50"  
   
@@ -201,7 +217,7 @@ export default function PartSelectionScreen({ navigation, route }) {
       >  
         <View style={styles.partContent}>  
           <View style={styles.partHeader}>  
-            <Text style={styles.partName}>{item.nombre}</Text>  
+                          <Text style={styles.partName}>{item.name}</Text>  
             {multiSelect && (  
               <TouchableOpacity  
                 style={[styles.checkboxContainer, isSelected && styles.checkboxSelected]}  
@@ -212,19 +228,19 @@ export default function PartSelectionScreen({ navigation, route }) {
             )}  
           </View>  
   
-          <Text style={styles.partSku}>Código: {item.codigo}</Text>  
+          <Text style={styles.partSku}>Código: {item.sku}</Text>  
   
-          {item.descripcion && <Text style={styles.partDescription}>{item.descripcion}</Text>}  
+          {item.description && <Text style={styles.partDescription}>{item.description}</Text>}  
   
           <View style={styles.partFooter}>  
             <View style={styles.categoryBadge}>  
-              <Text style={styles.categoryText}>{item.categoria_materiales?.nombre || "Sin categoría"}</Text>  
+              <Text style={styles.categoryText}>{item.category || "Sin categoría"}</Text>  
             </View>  
   
             <View style={styles.stockContainer}>  
               <Feather name="box" size={14} color={stockColor} style={styles.stockIcon} />  
               <Text style={[styles.stockText, { color: stockColor }]}>  
-                {item.stock_actual} unidades  
+                {item.stock} unidades  
               </Text>  
             </View>  
   
@@ -267,8 +283,8 @@ export default function PartSelectionScreen({ navigation, route }) {
   
     const isSelected = selectedItems.some((item) => item.id === selectedItem.id)  
     const quantity = quantities[selectedItem.id!] || 1  
-    const formattedPrice = formatCurrency(selectedItem.precio_venta || 0)  
-    const totalPrice = formatCurrency((selectedItem.precio_venta || 0) * quantity)  
+    const formattedPrice = formatCurrency(selectedItem.priceUSD || 0)  
+    const totalPrice = formatCurrency((selectedItem.priceUSD || 0) * quantity)  
   
     return (  
       <Modal  
@@ -290,24 +306,24 @@ export default function PartSelectionScreen({ navigation, route }) {
           </View>  
 
           <ScrollView style={styles.modalContent}>  
-            <Text style={styles.modalItemName}>{selectedItem.nombre}</Text>  
-            <Text style={styles.modalItemSku}>Código: {selectedItem.codigo}</Text>  
+            <Text style={styles.modalItemName}>{selectedItem.name}</Text>  
+            <Text style={styles.modalItemSku}>Código: {selectedItem.sku}</Text>  
               
-            {selectedItem.descripcion && (  
-              <Text style={styles.modalItemDescription}>{selectedItem.descripcion}</Text>  
+            {selectedItem.description && (  
+              <Text style={styles.modalItemDescription}>{selectedItem.description}</Text>  
             )}  
 
             <View style={styles.modalItemDetails}>  
               <View style={styles.modalDetailRow}>  
                 <Text style={styles.modalDetailLabel}>Categoría:</Text>  
                 <Text style={styles.modalDetailValue}>  
-                  {selectedItem.categoria_materiales?.nombre || "Sin categoría"}  
+                  {selectedItem.category || "Sin categoría"}  
                 </Text>  
               </View>  
 
               <View style={styles.modalDetailRow}>  
                 <Text style={styles.modalDetailLabel}>Stock disponible:</Text>  
-                <Text style={styles.modalDetailValue}>{selectedItem.stock_actual} unidades</Text>  
+                <Text style={styles.modalDetailValue}>{selectedItem.stock} unidades</Text>  
               </View>  
 
               <View style={styles.modalDetailRow}>  
@@ -317,7 +333,7 @@ export default function PartSelectionScreen({ navigation, route }) {
 
               <View style={styles.modalDetailRow}>  
                 <Text style={styles.modalDetailLabel}>Ubicación:</Text>  
-                <Text style={styles.modalDetailValue}>{selectedItem.ubicacion_almacen || "No especificada"}</Text>  
+                <Text style={styles.modalDetailValue}>{selectedItem.location || "No especificada"}</Text>  
               </View>  
             </View>  
 
@@ -352,12 +368,12 @@ export default function PartSelectionScreen({ navigation, route }) {
                   <TouchableOpacity  
                     style={styles.quantityButton}  
                     onPress={() => updateQuantity(selectedItem.id!, quantity + 1)}  
-                    disabled={quantity >= selectedItem.stock_actual}  
+                    disabled={quantity >= selectedItem.stock}  
                   >  
                     <Feather  
                       name="plus"  
                       size={20}  
-                      color={quantity >= selectedItem.stock_actual ? "#ccc" : "#1a73e8"}  
+                      color={quantity >= selectedItem.stock ? "#ccc" : "#1a73e8"}  
                     />  
                   </TouchableOpacity>  
                 </View>  

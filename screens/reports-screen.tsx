@@ -18,45 +18,19 @@ import { LineChart, BarChart, PieChart } from "react-native-chart-kit"
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
 // Importaciones corregidas para usar servicios de Supabase  
-import * as orderService from "../services/supabase/order-service"  
-import * as clientService from "../services/supabase/client-service"  
-import * as inventoryService from "../services/supabase/inventory-service"  
+import { orderService } from "../services/supabase/order-service"  
+import { clientService } from "../services/supabase/client-service"  
+import { inventoryService } from "../services/supabase/inventory-service"  
 import * as dashboardService from "../services/supabase/dashboard-service"  
 import * as accessService from "../services/supabase/access-service"  
-import * as userService from "../services/supabase/user-service"  
+import { userService } from "../services/supabase/user-service"  
+import { Order } from "../types/order"  
+import { Client } from "../services/supabase/client-service"  
+import { InventoryItem } from "../types/inventory"  
   
 // Tipos TypeScript para resolver errores  
 interface ReportsScreenProps {  
   navigation: any  
-}  
-  
-interface OrderType {  
-  id: string  
-  numero_orden: string  
-  descripcion: string  
-  estado: string  
-  prioridad: string  
-  client_id: string  
-  vehiculo_id: string  
-  tecnico_id?: string  
-  costo?: number  
-  fecha_creacion: string  
-  observacion?: string  
-}  
-  
-interface ClientType {  
-  id: string  
-  nombre: string  
-  email?: string  
-  telefono?: string  
-}  
-  
-interface InventoryType {  
-  id: string  
-  nombre: string  
-  codigo: string  
-  stock_actual: number  
-  precio_venta?: number  
 }  
   
 interface ChartDataType {  
@@ -117,9 +91,9 @@ export default function ReportsScreen({ navigation }: ReportsScreenProps) {
   const [userRole, setUserRole] = useState<string | null>(null)  
     
   // Estados para datos de reportes  
-  const [orders, setOrders] = useState<OrderType[]>([])  
-  const [clients, setClients] = useState<ClientType[]>([])  
-  const [inventory, setInventory] = useState<InventoryType[]>([])  
+  const [orders, setOrders] = useState<Order[]>([])  
+  const [clients, setClients] = useState<Client[]>([])  
+  const [inventory, setInventory] = useState<InventoryItem[]>([])  
   const [stats, setStats] = useState<StatType[]>([])  
   const [monthlyData, setMonthlyData] = useState<ChartDataType>({  
     labels: [],  
@@ -130,6 +104,10 @@ export default function ReportsScreen({ navigation }: ReportsScreenProps) {
     datasets: [{ data: [] }]  
   })  
   const [revenueData, setRevenueData] = useState<PieChartDataType[]>([])  
+  const [revenueByStatusData, setRevenueByStatusData] = useState<ChartDataType>({  
+    labels: [],  
+    datasets: [{ data: [] }]  
+  })  
   
   // Ancho de la pantalla para los gráficos  
   const screenWidth = Dimensions.get("window").width - 40  
@@ -143,8 +121,12 @@ export default function ReportsScreen({ navigation }: ReportsScreenProps) {
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await userService.getTallerId(user.id)  
-      const userPermissions = await accessService.getUserPermissions(user.id, userTallerId)  
+      const userTallerId = await userService.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {
+        setError("No se pudo obtener la información del taller")
+        return
+      }
+      const userPermissions = await userService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       if (userPermissions?.rol === 'client') {  
@@ -182,12 +164,12 @@ export default function ReportsScreen({ navigation }: ReportsScreenProps) {
   )  
   
   // Generar estadísticas basadas en datos reales  
-  const generateStats = (orders: OrderType[], clients: ClientType[], inventory: InventoryType[]) => {  
-    const completedOrders = orders.filter((order: OrderType) => order.estado === "Completada")  
-    const totalRevenue = completedOrders.reduce((sum: number, order: OrderType) => sum + (order.costo || 0), 0)  
+  const generateStats = (orders: Order[], clients: Client[], inventory: InventoryItem[]) => {  
+    const completedOrders = orders.filter((order: Order) => order.status === "completed")  
+    const totalRevenue = completedOrders.reduce((sum: number, order: Order) => sum + (order.total || 0), 0)  
     const newClientsThisMonth = getNewClientsThisMonth(clients)  
-    const totalInventoryValue = inventory.reduce((sum: number, item: InventoryType) =>   
-      sum + (item.stock_actual * (item.precio_venta || 0)), 0  
+    const totalInventoryValue = inventory.reduce((sum: number, item: InventoryItem) =>   
+      sum + (item.stock * (item.priceUSD || 0)), 0  
     )  
   
     const statsData: StatType[] = [  
@@ -221,316 +203,314 @@ export default function ReportsScreen({ navigation }: ReportsScreenProps) {
   }  
   
   // Filtrar órdenes por período  
-  const filterOrdersByPeriod = (orders: OrderType[], period: string) => {  
+  const filterOrdersByPeriod = (orders: Order[], period: string) => {  
     const now = new Date()  
-    return orders.filter((order: OrderType) => {  
-      const orderDate = new Date(order.fecha_creacion)  
+    return orders.filter((order: Order) => {  
+      const orderDate = new Date(order.createdAt)  
         
       switch (period) {  
         case "week":  
           const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)  
           return orderDate >= weekAgo  
         case "month":  
-          return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear()  
-        case "year":  
-          return orderDate.getFullYear() === now.getFullYear()  
+          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)  
+          return orderDate >= monthAgo  
+        case "quarter":  
+          const quarterAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)  
+          return orderDate >= quarterAgo  
         default:  
           return true  
       }  
     })  
   }  
   
-  // Obtener ingresos por mes  
-  const getMonthlyRevenue = (orders: OrderType[]) => {  
-    const monthlyRevenue = orders  
-      .filter((order: OrderType) => order.estado === "Completada")  
-      .reduce((sum: number, order: OrderType) => sum + (order.costo || 0), 0)  
-      
-    return monthlyRevenue  
+  // Obtener ingresos mensuales  
+  const getMonthlyRevenue = (orders: Order[]) => {  
+    const thisMonthOrders = orders  
+      .filter((order: Order) => order.status === "completed")  
+      .reduce((sum: number, order: Order) => sum + (order.total || 0), 0)  
+    return thisMonthOrders  
   }  
   
-  // Obtener órdenes por mes  
-  const getMonthlyOrders = (orders: OrderType[]) => {  
-    const monthlyOrders = orders  
-      .filter((order: OrderType) => {  
-        const orderDate = new Date(order.fecha_creacion)  
+  // Obtener órdenes mensuales  
+  const getMonthlyOrders = (orders: Order[]) => {  
+    const thisMonthOrders = orders  
+      .filter((order: Order) => {  
+        const orderDate = new Date(order.createdAt)  
         const now = new Date()  
-        return orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear()  
+        return orderDate.getMonth() === now.getMonth() &&  
+               orderDate.getFullYear() === now.getFullYear()  
       })  
-      .reduce((sum: number, order: OrderType) => sum + 1, 0)  
-      
-    return monthlyOrders  
+      .reduce((sum: number, order: Order) => sum + 1, 0)  
+    return thisMonthOrders  
   }  
   
   // Obtener clientes nuevos este mes  
-    // Obtener clientes nuevos este mes  
-    const getNewClientsThisMonth = (clients: ClientType[]) => {  
-      // Asumiendo que los clientes tienen fecha de creación  
-      const now = new Date()  
-      return clients.filter((client: ClientType) => {  
-        // Si no hay fecha de creación, asumir que es cliente antiguo  
-        if (!client.created_at) return false  
-        const clientDate = new Date(client.created_at)  
-        return clientDate.getMonth() === now.getMonth() && clientDate.getFullYear() === now.getFullYear()  
+  const getNewClientsThisMonth = (clients: Client[]) => {  
+    const now = new Date()  
+    return clients.filter(client => {  
+      const clientDate = new Date(client.createdAt)  
+      return clientDate.getMonth() === now.getMonth() &&  
+             clientDate.getFullYear() === now.getFullYear()  
+    }).length  
+  }  
+  
+  // Generar datos para gráficos  
+  const generateChartData = (orders: Order[]) => {  
+    generateMonthlyOrdersData(orders)  
+    generateServicesData(orders)  
+    generateRevenueByStatusData(orders)  
+  }  
+  
+  // Generar datos de órdenes mensuales  
+  const generateMonthlyOrdersData = (orders: Order[]) => {  
+    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']  
+    const currentYear = new Date().getFullYear()  
+    
+    const monthOrders = orders.filter((order: Order) => {  
+      const orderDate = new Date(order.createdAt)  
+      return orderDate.getFullYear() === currentYear  
+    })  
+
+    const monthlyCounts = months.map((month, index) => {  
+      const count = monthOrders.filter(order => {  
+        const orderDate = new Date(order.createdAt)  
+        return orderDate.getMonth() === index  
       }).length  
+      return count  
+    })  
+
+    setMonthlyData({  
+      labels: months,  
+      datasets: [{ data: monthlyCounts, color: () => '#1a73e8', strokeWidth: 2 }]  
+    })  
+  }  
+  
+  // Generar datos de servicios  
+  const generateServicesData = (orders: Order[]) => {  
+    const serviceCount = orders.reduce((acc: Record<string, number>, order: Order) => {  
+      // Aquí podrías mapear servicios específicos basados en la descripción o items
+      const serviceType = order.description || 'Servicio General'  
+      acc[serviceType] = (acc[serviceType] || 0) + 1  
+      return acc  
+    }, {})  
+
+    const topServices = Object.entries(serviceCount)  
+      .sort(([,a], [,b]) => b - a)  
+      .slice(0, 5)  
+
+    setServiceData({  
+      labels: topServices.map(([service]) => service),  
+      datasets: [{ data: topServices.map(([, count]) => count), color: () => '#4caf50' }]  
+    })  
+  }  
+  
+  // Generar datos de ingresos por estado  
+  const generateRevenueByStatusData = (orders: Order[]) => {  
+    const revenueByStatus = orders.reduce((acc: Record<string, number>, order: Order) => {  
+      const status = order.status  
+      acc[status] = (acc[status] || 0) + (order.total || 0)  
+      return acc  
+    }, {})  
+
+    const colors = ['#4caf50', '#1a73e8', '#f5a623', '#f44336', '#9c27b0', '#ff9800']  
+    
+    const pieData = Object.entries(revenueByStatus).map(([status, revenue], index) => ({  
+      name: status,  
+      population: revenue,  
+      color: colors[index % colors.length],  
+      legendFontColor: '#7F7F7F',  
+      legendFontSize: 12  
+    }))  
+
+    setRevenueData(pieData)  
+
+    // También generar datos para gráfico de barras  
+    setRevenueByStatusData({  
+      labels: Object.keys(revenueByStatus),  
+      datasets: [{ data: Object.values(revenueByStatus), color: () => '#1a73e8' }]  
+    })  
+  }  
+  
+  // Configuración de gráficos  
+  const chartConfig = {  
+    backgroundColor: "#ffffff",  
+    backgroundGradientFrom: "#ffffff",  
+    backgroundGradientTo: "#ffffff",  
+    decimalPlaces: 0,  
+    color: (opacity = 1) => `rgba(26, 115, 232, ${opacity})`,  
+    labelColor: (opacity = 1) => `rgba(51, 51, 51, ${opacity})`,  
+    style: {  
+      borderRadius: 16  
+    },  
+    propsForDots: {  
+      r: "6",  
+      strokeWidth: "2",  
+      stroke: "#1a73e8"  
     }  
-    
-    // Generar datos para gráficos  
-    const generateChartData = (orders: OrderType[]) => {  
-      // Datos mensuales de órdenes  
-      const monthlyOrdersData = generateMonthlyOrdersData(orders)  
-      setMonthlyData(monthlyOrdersData)  
-    
-      // Datos de servicios más solicitados  
-      const servicesData = generateServicesData(orders)  
-      setServiceData(servicesData)  
-    
-      // Datos de ingresos por estado  
-      const revenueByStatusData = generateRevenueByStatusData(orders)  
-      setRevenueData(revenueByStatusData)  
+  }  
+  
+  // Manejar selección de reporte  
+  const handleReportPress = (reportType: string) => {  
+    setCurrentReport(reportType)  
+    setShowReportModal(true)  
+  }  
+  
+  // Renderizar contenido del modal de reporte  
+  const renderReportContent = () => {  
+    switch (currentReport) {  
+      case "monthly":  
+        return (  
+          <View style={styles.chartContainer}>  
+            <Text style={styles.chartTitle}>Órdenes por Mes</Text>  
+            <LineChart  
+              data={monthlyData}  
+              width={screenWidth}  
+              height={220}  
+              chartConfig={chartConfig}  
+              bezier  
+              style={styles.chart}  
+            />  
+          </View>  
+        )  
+      case "services":  
+        return (  
+          <View style={styles.chartContainer}>  
+            <Text style={styles.chartTitle}>Servicios Más Solicitados</Text>  
+            <BarChart  
+              data={serviceData}  
+              width={screenWidth}  
+              height={220}  
+              chartConfig={chartConfig}  
+              style={styles.chart}  
+              yAxisLabel=""  
+              yAxisSuffix=""  
+            />  
+          </View>  
+        )  
+      case "revenue":  
+        return (  
+          <View style={styles.chartContainer}>  
+            <Text style={styles.chartTitle}>Ingresos por Estado</Text>  
+            <PieChart  
+              data={revenueData}  
+              width={screenWidth}  
+              height={220}  
+              chartConfig={chartConfig}  
+              accessor="population"  
+              backgroundColor="transparent"  
+              paddingLeft="15"  
+              style={styles.chart}  
+            />  
+          </View>  
+        )  
+      default:  
+        return null  
     }  
-    
-    // Generar datos mensuales de órdenes  
-    const generateMonthlyOrdersData = (orders: OrderType[]) => {  
-      const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]  
-      const currentYear = new Date().getFullYear()  
-        
-      const monthlyData = months.map((month, index) => {  
-        const monthOrders = orders.filter((order: OrderType) => {  
-          const orderDate = new Date(order.fecha_creacion)  
-          return orderDate.getMonth() === index && orderDate.getFullYear() === currentYear  
-        })  
-        return monthOrders.length  
-      })  
-    
-      return {  
-        labels: months,  
-        datasets: [{ data: monthlyData }]  
-      }  
-    }  
-    
-    // Generar datos de servicios  
-    const generateServicesData = (orders: OrderType[]) => {  
-      const serviceCount = orders.reduce((acc: Record<string, number>, order: OrderType) => {  
-        const service = order.descripcion || "Servicio General"  
-        acc[service] = (acc[service] || 0) + 1  
-        return acc  
-      }, {})  
-    
-      const sortedServices = Object.entries(serviceCount)  
-        .sort(([,a], [,b]) => (b as number) - (a as number))  
-        .slice(0, 5)  
-    
-      return {  
-        labels: sortedServices.map(([service]) => service),  
-        datasets: [{ data: sortedServices.map(([,count]) => count as number) }]  
-      }  
-    }  
-    
-    // Generar datos de ingresos por estado  
-    const generateRevenueByStatusData = (orders: OrderType[]) => {  
-      const statusColors: Record<string, string> = {  
-        "Pendiente": "#1a73e8",  
-        "En Proceso": "#ff9800",   
-        "Completada": "#4caf50",  
-        "Entregada": "#607d8b",  
-        "Cancelada": "#e53935"  
-      }  
-    
-      const revenueByStatus = orders.reduce((acc: Record<string, number>, order: OrderType) => {  
-        const status = order.estado  
-        acc[status] = (acc[status] || 0) + (order.costo || 0)  
-        return acc  
-      }, {})  
-    
-      return Object.entries(revenueByStatus).map(([status, revenue]) => ({  
-        name: status,  
-        population: revenue as number,  
-        color: statusColors[status] || "#666",  
-        legendFontColor: "#333",  
-        legendFontSize: 12  
-      }))  
-    }  
-    
-    // Configuración de gráficos  
-    const chartConfig = {  
-      backgroundColor: "#ffffff",  
-      backgroundGradientFrom: "#ffffff",  
-      backgroundGradientTo: "#ffffff",  
-      decimalPlaces: 0,  
-      color: (opacity = 1) => `rgba(26, 115, 232, ${opacity})`,  
-      labelColor: (opacity = 1) => `rgba(51, 51, 51, ${opacity})`,  
-      style: {  
-        borderRadius: 16  
-      },  
-      propsForDots: {  
-        r: "6",  
-        strokeWidth: "2",  
-        stroke: "#1a73e8"  
-      }  
-    }  
-    
-    // Manejar selección de reporte  
-    const handleReportPress = (reportType: string) => {  
-      setCurrentReport(reportType)  
-      setShowReportModal(true)  
-    }  
-    
-    // Renderizar contenido del modal de reporte  
-    const renderReportContent = () => {  
-      switch (currentReport) {  
-        case "monthly":  
-          return (  
-            <View style={styles.chartContainer}>  
-              <Text style={styles.chartTitle}>Órdenes por Mes</Text>  
-              <LineChart  
-                data={monthlyData}  
-                width={screenWidth}  
-                height={220}  
-                chartConfig={chartConfig}  
-                bezier  
-                style={styles.chart}  
-              />  
-            </View>  
-          )  
-        case "services":  
-          return (  
-            <View style={styles.chartContainer}>  
-              <Text style={styles.chartTitle}>Servicios Más Solicitados</Text>  
-              <BarChart  
-                data={serviceData}  
-                width={screenWidth}  
-                height={220}  
-                chartConfig={chartConfig}  
-                style={styles.chart}  
-                yAxisLabel=""  
-                yAxisSuffix=""  
-              />  
-            </View>  
-          )  
-        case "revenue":  
-          return (  
-            <View style={styles.chartContainer}>  
-              <Text style={styles.chartTitle}>Ingresos por Estado</Text>  
-              <PieChart  
-                data={revenueData}  
-                width={screenWidth}  
-                height={220}  
-                chartConfig={chartConfig}  
-                accessor="population"  
-                backgroundColor="transparent"  
-                paddingLeft="15"  
-                style={styles.chart}  
-              />  
-            </View>  
-          )  
-        default:  
-          return null  
-      }  
-    }  
-    
-    if (loading) {  
-      return (  
-        <View style={styles.loadingContainer}>  
-          <ActivityIndicator size="large" color="#1a73e8" />  
-          <Text style={styles.loadingText}>Cargando reportes...</Text>  
-        </View>  
-      )  
-    }  
-    
-    if (error) {  
-      return (  
-        <View style={styles.errorContainer}>  
-          <MaterialIcons name="error" size={64} color="#f44336" />  
-          <Text style={styles.errorText}>{error}</Text>  
-          <TouchableOpacity style={styles.retryButton} onPress={loadReportsData}>  
-            <Text style={styles.retryButtonText}>Reintentar</Text>  
-          </TouchableOpacity>  
-        </View>  
-      )  
-    }  
-    
+  }  
+  
+  if (loading) {  
     return (  
-      <SafeAreaView style={styles.container}>  
-        <View style={styles.header}>  
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
-            <Feather name="arrow-left" size={24} color="#333" />  
-          </TouchableOpacity>  
-          <Text style={styles.headerTitle}>Reportes</Text>  
-        </View>  
-    
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>  
-          {/* Estadísticas principales */}  
-          <View style={styles.statsSection}>  
-            <Text style={styles.sectionTitle}>Estadísticas Generales</Text>  
-            <View style={styles.statsGrid}>  
-              {stats.map((stat, index) => (  
-                <StatCard key={index} {...stat} />  
-              ))}  
-            </View>  
-          </View>  
-    
-          {/* Reportes disponibles */}  
-          <View style={styles.reportsSection}>  
-            <Text style={styles.sectionTitle}>Reportes Disponibles</Text>  
-              
-            <ReportCard  
-              title="Órdenes Mensuales"  
-              icon="trending-up"  
-              onPress={() => handleReportPress("monthly")}  
-            />  
-              
-            <ReportCard  
-              title="Servicios Populares"  
-              icon="bar-chart-2"  
-              onPress={() => handleReportPress("services")}  
-            />  
-              
-            <ReportCard  
-              title="Ingresos por Estado"  
-              icon="pie-chart"  
-              onPress={() => handleReportPress("revenue")}  
-            />  
-              
-            <ReportCard  
-              title="Inventario Crítico"  
-              icon="alert-triangle"  
-              onPress={() => navigation.navigate("Inventory", { filter: "low-stock" })}  
-            />  
-              
-            <ReportCard  
-              title="Clientes Activos"  
-              icon="users"  
-              onPress={() => navigation.navigate("Clients", { filter: "active" })}  
-            />  
-          </View>  
-        </ScrollView>  
-    
-        {/* Modal para mostrar gráficos */}  
-        <Modal  
-          visible={showReportModal}  
-          animationType="slide"  
-          presentationStyle="pageSheet"  
-        >  
-          <SafeAreaView style={styles.modalContainer}>  
-            <View style={styles.modalHeader}>  
-              <TouchableOpacity   
-                style={styles.modalBackButton}   
-                onPress={() => setShowReportModal(false)}  
-              >  
-                <Feather name="arrow-left" size={24} color="#333" />  
-              </TouchableOpacity>  
-              <Text style={styles.modalTitle}>Reporte Detallado</Text>  
-            </View>  
-              
-            <ScrollView style={styles.modalContent}>  
-              {renderReportContent()}  
-            </ScrollView>  
-          </SafeAreaView>  
-        </Modal>  
-      </SafeAreaView>  
+      <View style={styles.loadingContainer}>  
+        <ActivityIndicator size="large" color="#1a73e8" />  
+        <Text style={styles.loadingText}>Cargando reportes...</Text>  
+      </View>  
     )  
   }  
+  
+  if (error) {  
+    return (  
+      <View style={styles.errorContainer}>  
+        <MaterialIcons name="error" size={64} color="#f44336" />  
+        <Text style={styles.errorText}>{error}</Text>  
+        <TouchableOpacity style={styles.retryButton} onPress={loadReportsData}>  
+          <Text style={styles.retryButtonText}>Reintentar</Text>  
+        </TouchableOpacity>  
+      </View>  
+    )  
+  }  
+  
+  return (  
+    <SafeAreaView style={styles.container}>  
+      <View style={styles.header}>  
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
+          <Feather name="arrow-left" size={24} color="#333" />  
+        </TouchableOpacity>  
+        <Text style={styles.headerTitle}>Reportes</Text>  
+      </View>  
+    
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>  
+        {/* Estadísticas principales */}  
+        <View style={styles.statsSection}>  
+          <Text style={styles.sectionTitle}>Estadísticas Generales</Text>  
+          <View style={styles.statsGrid}>  
+            {stats.map((stat, index) => (  
+              <StatCard key={index} {...stat} />  
+            ))}  
+          </View>  
+        </View>  
+    
+        {/* Reportes disponibles */}  
+        <View style={styles.reportsSection}>  
+          <Text style={styles.sectionTitle}>Reportes Disponibles</Text>  
+              
+          <ReportCard  
+            title="Órdenes Mensuales"  
+            icon="trending-up"  
+            onPress={() => handleReportPress("monthly")}  
+          />  
+              
+          <ReportCard  
+            title="Servicios Populares"  
+            icon="bar-chart-2"  
+            onPress={() => handleReportPress("services")}  
+          />  
+              
+          <ReportCard  
+            title="Ingresos por Estado"  
+            icon="pie-chart"  
+            onPress={() => handleReportPress("revenue")}  
+          />  
+              
+          <ReportCard  
+            title="Inventario Crítico"  
+            icon="alert-triangle"  
+            onPress={() => navigation.navigate("Inventory", { filter: "low-stock" })}  
+          />  
+              
+          <ReportCard  
+            title="Clientes Activos"  
+            icon="users"  
+            onPress={() => navigation.navigate("Clients", { filter: "active" })}  
+          />  
+        </View>  
+      </ScrollView>  
+    
+      {/* Modal para mostrar gráficos */}  
+      <Modal  
+        visible={showReportModal}  
+        animationType="slide"  
+        presentationStyle="pageSheet"  
+      >  
+        <SafeAreaView style={styles.modalContainer}>  
+          <View style={styles.modalHeader}>  
+            <TouchableOpacity   
+              style={styles.modalBackButton}   
+              onPress={() => setShowReportModal(false)}  
+            >  
+              <Feather name="arrow-left" size={24} color="#333" />  
+            </TouchableOpacity>  
+            <Text style={styles.modalTitle}>Reporte Detallado</Text>  
+          </View>  
+              
+          <ScrollView style={styles.modalContent}>  
+            {renderReportContent()}  
+          </ScrollView>  
+        </SafeAreaView>  
+      </Modal>  
+    </SafeAreaView>  
+  )  
+}  
     
   const styles = StyleSheet.create({  
     container: {  

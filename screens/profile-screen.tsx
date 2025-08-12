@@ -14,15 +14,17 @@ import {
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useAuth } from "../context/auth-context"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
-import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-  
-export default function ProfileScreen({ navigation }) {  
+import { userService } from "../services/supabase/user-service" 
+import { clientService, Client } from "../services/supabase/client-service"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import { UiScreenNavProp } from "../types"
+
+
+export default function ProfileScreen({ navigation }: UiScreenNavProp) {  
   const { user, logout } = useAuth()  
   const [loading, setLoading] = useState(true)  
   const [updating, setUpdating] = useState(false)  
-  const [userProfile, setUserProfile] = useState<ClienteType | null>(null)  
+  const [userProfile, setUserProfile] = useState<Client | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
   const [editModalVisible, setEditModalVisible] = useState(false)  
   const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false)  
@@ -51,21 +53,27 @@ export default function ProfileScreen({ navigation }) {
       if (!user?.id) return  
   
       // Obtener perfil del usuario  
-      const profile = await CLIENTS_SERVICES.GET_CLIENTS_BY_ID(user.id)  
+      const profile = await clientService.getClientByUserId(user.id)  
       setUserProfile(profile)  
   
       // Obtener rol del usuario  
-      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      const userTallerId = await userService.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {
+        setError("No se pudo obtener la información del taller")
+        return
+      }
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       // Inicializar datos del formulario de edición  
-      setEditFormData({  
-        name: profile.name || "",  
-        email: profile.email || "",  
-        phone: profile.phone || "",  
-        company: profile.company || "",  
-      })  
+      if (profile) {
+        setEditFormData({  
+          name: profile.name || "",  
+          email: profile.email || "",  
+          phone: profile.phone || "",  
+          company: profile.company || "",  
+        })  
+      }
   
     } catch (error) {  
       console.error("Error loading user profile:", error)  
@@ -83,13 +91,15 @@ export default function ProfileScreen({ navigation }) {
     try {  
       setUpdating(true)  
   
+      if (!user?.id || !userProfile) return
+
       const updatedProfile = {  
         ...userProfile,  
         ...editFormData,  
-        updated_at: new Date().toISOString()  
+        updatedAt: new Date().toISOString()  
       }  
   
-      await CLIENTS_SERVICES.UPDATE_CLIENTE(user.id, updatedProfile)  
+      await clientService.updateClient(user.id, updatedProfile)  
       setUserProfile(updatedProfile)  
       setEditModalVisible(false)  
   
@@ -131,9 +141,11 @@ export default function ProfileScreen({ navigation }) {
     try {  
       setUpdating(true)  
   
+      if (!user?.id) return
+
       // En un escenario real, aquí validarías la contraseña actual  
       // y actualizarías la contraseña en el sistema de autenticación  
-      await USER_SERVICE.CHANGE_PASSWORD(user.id, passwordFormData.currentPassword, passwordFormData.newPassword)  
+      await userService.updatePassword(passwordFormData.currentPassword, passwordFormData.newPassword)  
   
       setChangePasswordModalVisible(false)  
       setPasswordFormData({  
@@ -296,7 +308,7 @@ export default function ProfileScreen({ navigation }) {
               secureTextEntry  
             />  
             {passwordErrors.currentPassword && (  
-              <Text style={styles.errorText}>{passwordErrors.currentPassword}</Text>  
+                              <Text style={styles.inputErrorText}>{passwordErrors.currentPassword}</Text>  
             )}  
           </View>  
   
@@ -312,7 +324,7 @@ export default function ProfileScreen({ navigation }) {
               secureTextEntry  
             />  
             {passwordErrors.newPassword && (  
-              <Text style={styles.errorText}>{passwordErrors.newPassword}</Text>  
+                              <Text style={styles.inputErrorText}>{passwordErrors.newPassword}</Text>  
             )}  
           </View>  
   
@@ -328,7 +340,7 @@ export default function ProfileScreen({ navigation }) {
               secureTextEntry  
             />  
             {passwordErrors.confirmPassword && (  
-              <Text style={styles.errorText}>{passwordErrors.confirmPassword}</Text>  
+                              <Text style={styles.inputErrorText}>{passwordErrors.confirmPassword}</Text>  
             )}  
           </View>  
         </ScrollView>  
@@ -662,7 +674,7 @@ const styles = StyleSheet.create({
   inputError: {  
     borderColor: "#e53935",  
   },  
-  errorText: {  
+  inputErrorText: {  
     fontSize: 14,  
     color: "#e53935",  
     marginTop: 4,  

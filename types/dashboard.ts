@@ -1,4 +1,4 @@
-import { OrderStatus } from '../services/supabase/order-service';
+import { OrderStatus } from './index';
 
 export interface DashboardStats {
   totalOrders: number;

@@ -16,11 +16,12 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import SERVICIOS_SERVICES, { ServicioType } from "../services/SERVICIOS.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
+import { getAllServices } from "../services/supabase/services-service"
+import { accessService } from "../services/supabase/access-service"  
+import { userService } from "../services/supabase/user-service" 
+import { UiScreenProps, ServicioType } from "../types"
   
-export default function ServiceSelectionScreen({ navigation, route }) {  
+export default function ServiceSelectionScreen({ navigation, route }: UiScreenProps) {  
   const { onServiceSelect, selectedService = null, multiSelect = false } = route.params || {}  
   const { user } = useAuth()  
   
@@ -48,13 +49,14 @@ export default function ServiceSelectionScreen({ navigation, route }) {
   
       if (!user?.id) return  
   
-      // Validar permisos del usuario  
-      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
-      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+            // Validar permisos del usuario  
+      const userTallerId = await userService.GET_TALLER_ID(user.id)  
+      if (!userTallerId) return
+      const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
-  
+
       // Cargar servicios desde Supabase  
-      const allServices = await SERVICIOS_SERVICES.GET_ALL_SERVICIOS()  
+      const allServices = await getAllServices()  
         
       setServices(allServices)  
       setFilteredServices(allServices)  
@@ -711,5 +713,3 @@ const styles = StyleSheet.create({
     color: "#fff",  
   },  
 })  
-  
-export default ServiceSelectionScreen

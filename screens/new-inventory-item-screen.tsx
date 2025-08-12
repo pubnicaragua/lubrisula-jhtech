@@ -15,31 +15,32 @@ import {
 } from "react-native"  
 import { Feather } from "@expo/vector-icons"  
 import { useAuth } from "../context/auth-context"  
-import INVENTARIO_SERVICES, { InventarioType, CategoriaMaterialType, ProveedorType } from "../services/INVETARIO.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
-  
-export default function NewInventoryItemScreen({ navigation }) {  
-  const { user } = useAuth()  
-  const [loading, setLoading] = useState(false)  
-  const [categories, setCategories] = useState<CategoriaMaterialType[]>([])  
-  const [suppliers, setSuppliers] = useState<ProveedorType[]>([])  
-  const [categoryModalVisible, setCategoryModalVisible] = useState(false)  
-  const [supplierModalVisible, setSupplierModalVisible] = useState(false)  
+import INVENTARIO_SERVICES from "../services/supabase/inventory-service"
+import { InventoryItem, InventoryCategory, InventoryItemFormData } from "../types/inventory"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service" 
+import { CategoriaMaterialType } from "../services/supabase/services-service"
+
+export default function NewInventoryItemScreen({ navigation }: { navigation: any }) {
+  const { user } = useAuth()
+  const [loading, setLoading] = useState(false)
+  const [categories, setCategories] = useState<CategoriaMaterialType[]>([])
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([])
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false)
+  const [supplierModalVisible, setSupplierModalVisible] = useState(false)
     
-  const [formData, setFormData] = useState<Partial<InventarioType>>({  
-    codigo: "",  
-    nombre: "",  
-    descripcion: "",  
-    categoria_id: "",  
-    estado: "Activo",  
-    precio_compra: 0,  
-    precio_venta: 0,  
-    stock_actual: 0,  
-    stock_minimo: 0,  
-    proveedor_id: "",  
-    ubicacion_almacen: "",  
-    fecha_ingreso: new Date().toISOString().split('T')[0],  
+    const [formData, setFormData] = useState<Partial<InventoryItem>>({
+    producto: "",
+    codigo: "",
+    descripcion: "",
+    categoria_id: "",
+    stock_actual: 0,
+    stock_minimo: 0,
+    precio_compra: 0,
+    precio_venta: 0,
+    proveedor_id: "",
+    ubicacion_almacen: "",
+    estado: 'Activo',
   })  
   
   const [errors, setErrors] = useState<Record<string, string>>({})  
@@ -54,9 +55,14 @@ export default function NewInventoryItemScreen({ navigation }) {
   
       // Validar permisos del usuario  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {
+        Alert.alert("Error", "No tienes permisos para agregar artículos al inventario")  
+        navigation.goBack()  
+        return  
+      }
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
   
-      if (userPermissions?.rol === 'client') {  
+      if (userPermissions?.rol === 'client') {
         Alert.alert("Error", "No tienes permisos para agregar artículos al inventario")  
         navigation.goBack()  
         return  
@@ -64,8 +70,8 @@ export default function NewInventoryItemScreen({ navigation }) {
   
       // Cargar categorías y proveedores  
       const [categoriesData, suppliersData] = await Promise.all([  
-        INVENTARIO_SERVICES.GET_CATEGORIA_MATERIALES(),  
-        INVENTARIO_SERVICES.GET_PROVEEDORES()  
+        INVENTARIO_SERVICES.getInventoryCategories(),  
+        Promise.resolve([]) // Placeholder for suppliers - not implemented in service
       ])  
   
       setCategories(categoriesData)  
@@ -77,43 +83,43 @@ export default function NewInventoryItemScreen({ navigation }) {
     }  
   }  
   
-  const validateForm = () => {  
-    const newErrors: Record<string, string> = {}  
-  
-    if (!formData.codigo?.trim()) {  
-      newErrors.codigo = "El código es requerido"  
-    }  
-  
-    if (!formData.nombre?.trim()) {  
-      newErrors.nombre = "El nombre es requerido"  
-    }  
-  
-    if (!formData.categoria_id) {  
-      newErrors.categoria_id = "La categoría es requerida"  
-    }  
-  
-    if (!formData.precio_compra || formData.precio_compra <= 0) {  
-      newErrors.precio_compra = "El precio de compra debe ser mayor a 0"  
-    }  
-  
-    if (!formData.precio_venta || formData.precio_venta <= 0) {  
-      newErrors.precio_venta = "El precio de venta debe ser mayor a 0"  
-    }  
-  
-    if (formData.precio_venta && formData.precio_compra && formData.precio_venta <= formData.precio_compra) {  
-      newErrors.precio_venta = "El precio de venta debe ser mayor al precio de compra"  
-    }  
-  
-    if (formData.stock_actual === undefined || formData.stock_actual < 0) {  
-      newErrors.stock_actual = "El stock actual no puede ser negativo"  
-    }  
-  
-    if (!formData.stock_minimo || formData.stock_minimo < 0) {  
-      newErrors.stock_minimo = "El stock mínimo debe ser mayor o igual a 0"  
-    }  
-  
-    if (!formData.ubicacion_almacen?.trim()) {  
-      newErrors.ubicacion_almacen = "La ubicación en almacén es requerida"  
+    const validateForm = () => {
+    const newErrors: Record<string, string> = {}
+
+    if (!formData.codigo?.trim()) {
+      newErrors.codigo = "El código SKU es requerido"
+    }
+
+    if (!formData.producto?.trim()) {
+      newErrors.producto = "El nombre es requerido"
+    }
+
+    if (!formData.categoria_id) {
+      newErrors.categoria_id = "La categoría es requerida"
+    }
+
+    if (!formData.precio_compra || formData.precio_compra <= 0) {
+      newErrors.precio_compra = "El precio de compra debe ser mayor a 0"
+    }
+
+    if (!formData.precio_venta || formData.precio_venta <= 0) {
+      newErrors.precio_venta = "El precio de venta debe ser mayor a 0"
+    }
+
+    if (formData.precio_venta && formData.precio_compra && formData.precio_venta <= formData.precio_compra) {
+      newErrors.precio_venta = "El precio de venta debe ser mayor al precio de compra"
+    }
+
+    if (formData.stock_actual === undefined || formData.stock_actual < 0) {
+      newErrors.stock_actual = "El stock actual no puede ser negativo"
+    }
+
+    if (!formData.stock_minimo || formData.stock_minimo < 0) {
+      newErrors.stock_minimo = "El stock mínimo debe ser mayor o igual a 0"
+    }
+
+    if (!formData.ubicacion_almacen?.trim()) {
+      newErrors.ubicacion_almacen = "La ubicación en almacén es requerida"
     }  
   
     setErrors(newErrors)  
@@ -127,7 +133,7 @@ export default function NewInventoryItemScreen({ navigation }) {
       setLoading(true)  
         
       // Crear nuevo artículo de inventario  
-      const newItem = await INVENTARIO_SERVICES.INSERT_INVENTARIO(formData as InventarioType)  
+      const newItem = await INVENTARIO_SERVICES.createInventoryItem(formData as InventoryItemFormData)  
         
       Alert.alert(  
         "Éxito",  
@@ -147,7 +153,7 @@ export default function NewInventoryItemScreen({ navigation }) {
     }  
   }  
   
-  const updateFormData = (field: keyof InventarioType, value: any) => {  
+  const updateFormData = (field: keyof InventoryItem, value: string | number | boolean) => {  
     setFormData(prev => ({ ...prev, [field]: value }))  
     if (errors[field]) {  
       setErrors(prev => ({ ...prev, [field]: "" }))  
@@ -155,8 +161,8 @@ export default function NewInventoryItemScreen({ navigation }) {
   }  
   
   const getSelectedCategoryName = () => {  
-    const category = categories.find(cat => cat.id === formData.categoria_id)  
-    return category?.nombre || "Seleccionar categoría"  
+    const selectedCategory = categories.find(cat => cat.id === formData.categoria_id)
+    return selectedCategory?.nombre || "Seleccionar categoría"  
   }  
   
   const getSelectedSupplierName = () => {  
@@ -201,9 +207,6 @@ export default function NewInventoryItemScreen({ navigation }) {
               ]}>  
                 {item.nombre}  
               </Text>  
-              {item.descripcion && (  
-                <Text style={styles.modalOptionDescription}>{item.descripcion}</Text>  
-              )}  
               {formData.categoria_id === item.id && (  
                 <Feather name="check" size={20} color="#1a73e8" />  
               )}  
@@ -252,9 +255,6 @@ export default function NewInventoryItemScreen({ navigation }) {
               ]}>  
                 {item.name}  
               </Text>  
-              <Text style={styles.modalOptionDescription}>  
-                {item.contact_name} • {item.phone}  
-              </Text>  
               {formData.proveedor_id === item.id && (  
                 <Feather name="check" size={20} color="#1a73e8" />  
               )}  
@@ -292,13 +292,13 @@ export default function NewInventoryItemScreen({ navigation }) {
           <View style={styles.inputGroup}>  
             <Text style={styles.label}>Nombre *</Text>  
             <TextInput  
-              style={[styles.input, errors.nombre && styles.inputError]}  
-              value={formData.nombre}  
-              onChangeText={(value) => updateFormData('nombre', value)}  
+              style={[styles.input, errors.producto && styles.inputError]}  
+              value={formData.producto}  
+              onChangeText={(value) => updateFormData('producto', value)}  
               placeholder="Nombre del artículo"  
               autoCapitalize="words"  
             />  
-            {errors.nombre && <Text style={styles.errorText}>{errors.nombre}</Text>}  
+            {errors.producto && <Text style={styles.errorText}>{errors.producto}</Text>}  
           </View>  
   
           <View style={styles.inputGroup}>  

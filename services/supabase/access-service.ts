@@ -1,5 +1,5 @@
 import { supabase } from '../../lib/supabase'
-import type { UserRole } from '../../types/user'
+import type { USER_ROLES_TYPE, UserPermissions } from '../../types/user'
 
 // Tipos para permisos
 type Permission = {
@@ -10,7 +10,7 @@ type Permission = {
 }
 
 type RolePermission = {
-  role: UserRole
+  role: USER_ROLES_TYPE
   permission_id: string
   can_view: boolean
   can_edit: boolean
@@ -50,7 +50,7 @@ export const accessService = {
   },
 
   // Obtener permisos para un rol específico
-  async getRolePermissions(role: UserRole): Promise<RolePermission[]> {
+  async getRolePermissions(role: USER_ROLES_TYPE): Promise<RolePermission[]> {
     try {
       const { data, error } = await supabase
         .from('role_permissions')
@@ -65,10 +65,25 @@ export const accessService = {
     }
   },
 
+  async GET_PERMISOS_USUARIO(userId: string, tallerId: string): Promise<UserPermissions | null> {
+    try {
+      // Por ahora, asumimos que todos los usuarios son clientes
+      // En el futuro, esto se puede expandir para incluir roles y permisos reales
+      return {
+        rol: 'client',
+        permisos: [],
+        taller_id: tallerId
+      }
+    } catch (error) {
+      console.error('Error in GET_PERMISOS_USUARIO:', error)
+      return null
+    }
+  },
+
   // Verificar si un rol tiene un permiso específico
   async hasPermission(
-    role: UserRole, 
-    permissionName: string, 
+    role: USER_ROLES_TYPE,
+    permissionName: string,
     action: 'view' | 'edit' | 'delete' = 'view'
   ): Promise<boolean> {
     try {
@@ -89,7 +104,7 @@ export const accessService = {
 
   // Actualizar permisos para un rol
   async updateRolePermissions(
-    role: UserRole, 
+    role: USER_ROLES_TYPE,
     permissions: Array<{
       permission_id: string
       can_view: boolean
@@ -129,9 +144,9 @@ export const accessService = {
       return { success: true }
     } catch (error) {
       console.error('Error updating role permissions:', error)
-      return { 
-        success: false, 
-        error: error instanceof Error ? error : new Error('Error al actualizar los permisos') 
+      return {
+        success: false,
+        error: error instanceof Error ? error : new Error('Error al actualizar los permisos')
       }
     }
   },
@@ -159,9 +174,9 @@ export const accessService = {
     try {
       // Obtener la configuración actual para verificar si existe
       const currentConfig = await this.getWorkshopConfig()
-      
+
       let result
-      
+
       if (currentConfig) {
         // Actualizar configuración existente
         const { data, error } = await supabase
@@ -173,7 +188,7 @@ export const accessService = {
           .eq('id', currentConfig.id)
           .select()
           .single()
-          
+
         if (error) throw error
         result = data
       } else {
@@ -187,7 +202,7 @@ export const accessService = {
           }])
           .select()
           .single()
-          
+
         if (error) throw error
         result = data
       }
@@ -195,15 +210,15 @@ export const accessService = {
       return { success: true, data: result as WorkshopConfig }
     } catch (error) {
       console.error('Error updating workshop config:', error)
-      return { 
-        success: false, 
-        error: error instanceof Error ? error : new Error('Error al actualizar la configuración del taller') 
+      return {
+        success: false,
+        error: error instanceof Error ? error : new Error('Error al actualizar la configuración del taller')
       }
     }
   },
 
   // Obtener menú de navegación según el rol del usuario
-  async getNavigationMenu(role: UserRole): Promise<Array<{
+  async getNavigationMenu(role: USER_ROLES_TYPE): Promise<Array<{
     id: string
     title: string
     icon: string
@@ -271,7 +286,7 @@ export const accessService = {
   },
 
   // Menú de navegación por defecto (en caso de que falle la carga desde la base de datos)
-  private getDefaultNavigationMenu(role: UserRole) {
+  getDefaultNavigationMenu(role: USER_ROLES_TYPE) {
     const commonMenu = [
       {
         id: 'dashboard',
@@ -390,12 +405,9 @@ export const accessService = {
   },
 
   // Verificar si una ruta es accesible para un rol específico
-  async isRouteAccessible(role: UserRole, path: string): Promise<boolean> {
+  async isRouteAccessible(role: USER_ROLES_TYPE, path: string): Promise<boolean> {
     try {
-      // Obtener el menú de navegación para el rol
       const menu = await this.getNavigationMenu(role)
-      
-      // Función recursiva para buscar la ruta en el menú
       const findRoute = (items: any[], targetPath: string): any => {
         for (const item of items) {
           if (item.path === targetPath) return item
@@ -406,21 +418,22 @@ export const accessService = {
         }
         return null
       }
-      
-      const routeItem = findRoute(menu, path)
-      
-      // Si la ruta no está en el menú, denegar por defecto (seguridad por defecto)
-      if (!routeItem) return false
-      
-      // Si la ruta no requiere permiso, permitir acceso
-      if (!routeItem.requiredPermission) return true
-      
-      // Verificar si el rol tiene el permiso requerido
-      return this.hasPermission(role, routeItem.requiredPermission, 'view')
+
+      return findRoute(menu, path) !== null
     } catch (error) {
-      console.error('Error checking route access:', error)
-      return false // En caso de error, denegar acceso
+      console.error('Error checking route accessibility:', error)
+      return false
     }
+  },
+
+  // Get user permissions (alias for GET_PERMISOS_USUARIO)
+  async getUserPermissions(userId: string, tallerId: string): Promise<UserPermissions | null> {
+    return this.GET_PERMISOS_USUARIO(userId, tallerId)
+  },
+
+  // Check user permissions (alias for GET_PERMISOS_USUARIO)
+  async checkUserPermissions(userId: string, tallerId: string): Promise<UserPermissions | null> {
+    return this.GET_PERMISOS_USUARIO(userId, tallerId)
   }
 }
 

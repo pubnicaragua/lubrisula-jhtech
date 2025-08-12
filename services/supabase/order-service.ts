@@ -1,79 +1,19 @@
 import { supabase } from '../../lib/supabase';
-import type { AppImage } from '../../types';
+import type { 
+  Order, 
+  OrderItem, 
+  OrderStatus, 
+  PaymentStatus, 
+  OrderImage, 
+  OrderComment, 
+  RepairProcess,
+  CreateOrderData,
+  UpdateOrderData,
+  CreateOrderItemData,
+  CreateOrderCommentData
+} from '../../types';
 
-// Define types
-export type OrderStatus =
-  | 'reception' | 'diagnosis' | 'waiting_parts' | 'in_progress'
-  | 'quality_check' | 'completed' | 'delivered' | 'cancelled';
-
-export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'refunded';
-
-export type OrderItem = {
-  id: string;
-  name: string;
-  quantity: number;
-  unitPrice: number;
-  total: number;
-  partNumber?: string;
-  supplier?: string;
-  status: 'pending' | 'ordered' | 'received' | 'installed';
-};
-
-export type OrderImage = AppImage;
-
-export type OrderComment = {
-  id: string;
-  userId: string;
-  userName: string;
-  userAvatar?: string;
-  content: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type RepairProcess = {
-  id: string;
-  name: string;
-  description?: string;
-  startDate: string;
-  endDate?: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
-  technicianId: string;
-  technicianName: string;
-  notes?: string;
-  images: AppImage[];
-};
-
-export type Order = {
-  id: string;
-  number: string;
-  clientId: string;
-  vehicleId: string;
-  technicianId: string;
-  status: OrderStatus;
-  description?: string;
-  diagnosis?: string;
-  notes?: string;
-  priority?: 'low' | 'medium' | 'high';
-  estimatedCompletionDate?: string;
-  completionDate?: string;
-  paymentStatus: PaymentStatus;
-  paymentMethod?: string;
-  paymentNotes?: string;
-  subtotal: number;
-  tax: number;
-  discount: number;
-  total: number;
-  paidAmount: number;
-  balance: number;
-  warranty: { parts: number; labor: number };
-  images: OrderImage[];
-  comments: OrderComment[];
-  items: OrderItem[];
-  repairProcesses: RepairProcess[];
-  createdAt: string;
-  updatedAt: string;
-};
+// Los tipos están ahora definidos en types/orders.ts y se importan desde ahí
 
 const handleSupabaseError = (error: any, context: string) => {
   console.error(`Error ${context}:`, error);
@@ -84,7 +24,7 @@ export const orderService = {
   // Get all orders with optional filtering
   getAllOrders: async (filters: Record<string, any> = {}): Promise<Order[]> => {
     try {
-      let query = supabase.from('orders').select('*');
+      let query = supabase.from('ordenes_trabajo').select('*');
 
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
@@ -92,12 +32,15 @@ export const orderService = {
         }
       });
 
-      const { data, error } = await query.order('created_at', { ascending: false });
+      const { data, error } = await query.order('fecha_creacion', { ascending: false });
       if (error) throw error;
 
       return (data || []).map(order => ({
         ...order,
         // Map database fields to our type
+        clientId: order.client_id,
+        vehicleId: order.vehicle_id,
+        technicianId: order.technician_id,
         estimatedCompletionDate: order.estimated_completion_date,
         completionDate: order.completion_date,
         paymentStatus: order.payment_status,
@@ -123,7 +66,7 @@ export const orderService = {
     try {
       // Get the order
       const { data: order, error } = await supabase
-        .from('orders')
+        .from('ordenes_trabajo')
         .select('*')
         .eq('id', id)
         .single();
@@ -207,7 +150,7 @@ export const orderService = {
 
   // Create a new order
   createOrder: async (
-    orderData: Omit<Order, 'id' | 'number' | 'images' | 'comments' | 'items' | 'repairProcesses' | 'createdAt' | 'updatedAt'>
+    orderData: CreateOrderData
   ): Promise<Order> => {
     try {
       const orderNumber = `ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -226,7 +169,7 @@ export const orderService = {
       };
 
       const { data, error } = await supabase
-        .from('orders')
+        .from('ordenes_trabajo')
         .insert([newOrder])
         .select()
         .single();
@@ -241,7 +184,7 @@ export const orderService = {
   },
 
   // Update an order
-  updateOrder: async (id: string, updates: Partial<Order>): Promise<Order | null> => {
+  updateOrder: async (id: string, updates: UpdateOrderData): Promise<Order | null> => {
     try {
       const updateData = {
         ...updates,
@@ -255,7 +198,7 @@ export const orderService = {
       };
 
       const { error } = await supabase
-        .from('orders')
+        .from('ordenes_trabajo')
         .update(updateData)
         .eq('id', id);
 
@@ -268,10 +211,35 @@ export const orderService = {
     }
   },
 
+  async updateOrderStatus(id: string, status: string): Promise<Order | null> {
+    try {
+      const { data, error } = await supabase
+        .from('ordenes_trabajo')
+        .update({ status })
+        .eq('id', id)
+
+      if (error) throw error
+      return orderService.getOrderById(id)
+    } catch (error) {
+      handleSupabaseError(error, `update order status ${id}`);
+      throw error;
+    }
+  },
+
+  async deleteOrder(id: string): Promise<void> {
+    try {
+      const { error } = await supabase.from('ordenes_trabajo').delete().eq('id', id)
+      if (error) throw error
+    } catch (error) {
+      handleSupabaseError(error, `delete order ${id}`);
+      throw error;
+    }
+  },
+
   // Add a comment to an order
   addOrderComment: async (
     orderId: string,
-    comment: Omit<OrderComment, 'id' | 'createdAt' | 'updatedAt'>
+    comment: CreateOrderCommentData
   ): Promise<OrderComment> => {
     try {
       const newComment = {
@@ -294,22 +262,25 @@ export const orderService = {
 
       return {
         id: data.id,
+        orderId: orderId,
         userId: data.user_id,
         userName: data.user_name,
         userAvatar: data.user_avatar,
         content: data.content,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
+        type: 'technician' // Default type, can be made configurable
       };
     } catch (error) {
       handleSupabaseError(error, `add comment to order ${orderId}`);
       throw error;
     }
   },
+
   async getOrdersByClientId(clientId: string): Promise<Order[]> {
     try {
       const { data, error } = await supabase
-        .from('ordenes')
+        .from('ordenes_trabajo')
         .select('*')
         .eq('client_id', clientId)
         .order('fecha_creacion', { ascending: false })
@@ -319,10 +290,136 @@ export const orderService = {
         return []
       }
 
-      return data || []
+      return (data || []).map(order => ({
+        ...order,
+        // Map database fields to our type
+        clientId: order.client_id,
+        vehicleId: order.vehicle_id,
+        technicianId: order.technician_id,
+        estimatedCompletionDate: order.estimated_completion_date,
+        completionDate: order.completion_date,
+        paymentStatus: order.payment_status,
+        paymentMethod: order.payment_method,
+        paymentNotes: order.payment_notes,
+        paidAmount: order.paid_amount,
+        createdAt: order.created_at,
+        updatedAt: order.updated_at,
+        // Initialize empty arrays that will be populated by separate queries
+        images: [],
+        comments: [],
+        items: [],
+        repairProcesses: [],
+      }))
     } catch (error) {
       console.error('Error in getOrdersByClientId:', error)
       return []
+    }
+  },
+  
+  async initializeOrders(): Promise<void> {
+    try {
+      const orders = await orderService.getAllOrders();
+    } catch (error) {
+      console.error('Error initializing orders:', error);
+      throw new Error('Failed to initialize orders. Please check your connection and try again.');
+    }
+  },
+
+  // Get parts for a specific order
+  async getOrderParts(orderId: string): Promise<OrderItem[]> {
+    try {
+      const { data, error } = await supabase
+        .from('order_parts')
+        .select('*')
+        .eq('order_id', orderId);
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error(`Error fetching order parts for order ${orderId}:`, error);
+      throw error;
+    }
+  },
+
+  // Add a part to an order
+  async addPartToOrder(orderId: string, partData: CreateOrderItemData): Promise<OrderItem> {
+    try {
+      const { data, error } = await supabase
+        .from('order_parts')
+        .insert([{
+          order_id: orderId,
+          name: partData.name,
+          quantity: partData.quantity,
+          unit_price: partData.unitPrice,
+          total: partData.total,
+          part_number: partData.partNumber,
+          supplier: partData.supplier,
+          status: partData.status
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error(`Error adding part to order ${orderId}:`, error);
+      throw error;
+    }
+  },
+
+  // Update an order part
+  async updateOrderPart(partId: string, updates: Partial<OrderItem>): Promise<OrderItem> {
+    try {
+      const updateData: any = { ...updates };
+      
+      // Map fields if necessary
+      if ('unitPrice' in updates) updateData.unit_price = updates.unitPrice;
+      if ('partNumber' in updates) updateData.part_number = updates.partNumber;
+
+      const { data, error } = await supabase
+        .from('order_parts')
+        .update(updateData)
+        .eq('id', partId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error(`Error updating order part ${partId}:`, error);
+      throw error;
+    }
+  },
+
+  // Remove a part from an order
+  async removePartFromOrder(partId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('order_parts')
+        .delete()
+        .eq('id', partId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error(`Error removing order part ${partId}:`, error);
+      throw error;
+    }
+  },
+
+  // Get orders by vehicle ID
+  async getOrdersByVehicleId(vehicleId: string): Promise<Order[]> {
+    try {
+      const { data, error } = await supabase
+        .from('ordenes_trabajo')
+        .select('*')
+        .eq('vehicle_id', vehicleId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error(`Error fetching orders for vehicle ${vehicleId}:`, error);
+      throw error;
     }
   }
 };

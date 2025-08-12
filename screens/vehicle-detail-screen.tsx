@@ -19,74 +19,21 @@ import { Feather } from "@expo/vector-icons"
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
 // Importaciones corregidas para usar servicios de Supabase  
-import * as vehicleService from "../services/supabase/vehicle-service"  
-import * as orderService from "../services/supabase/order-service"  
-import * as clientService from "../services/supabase/client-service"  
-import * as appointmentService from "../services/supabase/appointment-service"  
-import * as accessService from "../services/supabase/access-service"  
-import * as userService from "../services/supabase/user-service"  
+import { vehicleService, Vehicle } from "../services/supabase/vehicle-service"  
+import { orderService } from "../services/supabase/order-service"  
+import { clientService, Client } from "../services/supabase/client-service"  
+import { getAppointmentsByVehicleId, AppointmentType } from "../services/supabase/appointment-service"  
+import { accessService } from "../services/supabase/access-service"  
+import { userService } from "../services/supabase/user-service"  
+import { Order, UiScreenProps } from "../types"
   
-// Tipos TypeScript para resolver errores  
-interface VehicleDetailScreenProps {  
-  route: any  
-  navigation: any  
-}  
-  
-interface VehicleType {  
-  id: string  
-  marca: string  
-  modelo: string  
-  año: number  
-  placa: string  
-  vin?: string  
-  color?: string  
-  kilometraje?: number  
-  client_id: string  
-  fecha_registro?: string  
-  proximo_servicio?: string  
-  imagenes?: string[]  
-  notas?: string  
-  activo?: boolean  
-}  
-  
-interface ClientType {  
-  id: string  
-  nombre: string  
-  email?: string  
-  telefono?: string  
-}  
-  
-interface OrderType {  
-  id: string  
-  numero_orden: string  
-  descripcion: string  
-  estado: string  
-  prioridad: string  
-  client_id: string  
-  vehiculo_id: string  
-  costo?: number  
-  fecha_creacion: string  
-  fecha_actualizacion?: string  
-}  
-  
-interface AppointmentType {  
-  id: string  
-  client_id: string  
-  vehiculo_id: string  
-  fecha: string  
-  hora: string  
-  tipo_servicio: string  
-  estado: string  
-  notas?: string  
-}  
-  
-export default function VehicleDetailScreen({ route, navigation }: VehicleDetailScreenProps) {  
+export default function VehicleDetailScreen({ route, navigation }: UiScreenProps) {  
   const { vehicleId } = route.params  
   const { user } = useAuth()  
     
-  const [vehicle, setVehicle] = useState<VehicleType | null>(null)  
-  const [client, setClient] = useState<ClientType | null>(null)  
-  const [orders, setOrders] = useState<OrderType[]>([])  
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null)  
+  const [client, setClient] = useState<Client | null>(null)  
+  const [orders, setOrders] = useState<Order[]>([])  
   const [appointments, setAppointments] = useState<AppointmentType[]>([])  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
@@ -105,6 +52,10 @@ export default function VehicleDetailScreen({ route, navigation }: VehicleDetail
   
       // Validar permisos del usuario  
       const userTallerId = await userService.getUserTaller(user.id)  
+      if (!userTallerId) {
+        setError("No se pudo obtener la información del taller")
+        return
+      }      
       const userPermissions = await accessService.checkUserPermissions(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
@@ -124,13 +75,13 @@ export default function VehicleDetailScreen({ route, navigation }: VehicleDetail
       // Cargar órdenes del vehículo  
       const vehicleOrders = await orderService.getOrdersByVehicleId(vehicleId)  
       // Ordenar por fecha más reciente  
-      const sortedOrders = vehicleOrders.sort((a: OrderType, b: OrderType) =>   
-        new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime()  
+      const sortedOrders = vehicleOrders.sort((a: Order, b: Order) =>   
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()  
       )  
       setOrders(sortedOrders)  
   
       // Cargar citas del vehículo  
-      const vehicleAppointments = await appointmentService.getAppointmentsByVehicleId(vehicleId)  
+      const vehicleAppointments = await getAppointmentsByVehicleId(vehicleId)  
       // Ordenar por fecha más reciente  
       const sortedAppointments = vehicleAppointments.sort((a: AppointmentType, b: AppointmentType) =>   
         new Date(b.fecha).getTime() - new Date(a.fecha).getTime()  
@@ -210,9 +161,9 @@ export default function VehicleDetailScreen({ route, navigation }: VehicleDetail
           <Feather name="x" size={24} color="#fff" />  
         </TouchableOpacity>  
           
-        {selectedImageIndex !== null && vehicle?.imagenes && (  
+        {selectedImageIndex !== null && vehicle?.images && (  
           <Image   
-            source={{ uri: vehicle.imagenes[selectedImageIndex] }}   
+            source={{ uri: vehicle.images[selectedImageIndex].uri }}   
             style={styles.fullScreenImage}  
             resizeMode="contain"  
           />  
@@ -270,10 +221,10 @@ export default function VehicleDetailScreen({ route, navigation }: VehicleDetail
         <View style={styles.vehicleHeader}>  
           <View style={styles.vehicleInfo}>  
             <Text style={styles.vehicleName}>  
-              {vehicle.marca} {vehicle.modelo}  
+              {vehicle.make} {vehicle.model}  
             </Text>  
-            <Text style={styles.vehicleYear}>{vehicle.año}</Text>  
-            <Text style={styles.vehiclePlate}>Placa: {vehicle.placa}</Text>  
+            <Text style={styles.vehicleYear}>{vehicle.year}</Text>  
+            <Text style={styles.vehiclePlate}>Placa: {vehicle.license_plate}</Text>  
           </View>  
           <View style={styles.vehicleIcon}>  
             <Feather name="truck" size={32} color="#1a73e8" />  
@@ -281,17 +232,17 @@ export default function VehicleDetailScreen({ route, navigation }: VehicleDetail
         </View>  
   
         {/* Imágenes del vehículo */}  
-        {vehicle.imagenes && vehicle.imagenes.length > 0 && (  
+        {vehicle.images && vehicle.images.length > 0 && (  
           <View style={styles.imagesSection}>  
             <Text style={styles.sectionTitle}>Imágenes</Text>  
             <ScrollView horizontal style={styles.imagesContainer}>  
-              {vehicle.imagenes.map((imageUri, index) => (  
+              {vehicle.images.map((image, index: number) => (  
                 <TouchableOpacity  
                   key={index}  
                   style={styles.imageContainer}  
                   onPress={() => setSelectedImageIndex(index)}  
                 >  
-                  <Image source={{ uri: imageUri }} style={styles.vehicleImage} />  
+                  <Image source={{ uri: image.uri }} style={styles.vehicleImage} />  
                 </TouchableOpacity>  
               ))}  
             </ScrollView>  
@@ -310,9 +261,9 @@ export default function VehicleDetailScreen({ route, navigation }: VehicleDetail
                 <Feather name="user" size={24} color="#1a73e8" />  
               </View>  
               <View style={styles.clientInfo}>  
-                <Text style={styles.clientName}>{client.nombre}</Text>  
+                <Text style={styles.clientName}>{client.name}</Text>  
                 <Text style={styles.clientEmail}>{client.email}</Text>  
-                <Text style={styles.clientPhone}>{client.telefono}</Text>  
+                <Text style={styles.clientPhone}>{client.phone}</Text>  
               </View>  
               <Feather name="chevron-right" size={20} color="#999" />  
             </TouchableOpacity>  
@@ -325,19 +276,19 @@ export default function VehicleDetailScreen({ route, navigation }: VehicleDetail
           <View style={styles.infoCard}>  
             <View style={styles.infoRow}>  
               <Text style={styles.infoLabel}>Marca:</Text>  
-              <Text style={styles.infoValue}>{vehicle.marca}</Text>  
+              <Text style={styles.infoValue}>{vehicle.make}</Text>  
             </View>  
             <View style={styles.infoRow}>  
               <Text style={styles.infoLabel}>Modelo:</Text>  
-              <Text style={styles.infoValue}>{vehicle.modelo}</Text>  
+              <Text style={styles.infoValue}>{vehicle.model}</Text>  
             </View>  
             <View style={styles.infoRow}>  
               <Text style={styles.infoLabel}>Año:</Text>  
-              <Text style={styles.infoValue}>{vehicle.año}</Text>  
+              <Text style={styles.infoValue}>{vehicle.year}</Text>  
             </View>  
             <View style={styles.infoRow}>  
               <Text style={styles.infoLabel}>Placa:</Text>  
-              <Text style={styles.infoValue}>{vehicle.placa}</Text>  
+              <Text style={styles.infoValue}>{vehicle.license_plate}</Text>  
             </View>  
             {vehicle.vin && (  
               <View style={styles.infoRow}>  
@@ -351,10 +302,10 @@ export default function VehicleDetailScreen({ route, navigation }: VehicleDetail
                 <Text style={styles.infoValue}>{vehicle.color}</Text>  
               </View>  
             )}  
-            {vehicle.kilometraje && (  
+            {vehicle.mileage && (  
               <View style={styles.infoRow}>  
                 <Text style={styles.infoLabel}>Kilometraje:</Text>  
-                <Text style={styles.infoValue}>{vehicle.kilometraje.toLocaleString()} km</Text>  
+                <Text style={styles.infoValue}>{vehicle.mileage.toLocaleString()} km</Text>  
               </View>  
             )}  
           </View>  
@@ -383,22 +334,22 @@ export default function VehicleDetailScreen({ route, navigation }: VehicleDetail
                   onPress={() => navigation.navigate("OrderDetail", { orderId: item.id })}  
                 >  
                   <View style={styles.orderHeader}>  
-                    <Text style={styles.orderNumber}>#{item.numero_orden}</Text>  
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.estado) }]}>  
-                      <Text style={styles.statusText}>{item.estado}</Text>  
+                    <Text style={styles.orderNumber}>#{item.number}</Text>  
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>  
+                      <Text style={styles.statusText}>{item.status}</Text>  
                     </View>  
                   </View>  
   
                   <Text style={styles.orderDescription} numberOfLines={2}>  
-                    {item.descripcion}  
+                    {item.description}  
                   </Text>  
   
                   <View style={styles.orderFooter}>  
                     <Text style={styles.orderDate}>  
-                      {new Date(item.fecha_creacion).toLocaleDateString("es-ES")}  
+                      {new Date(item.createdAt).toLocaleDateString("es-ES")}  
                     </Text>  
                     <Text style={styles.orderTotal}>  
-                      ${(item.costo || 0).toFixed(2)}  
+                      ${(item.total || 0).toFixed(2)}  
                     </Text>  
                   </View>  
                 </TouchableOpacity>  
@@ -473,11 +424,11 @@ export default function VehicleDetailScreen({ route, navigation }: VehicleDetail
         </View>  
   
         {/* Notas del vehículo */}  
-        {vehicle.notas && (  
+        {vehicle.notes && (  
           <View style={styles.section}>  
             <Text style={styles.sectionTitle}>Notas</Text>  
             <View style={styles.notesCard}>  
-              <Text style={styles.notesText}>{vehicle.notas}</Text>  
+              <Text style={styles.notesText}>{vehicle.notes}</Text>  
             </View>  
           </View>  
         )}  

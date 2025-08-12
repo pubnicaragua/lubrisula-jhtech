@@ -1,5 +1,5 @@
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
+import es from 'date-fns/esm/locale/es';
+import { format } from 'date-fns';
 
 // Formatear fecha
 export const formatDate = (dateString: string, formatStr = "dd/MM/yyyy"): string => {

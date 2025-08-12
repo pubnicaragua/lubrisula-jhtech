@@ -1,728 +1,567 @@
-"use client"  
+import React, { useState, useEffect } from 'react'
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
+  Alert,
+  Dimensions
+} from 'react-native'
+import { useAuth } from '../context/auth-context'
+import dashboardService from '../services/supabase/dashboard-service'
+import { MaterialIcons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons'
+import { useNavigation } from '@react-navigation/native'
+import type { StackNavigationProp } from '@react-navigation/stack'
+
+const { width } = Dimensions.get('window')
+
+interface DashboardStats {
+  totalOrders: number
+  pendingOrders: number
+  completedOrders: number
+  totalRevenue: number
+  totalClients: number
+  lowStockItems: number
+  upcomingAppointments: number
+}
+
+interface RecentActivity {
+  id: string
+  type: 'order' | 'client' | 'appointment' | 'inventory'
+  title: string
+  description: string
+  timestamp: string
+  status?: string
+}
+
+type RootStackParamList = {
+  OrderDetail: { orderId: string }
+  ClientDetail: { clientId: string }
+  AppointmentDetail: { appointmentId: string }
+}
+
+const DashboardScreen: React.FC = () => {
+  const { user } = useAuth()
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>()
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   
-import { useState, useCallback, useEffect } from "react"  
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl } from "react-native"  
-import { Feather } from "@expo/vector-icons"  
-import { useFocusEffect } from "@react-navigation/native"  
-// Importaciones corregidas para usar servicios de Supabase  
-import * as orderService from "../services/supabase/order-service"  
-import * as clientService from "../services/supabase/client-service"  
-import * as inventoryService from "../services/supabase/inventory-service"  
-import * as dashboardService from "../services/supabase/dashboard-service"  
-import * as userService from "../services/supabase/user-service"  
-import * as accessService from "../services/supabase/access-service"  
-import { useAuth } from "../context/auth-context"  
-  
-// Tipos TypeScript para resolver errores  
-interface DashboardScreenProps {  
-  navigation: any  
-}  
-  
-interface OrderType {  
-  id: string  
-  numero_orden: string  
-  descripcion: string  
-  estado: string  
-  prioridad: string  
-  client_id: string  
-  vehiculo_id: string  
-  tecnico_id?: string  
-  costo?: number  
-  fecha_creacion: string  
-  observacion?: string  
-}  
-  
-interface ClientType {  
-  id: string  
-  nombre: string  
-  email?: string  
-  telefono?: string  
-}  
-  
-interface InventoryItemType {  
-  id: string  
-  nombre: string  
-  codigo: string  
-  stock_actual: number  
-  stock_minimo?: number  
-  precio_venta?: number  
-}  
-  
-interface StatsType {  
-  totalOrders: number  
-  pendingOrders: number  
-  completedOrders: number  
-  totalRevenue: number  
-  totalClients: number  
-  lowStockItems: number  
-}  
-  
-export default function DashboardScreen({ navigation }: DashboardScreenProps) {  
-  const { user } = useAuth()  
-  const [isLoading, setIsLoading] = useState(true)  
-  const [refreshing, setRefreshing] = useState(false)  
-  const [orders, setOrders] = useState<OrderType[]>([])  
-  const [clients, setClients] = useState<ClientType[]>([])  
-  const [lowStockItems, setLowStockItems] = useState<InventoryItemType[]>([])  
-  const [stats, setStats] = useState<StatsType>({  
-    totalOrders: 0,  
-    pendingOrders: 0,  
-    completedOrders: 0,  
-    totalRevenue: 0,  
-    totalClients: 0,  
-    lowStockItems: 0  
-  })  
-  const [error, setError] = useState<string | null>(null)  
-  const [userRole, setUserRole] = useState<string | null>(null)  
-  
-  // Cargar datos del dashboard  
-  const loadDashboardData = useCallback(async () => {  
-    try {  
-      setIsLoading(true)  
-      setRefreshing(true)  
-      setError(null)  
-  
-      if (!user?.id) return  
-  
-      // Validar permisos del usuario  
-      const userTallerId = await userService.getTallerId(user.id)  
-      const userPermissions = await accessService.getUserPermissions(user.id, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
-  
-      // Cargar datos según el rol del usuario  
-      if (userPermissions?.rol === "client") {  
-        // Para clientes, solo cargar sus órdenes  
-        const clientOrders = await orderService.getOrdersByClientId(user.id)  
-        setOrders(clientOrders)  
-  
-        // Calcular estadísticas del cliente  
-        const pendingOrders = clientOrders.filter(  
-          (order: OrderType) => order.estado !== "Completada" && order.estado !== "Entregada"  
-        )  
-        const completedOrders = clientOrders.filter(  
-          (order: OrderType) => order.estado === "Completada" || order.estado === "Entregada"  
-        )  
-  
-        setStats({  
-          totalOrders: clientOrders.length,  
-          pendingOrders: pendingOrders.length,  
-          completedOrders: completedOrders.length,  
-          totalRevenue: clientOrders.reduce((sum: number, order: OrderType) => sum + (order.costo || 0), 0),  
-          totalClients: 0,  
-          lowStockItems: 0  
-        })  
-      } else {  
-        // Para técnicos y administradores, cargar todos los datos  
-        const [allOrders, allClients, lowStock] = await Promise.all([  
-          orderService.getAllOrders(),  
-          clientService.getAllClients(),  
-          inventoryService.getLowStockItems(),  
-        ])  
-  
-        setOrders(allOrders)  
-        setClients(allClients)  
-        setLowStockItems(lowStock)  
-  
-        // Calcular estadísticas generales  
-        const pendingOrders = allOrders.filter((order: OrderType) =>   
-          order.estado !== "Completada" && order.estado !== "Entregada"  
-        )  
-        const completedOrders = allOrders.filter(  
-          (order: OrderType) => order.estado === "Completada" || order.estado === "Entregada"  
-        )  
-  
-        setStats({  
-          totalOrders: allOrders.length,  
-          pendingOrders: pendingOrders.length,  
-          completedOrders: completedOrders.length,  
-          totalRevenue: allOrders.reduce((sum: number, order: OrderType) => sum + (order.costo || 0), 0),  
-          totalClients: allClients.length,  
-          lowStockItems: lowStock.length  
-        })  
-      }  
-    } catch (error) {  
-      console.error("Error al cargar datos del dashboard:", error)  
-      setError("No se pudieron cargar los datos. Intente nuevamente.")  
-    } finally {  
-      setIsLoading(false)  
-      setRefreshing(false)  
-    }  
-  }, [user])  
-  
-  useFocusEffect(  
-    useCallback(() => {  
-      loadDashboardData()  
-    }, [loadDashboardData])  
-  )  
-  
-  // Manejar navegación  
-  const handleNavigation = (screen: string) => {  
-    switch (screen) {  
-      case "orders":  
-        navigation.navigate("OrdersTab")  
-        break  
-      case "clients":  
-        navigation.navigate("ClientsTab")  
-        break  
-      case "inventory":  
-        navigation.navigate("InventoryTab")  
-        break  
-      case "reports":  
-        navigation.navigate("ReportsTab")  
-        break  
-      default:  
-        break  
-    }  
-  }  
-  
-  if (isLoading) {  
-    return (  
-      <View style={styles.loadingContainer}>  
-        <ActivityIndicator size="large" color="#1a73e8" />  
-        <Text style={styles.loadingText}>Cargando dashboard...</Text>  
-      </View>  
-    )  
-  }  
-  
-  if (error) {  
-    return (  
-      <View style={styles.errorContainer}>  
-        <Feather name="alert-circle" size={64} color="#f44336" />  
-        <Text style={styles.errorText}>{error}</Text>  
-        <TouchableOpacity style={styles.retryButton} onPress={loadDashboardData}>  
-          <Text style={styles.retryButtonText}>Reintentar</Text>  
-        </TouchableOpacity>  
-      </View>  
-    )  
-  }  
-  
-  return (  
-    <ScrollView   
-      style={styles.container}  
-      refreshControl={  
-        <RefreshControl refreshing={refreshing} onRefresh={loadDashboardData} colors={["#1a73e8"]} />  
-      }  
-    >  
-      {/* Header */}  
-      <View style={styles.header}>  
-        <Text style={styles.welcomeText}>¡Bienvenido!</Text>  
-        <Text style={styles.dateText}>{new Date().toLocaleDateString("es-ES")}</Text>  
-      </View>  
-  
-      {/* Estadísticas principales */}  
-      <View style={styles.statsContainer}>  
-        <View style={styles.statCard}>  
-          <View style={styles.statIconContainer}>  
-            <Feather name="clipboard" size={24} color="#1a73e8" />  
-          </View>  
-          <View style={styles.statContent}>  
-            <Text style={styles.statValue}>{stats.totalOrders}</Text>  
-            <Text style={styles.statLabel}>Órdenes Totales</Text>  
-          </View>  
-        </View>  
-  
-        <View style={styles.statCard}>  
-          <View style={styles.statIconContainer}>  
-            <Feather name="clock" size={24} color="#f5a623" />  
-          </View>  
-          <View style={styles.statContent}>  
-            <Text style={styles.statValue}>{stats.pendingOrders}</Text>  
-            <Text style={styles.statLabel}>Pendientes</Text>  
-          </View>  
-        </View>  
-  
-        <View style={styles.statCard}>  
-          <View style={styles.statIconContainer}>  
-            <Feather name="check-circle" size={24} color="#4caf50" />  
-          </View>  
-          <View style={styles.statContent}>  
-            <Text style={styles.statValue}>{stats.completedOrders}</Text>  
-            <Text style={styles.statLabel}>Completadas</Text>  
-          </View>  
-        </View>  
-  
-        <View style={styles.statCard}>  
-          <View style={styles.statIconContainer}>  
-            <Feather name="dollar-sign" size={24} color="#9c27b0" />  
-          </View>  
-          <View style={styles.statContent}>  
-            <Text style={styles.statValue}>${stats.totalRevenue.toFixed(2)}</Text>  
-            <Text style={styles.statLabel}>Ingresos</Text>  
-          </View>  
-        </View>  
-      </View>  
-  
-      {/* Acciones rápidas */}  
-      <View style={styles.quickActionsContainer}>  
-        <Text style={styles.sectionTitle}>Acciones Rápidas</Text>  
-          
-        <View style={styles.quickActionsGrid}>  
-          <TouchableOpacity style={styles.quickActionCard} onPress={() => handleNavigation("orders")}>  
-            <Feather name="plus-circle" size={32} color="#1a73e8" />  
-            <Text style={styles.quickActionText}>Nueva Orden</Text>  
-          </TouchableOpacity>  
-  
-          {userRole !== "client" && (  
-            <>  
-              <TouchableOpacity style={styles.quickActionCard} onPress={() => handleNavigation("clients")}>  
-                <Feather name="users" size={32} color="#4caf50" />  
-                <Text style={styles.quickActionText}>Clientes</Text>  
-              </TouchableOpacity>  
-  
-              <TouchableOpacity style={styles.quickActionCard} onPress={() => handleNavigation("inventory")}>  
-                <Feather name="package" size={32} color="#f5a623" />  
-                <Text style={styles.quickActionText}>Inventario</Text>  
-              </TouchableOpacity>  
-  
-              <TouchableOpacity style={styles.quickActionCard} onPress={() => handleNavigation("reports")}>  
-                <Feather name="bar-chart-2" size={32} color="#9c27b0" />  
-                <Text style={styles.quickActionText}>Reportes</Text>  
-              </TouchableOpacity>  
-            </>  
-          )}  
-        </View>  
-      </View>  
-  
-      {/* Órdenes recientes */}  
-      <View style={styles.recentContainer}>  
-        <View style={styles.sectionHeader}>  
-          <Text style={styles.sectionTitle}>Órdenes Recientes</Text>  
-          <TouchableOpacity onPress={() => handleNavigation("orders")}>  
-            <Text style={styles.seeAllText}>Ver todas</Text>  
-          </TouchableOpacity>  
-        </View>  
-  
-        {orders.length > 0 ? (  
-          orders.slice(0, 5).map((order: OrderType) => (  
-            <TouchableOpacity  
-              key={order.id}  
-              style={styles.orderCard}  
-              onPress={() =>  
-                navigation.navigate("OrdersTab", {  
-                  screen: "OrderDetail",  
-                  params: { orderId: order.id },  
-                })  
-              }  
-            >  
-              <View style={styles.orderInfo}>  
-                <Text style={styles.orderNumber}>#{order.numero_orden}</Text>  
-                <Text style={styles.orderDescription} numberOfLines={1}>  
-                  {order.descripcion}  
-                </Text>  
-                <Text style={styles.orderDate}>  
-                  {new Date(order.fecha_creacion).toLocaleDateString("es-ES")}  
-                </Text>  
-              </View>  
-              <View style={styles.orderStatus}>  
-                <Text style={[styles.statusText, { color: getStatusColor(order.estado) }]}>  
-                  {order.estado}  
-                </Text>  
-                <Text style={styles.orderAmount}>${(order.costo || 0).toFixed(2)}</Text>  
-              </View>  
-            </TouchableOpacity>  
-          ))  
-        ) : (  
-          <View style={styles.emptyState}>  
-            <Feather name="clipboard" size={48} color="#ccc" />  
-            <Text style={styles.emptyText}>No hay órdenes registradas</Text>  
-          </View>  
-        )}  
-      </View>  
-  
-      {userRole !== "client" && (  
-        <>  
-          {/* Clientes recientes */}  
-          <View style={styles.recentContainer}>  
-            <View style={styles.sectionHeader}>  
-              <Text style={styles.sectionTitle}>Clientes Recientes</Text>  
-              <TouchableOpacity onPress={() => handleNavigation("clients")}>  
-                <Text style={styles.seeAllText}>Ver todos</Text>  
-              </TouchableOpacity>  
-            </View>  
-  
-            {clients.length > 0 ? (  
-              clients.slice(0, 3).map((client: ClientType) => (  
-                <TouchableOpacity  
-                  key={client.id}  
-                  style={styles.clientCard}  
-                  onPress={() =>  
-                    navigation.navigate("ClientsTab", {  
-                      screen: "ClientDetail",  
-                      params: { clientId: client.id },  
-                    })  
-                  }  
-                >  
-                  <View style={styles.clientAvatar}>  
-                    <Feather name="user" size={24} color="#1a73e8" />  
-                  </View>  
-                  <View style={styles.clientInfo}>  
-                    <Text style={styles.clientName}>{client.nombre}</Text>  
-                    <Text style={styles.clientContact}>{client.telefono}</Text>  
-                  </View>  
-                  <Feather name="chevron-right" size={20} color="#999" />  
-                </TouchableOpacity>  
-              ))  
-            ) : (  
-              <View style={styles.emptyState}>  
-                <Feather name="users" size={48} color="#ccc" />  
-                <Text style={styles.emptyText}>No hay clientes registrados</Text>  
-              </View>  
-            )}  
-          </View>  
-  
-          {/* Inventario bajo */}  
-          <View style={styles.recentContainer}>  
-            <View style={styles.sectionHeader}>  
-              <Text style={styles.sectionTitle}>Inventario Bajo</Text>  
-              <TouchableOpacity onPress={() => handleNavigation("inventory")}>  
-                <Text style={styles.seeAllText}>Ver inventario</Text>  
-              </TouchableOpacity>  
-            </View>  
-  
-            {lowStockItems.length > 0 ? (  
-              lowStockItems.slice(0, 3).map((item: InventoryItemType) => (  
-                <TouchableOpacity  
-                  key={item.id}  
-                  style={styles.inventoryCard}  
-                  onPress={() =>  
-                    navigation.navigate("InventoryTab", {  
-                      screen: "InventoryItemDetail",  
-                      params: { itemId: item.id },  
-                    })  
-                  }  
-                >  
-                  <View style={styles.inventoryIconContainer}>  
-                    <Feather name="package" size={24} color="#f5a623" />  
-                  </View>  
-                  <View style={styles.inventoryInfo}>  
-                    <Text style={styles.inventoryName}>{item.nombre}</Text>  
-                    <Text style={styles.inventorySku}>{item.codigo}</Text>  
-                  </View>  
-                  <View style={styles.inventoryQuantity}>  
-                    <Text  
-                      style={[  
-                        styles.quantityText,  
-                        item.stock_actual <= (item.stock_minimo || 0) / 2 ? styles.criticalStock : styles.lowStock,  
-                      ]}  
-                    >  
-                      {item.stock_actual} unid.  
-                    </Text>  
-                  </View>  
-                </TouchableOpacity>  
-              ))  
-            ) : (  
-              <View style={styles.emptyState}>  
-                <Feather name="package" size={48} color="#ccc" />  
-                <Text style={styles.emptyText}>No hay items con bajo stock</Text>  
-              </View>  
-            )}  
-          </View>  
-        </>  
-      )}  
-    </ScrollView>  
-  )  
-  
-  // Función para obtener color del estado  
-  function getStatusColor(estado: string) {  
-    switch (estado) {  
-      case "Pendiente":  
-        return "#1a73e8"  
-      case "En Diagnóstico":  
-        return "#f5a623"  
-      case "Esperando Repuestos":  
-        return "#9c27b0"  
-      case "En Proceso":  
-        return "#ff9800"  
-      case "Control Calidad":  
-        return "#607d8b"  
-      case "Completada":  
-        return "#4caf50"  
-      case "Entregada":  
-        return "#607d8b"  
-      case "Cancelada":  
-        return "#e53935"  
-      default:  
-        return "#666"  
-    }  
-  }  
-}  
-  
-const styles = StyleSheet.create({  
-  container: {  
-    flex: 1,  
-    backgroundColor: "#f8f9fa",  
-  },  
-  loadingContainer: {  
-    flex: 1,  
-    justifyContent: "center",  
-    alignItems: "center",  
-    backgroundColor: "#f8f9fa",  
-  },  
-  loadingText: {  
-    marginTop: 10,  
-    fontSize: 16,  
-    color: "#666",  
-  },  
-  errorContainer: {  
-    flex: 1,  
-    justifyContent: "center",  
-    alignItems: "center",  
-    padding: 20,  
-  },  
-  errorText: {  
-    fontSize: 16,  
-    color: "#f44336",  
-    textAlign: "center",  
-    marginTop: 16,  
-    marginBottom: 20,  
-  },  
-  retryButton: {  
-    backgroundColor: "#1a73e8",  
-    paddingHorizontal: 20,  
-    paddingVertical: 10,  
-    borderRadius: 8,  
-  },  
-  retryButtonText: {  
-    color: "#fff",  
-    fontWeight: "bold",  
-  },  
-  header: {  
-    backgroundColor: "#fff",  
-    padding: 20,  
-    alignItems: "center",  
-    borderBottomWidth: 1,  
-    borderBottomColor: "#e1e4e8",  
-  },  
-  welcomeText: {  
-    fontSize: 18,  
-    fontWeight: "bold",  
-    color: "#333",  
-    marginBottom: 4,  
-  },  
-  dateText: {  
-    fontSize: 14,  
-    color: "#666",  
-  },  
-  statsContainer: {  
-    flexDirection: "row",  
-    flexWrap: "wrap",  
-    justifyContent: "space-between",  
-    padding: 16,  
-  },  
-  statCard: {  
-    backgroundColor: "#fff",  
-    borderRadius: 8,  
-    padding: 16,  
-    marginBottom: 16,  
-    width: "48%",  
-    flexDirection: "row",  
-    alignItems: "center",  
-    shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 1 },  
-    shadowOpacity: 0.1,  
-    shadowRadius: 2,  
-    elevation: 2,  
-  },  
-  statIconContainer: {  
-    width: 40,  
-    height: 40,  
-    borderRadius: 20,  
-    backgroundColor: "#f5f5f5",  
-    justifyContent: "center",  
-    alignItems: "center",  
-    marginRight: 12,  
-  },  
-  statContent: {  
-    flex: 1,  
-  },  
-  statValue: {  
-    fontSize: 20,  
-    fontWeight: "bold",  
-    color: "#333",  
-  },  
-  statLabel: {  
-    fontSize: 14,  
-    color: "#666",  
-  },  
-  quickActionsContainer: {  
-    padding: 16,  
-  },  
-  sectionTitle: {  
-    fontSize: 18,  
-    fontWeight: "bold",  
-    color: "#333",  
-    marginBottom: 16,  
-  },  
-  quickActionsGrid: {  
-    flexDirection: "row",  
-    flexWrap: "wrap",  
-    justifyContent: "space-between",  
-  },  
-  quickActionCard: {  
-    backgroundColor: "#fff",  
-    borderRadius: 8,  
-    padding: 16,  
-    width: "48%",  
-    alignItems: "center",  
-    marginBottom: 12,  
-    shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 1 },  
-    shadowOpacity: 0.1,  
-    shadowRadius: 2,  
-    elevation: 2,  
-  },  
-  quickActionText: {  
-    fontSize: 14,  
-    color: "#333",  
-    marginTop: 8,  
-    textAlign: "center",  
-  },  
-  recentContainer: {  
-    padding: 16,  
-  },  
-  sectionHeader: {  
-    flexDirection: "row",  
-    justifyContent: "space-between",  
-    alignItems: "center",  
-    marginBottom: 16,  
-  },  
-  seeAllText: {  
-    fontSize: 14,  
-    color: "#1a73e8",  
-  },  
-  orderCard: {  
-    backgroundColor: "#fff",  
-    borderRadius: 8,  
-    padding: 16,  
-    marginBottom: 12,  
-    flexDirection: "row",  
-    alignItems: "center",  
-    shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 1 },  
-    shadowOpacity: 0.1,  
-    shadowRadius: 2,  
-    elevation: 2,  
-  },  
-  orderInfo: {  
-    flex: 1,  
-  },  
-  orderNumber: {  
-    fontSize: 16,  
-    fontWeight: "bold",  
-    color: "#333",  
-    marginBottom: 4,  
-  },  
-  orderDescription: {  
-    fontSize: 14,  
-    color: "#666",  
-    marginBottom: 4,  
-  },  
-  orderDate: {  
-    fontSize: 12,  
-    color: "#999",  
-  },  
-  orderStatus: {  
-    alignItems: "flex-end",  
-  },  
-  statusText: {  
-    fontSize: 12,  
-    fontWeight: "500",  
-    marginBottom: 4,  
-  },  
-  orderAmount: {  
-    fontSize: 16,  
-    fontWeight: "bold",  
-    color: "#4caf50",  
-  },  
-  clientCard: {  
-    backgroundColor: "#fff",  
-    borderRadius: 8,  
-    padding: 16,  
-    marginBottom: 12,  
-    flexDirection: "row",  
-    alignItems: "center",  
-    shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 1 },  
-    shadowOpacity: 0.1,  
-    shadowRadius: 2,  
-    elevation: 2,  
-  },  
-  clientAvatar: {  
-    width: 40,  
-    height: 40,  
-    borderRadius: 20,  
-    backgroundColor: "#f5f5f5",  
-    justifyContent: "center",  
-    alignItems: "center",  
-    marginRight: 12,  
-  },  
-  clientInfo: {  
-    flex: 1,  
-  },  
-  clientName: {  
-    fontSize: 16,  
-    fontWeight: "bold",  
-    color: "#333",  
-  },  
-  clientContact: {  
-    fontSize: 14,  
-    color: "#666",  
-  },  
-  inventoryCard: {  
-    backgroundColor: "#fff",  
-    borderRadius: 8,  
-    padding: 16,  
-    marginBottom: 12,  
-    flexDirection: "row",  
-    alignItems: "center",  
-    shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 1 },  
-    shadowOpacity: 0.1,  
-    shadowRadius: 2,  
-    elevation: 2,  
-  },  
-  inventoryIconContainer: {  
-    width: 40,  
-    height: 40,  
-    borderRadius: 20,  
-    backgroundColor: "#f5f5f5",  
-    justifyContent: "center",  
-    alignItems: "center",  
-    marginRight: 12,  
-  },  
-  inventoryInfo: {  
-    flex: 1,  
-  },  
-  inventoryName: {  
-    fontSize: 16,  
-    fontWeight: "bold",  
-    color: "#333",  
-  },  
-  inventorySku: {  
-    fontSize: 14,  
-    color: "#666",  
-  },  
-  inventoryQuantity: {  
-    marginLeft: "auto",  
-  },  
-  quantityText: {  
-    fontSize: 14,  
-    fontWeight: "bold",  
-  },  
-  lowStock: {  
-    color: "#f5a623",  
-  },  
-  criticalStock: {  
-    color: "#e53935",  
-  },  
-  emptyState: {  
-    padding: 20,  
-    alignItems: "center",  
-    justifyContent: "center",  
-  },  
-  emptyText: {  
-    fontSize: 16,  
-    color: "#999",  
-    marginTop: 8,  
-  },  
+  const userRole = user?.role
+
+  useEffect(() => {
+    loadDashboardData()
+  }, [user, user?.role])
+
+  const loadDashboardData = async () => {
+    if (!user) return
+    
+    try {
+      setLoading(true)
+      const [dashboardStats, activity] = await Promise.all([
+        dashboardService.getDashboardStats(user.id, userRole || 'client'),
+        dashboardService.getRecentActivity(user.id, userRole || 'client', 10)
+      ])
+      
+      setStats(dashboardStats)
+      setRecentActivity(activity)
+    } catch (error) {
+      console.error('Error loading dashboard data:', error)
+      Alert.alert('Error', 'No se pudo cargar la información del dashboard')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await loadDashboardData()
+    setRefreshing(false)
+  }
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('es-HN', {
+      style: 'currency',
+      currency: 'HNL'
+    }).format(amount)
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('es-HN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+      case 'delivered':
+        return '#4CAF50'
+      case 'in_progress':
+        return '#2196F3'
+      case 'reception':
+        return '#FF9800'
+      case 'cancelled':
+        return '#F44336'
+      default:
+        return '#757575'
+    }
+  }
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'Completada'
+      case 'delivered':
+        return 'Entregada'
+      case 'in_progress':
+        return 'En Proceso'
+      case 'reception':
+        return 'Recepción'
+      case 'cancelled':
+        return 'Cancelada'
+      default:
+        return status
+    }
+  }
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'newOrder':
+        navigation.navigate('NewOrder' as never)
+        break
+      case 'newClient':
+        navigation.navigate('NewClient' as never)
+        break
+      case 'inventory':
+        navigation.navigate('Inventory' as never)
+        break
+      case 'appointments':
+        navigation.navigate('Appointments' as never)
+        break
+      default:
+        break
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2196F3" />
+        <Text style={styles.loadingText}>Cargando dashboard...</Text>
+      </View>
+    )
+  }
+
+  return (
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Dashboard</Text>
+        <Text style={styles.headerSubtitle}>
+          Bienvenido, {user?.email || 'Usuario'}
+        </Text>
+      </View>
+
+      {/* Quick Actions */}
+      {userRole !== 'client' && (
+        <View style={styles.quickActionsContainer}>
+          <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
+          <View style={styles.quickActionsGrid}>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => handleQuickAction('newOrder')}
+            >
+              <MaterialIcons name="add-circle" size={24} color="#2196F3" />
+              <Text style={styles.quickActionText}>Nueva Orden</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => handleQuickAction('newClient')}
+            >
+              <MaterialIcons name="person-add" size={24} color="#4CAF50" />
+              <Text style={styles.quickActionText}>Nuevo Cliente</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => handleQuickAction('inventory')}
+            >
+              <MaterialIcons name="inventory" size={24} color="#FF9800" />
+              <Text style={styles.quickActionText}>Inventario</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => handleQuickAction('appointments')}
+            >
+              <MaterialIcons name="event" size={24} color="#9C27B0" />
+              <Text style={styles.quickActionText}>Citas</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Stats Cards */}
+      {stats && (
+        <View style={styles.statsContainer}>
+          <Text style={styles.sectionTitle}>Estadísticas Generales</Text>
+          <View style={styles.statsGrid}>
+            <View style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <MaterialIcons name="assignment" size={24} color="#2196F3" />
+              </View>
+              <View style={styles.statContent}>
+                <Text style={styles.statValue}>{stats.totalOrders}</Text>
+                <Text style={styles.statLabel}>Total Órdenes</Text>
+              </View>
+            </View>
+
+            <View style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <MaterialIcons name="pending" size={24} color="#FF9800" />
+              </View>
+              <View style={styles.statContent}>
+                <Text style={styles.statValue}>{stats.pendingOrders}</Text>
+                <Text style={styles.statLabel}>Pendientes</Text>
+              </View>
+            </View>
+
+            <View style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <MaterialIcons name="check-circle" size={24} color="#4CAF50" />
+              </View>
+              <View style={styles.statContent}>
+                <Text style={styles.statValue}>{stats.completedOrders}</Text>
+                <Text style={styles.statLabel}>Completadas</Text>
+              </View>
+            </View>
+
+            <View style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <MaterialIcons name="attach-money" size={24} color="#4CAF50" />
+              </View>
+              <View style={styles.statContent}>
+                <Text style={styles.statValue}>
+                  {formatCurrency(stats.totalRevenue)}
+                </Text>
+                <Text style={styles.statLabel}>Ingresos</Text>
+              </View>
+            </View>
+
+            {userRole !== 'client' && (
+              <>
+                <View style={styles.statCard}>
+                  <View style={styles.statIconContainer}>
+                    <MaterialIcons name="people" size={24} color="#9C27B0" />
+                  </View>
+                  <View style={styles.statContent}>
+                    <Text style={styles.statValue}>{stats.totalClients}</Text>
+                    <Text style={styles.statLabel}>Clientes</Text>
+                  </View>
+                </View>
+
+                <View style={styles.statCard}>
+                  <View style={styles.statIconContainer}>
+                    <MaterialIcons name="warning" size={24} color="#F44336" />
+                  </View>
+                  <View style={styles.statContent}>
+                    <Text style={styles.statValue}>{stats.lowStockItems}</Text>
+                    <Text style={styles.statLabel}>Stock Bajo</Text>
+                  </View>
+                </View>
+              </>
+            )}
+
+            <View style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <MaterialIcons name="event" size={24} color="#9C27B0" />
+              </View>
+              <View style={styles.statContent}>
+                <Text style={styles.statValue}>{stats.upcomingAppointments}</Text>
+                <Text style={styles.statLabel}>Próximas Citas</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Recent Activity */}
+      <View style={styles.activityContainer}>
+        <Text style={styles.sectionTitle}>Actividad Reciente</Text>
+        {recentActivity.length > 0 ? (
+          recentActivity.map((activity, index) => (
+            <TouchableOpacity
+              key={`${activity.id}-${index}`}
+              style={styles.activityItem}
+              onPress={() => {
+                // Navegar a la pantalla correspondiente según el tipo
+                switch (activity.type) {
+                  case 'order':
+                    navigation.navigate('OrderDetail', { orderId: activity.id })
+                    break
+                  case 'client':
+                    navigation.navigate('ClientDetail', { clientId: activity.id })
+                    break
+                  case 'appointment':
+                    navigation.navigate('AppointmentDetail', { appointmentId: activity.id })
+                    break
+                  default:
+                    break
+                }
+              }}
+            >
+              <View style={styles.activityIconContainer}>
+                {activity.type === 'order' && (
+                  <MaterialIcons name="assignment" size={20} color="#2196F3" />
+                )}
+                {activity.type === 'client' && (
+                  <MaterialIcons name="person" size={20} color="#4CAF50" />
+                )}
+                {activity.type === 'appointment' && (
+                  <MaterialIcons name="event" size={20} color="#9C27B0" />
+                )}
+                {activity.type === 'inventory' && (
+                  <MaterialIcons name="inventory" size={20} color="#FF9800" />
+                )}
+              </View>
+              
+              <View style={styles.activityContent}>
+                <Text style={styles.activityTitle}>{activity.title}</Text>
+                <Text style={styles.activityDescription}>{activity.description}</Text>
+                <Text style={styles.activityTimestamp}>
+                  {formatDate(activity.timestamp)}
+                </Text>
+              </View>
+              
+              {activity.status && (
+                <View style={styles.activityStatus}>
+                  <View
+                    style={[
+                      styles.statusDot,
+                      { backgroundColor: getStatusColor(activity.status) }
+                    ]}
+                  />
+                  <Text style={styles.statusText}>
+                    {getStatusText(activity.status)}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))
+        ) : (
+          <View style={styles.emptyState}>
+            <MaterialIcons name="info" size={48} color="#757575" />
+            <Text style={styles.emptyStateText}>No hay actividad reciente</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Bottom Spacing */}
+      <View style={styles.bottomSpacing} />
+    </ScrollView>
+  )
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5'
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5'
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#757575'
+  },
+  header: {
+    backgroundColor: '#2196F3',
+    padding: 20,
+    paddingTop: 40
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 4
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)'
+  },
+  quickActionsContainer: {
+    padding: 20,
+    backgroundColor: 'white',
+    margin: 16,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16
+  },
+  quickActionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between'
+  },
+  quickActionButton: {
+    width: (width - 80) / 2,
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    marginBottom: 12
+  },
+  quickActionText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#333',
+    textAlign: 'center'
+  },
+  statsContainer: {
+    padding: 20,
+    backgroundColor: 'white',
+    margin: 16,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between'
+  },
+  statCard: {
+    width: (width - 80) / 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    marginBottom: 12
+  },
+  statIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
+  },
+  statContent: {
+    flex: 1
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 2
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#757575'
+  },
+  activityContainer: {
+    padding: 20,
+    backgroundColor: 'white',
+    margin: 16,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4
+  },
+  activityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0'
+  },
+  activityIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
+  },
+  activityContent: {
+    flex: 1
+  },
+  activityTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4
+  },
+  activityDescription: {
+    fontSize: 14,
+    color: '#757575',
+    marginBottom: 4
+  },
+  activityTimestamp: {
+    fontSize: 12,
+    color: '#999'
+  },
+  activityStatus: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6
+  },
+  statusText: {
+    fontSize: 12,
+    color: '#757575'
+  },
+  emptyState: {
+    alignItems: 'center',
+    padding: 40
+  },
+  emptyStateText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#757575',
+    textAlign: 'center'
+  },
+  bottomSpacing: {
+    height: 20
+  }
 })
+
+export default DashboardScreen

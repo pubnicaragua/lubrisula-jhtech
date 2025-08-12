@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase'
-import type { InventoryItem, InventoryItemFormData } from '../../types/inventory'
+import { DashboardInventoryItem } from '../../types/dashboard'
+import type { InventoryItem, InventoryItemFormData, MaterialCategory, Supplier } from '../../types/inventory'
 
 // Tipos para el servicio de inventario
 type InventoryFilters = {
@@ -8,68 +9,81 @@ type InventoryFilters = {
   searchTerm?: string
 }
 
-// Mapeo de tipos de inventario
-const INVENTORY_TYPES = {
-  part: 'Repuesto',
-  material: 'Material',
-  tool: 'Herramienta',
-  consumable: 'Consumible'
-}
-
-// Mapeo de estados de inventario
-const INVENTORY_STATUS = {
-  in_stock: 'En Stock',
-  low_stock: 'Poco Stock',
-  out_of_stock: 'Sin Stock',
-  on_order: 'En Pedido',
-  discontinued: 'Descontinuado'
-}
-
 export const inventoryService = {
+
+  async getAllInventory(): Promise<InventoryItem[]> {
+    try {
+      // Hacer fetch de todos los items del inventario desde Supabase
+      const { data, error } = await supabase
+        .from('inventario')
+        .select('*')
+        .order('producto', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching inventory:', error);
+        throw error;
+      }
+
+      // Obtener categorías y proveedores por separado
+      const [categoriesData, suppliersData] = await Promise.all([
+        supabase.from('categorias_materiales').select('id, nombre'),
+        supabase.from('suppliers').select('id, name')
+      ]);
+
+      const categories = categoriesData.data || [];
+      const suppliers = suppliersData.data || [];
+
+      // Mapear los datos para incluir nombres de categoría y proveedor
+      return (data || []).map(item => ({
+        ...item,
+        categoria_nombre: categories.find(cat => cat.id === item.categoria_id)?.nombre,
+        proveedor_nombre: suppliers.find(sup => sup.id === item.proveedor_id)?.name
+      }));
+    } catch (error) {
+      console.error('Error in getAllInventory:', error);
+      throw error;
+    }
+  },
+
   // Obtener todos los artículos de inventario con filtros opcionales
   async getInventoryItems(filters: InventoryFilters = {}) {
     try {
       let query = supabase
-        .from('inventory')
+        .from('inventario')
         .select('*')
-        .order('name', { ascending: true })
+        .order('producto', { ascending: true })
 
       // Aplicar filtros
       if (filters.lowStock) {
-        query = query.lte('stock', supabase.rpc('get_min_stock_threshold'))
+        query = query.lte('stock_actual', supabase.rpc('get_min_stock_threshold'))
       }
 
       if (filters.category) {
-        query = query.eq('category', filters.category)
+        query = query.eq('categoria_id', filters.category)
       }
 
       if (filters.searchTerm) {
-        query = query.ilike('name', `%${filters.searchTerm}%`)
+        query = query.ilike('producto', `%${filters.searchTerm}%`)
       }
 
       const { data, error } = await query
 
       if (error) throw error
 
-      return data.map((item: any) => ({
-        id: item.id,
-        name: item.name,
-        description: item.description,
-        sku: item.sku,
-        barcode: item.barcode,
-        category: item.category,
-        type: INVENTORY_TYPES[item.type as keyof typeof INVENTORY_TYPES] || item.type,
-        stock: item.stock,
-        minStock: item.min_stock,
-        cost: item.cost,
-        price: item.price,
-        supplierId: item.supplier_id,
-        location: item.location,
-        status: INVENTORY_STATUS[item.status as keyof typeof INVENTORY_STATUS] || item.status,
-        notes: item.notes,
-        images: item.images || [],
-        createdAt: item.created_at,
-        updatedAt: item.updated_at
+      // Obtener categorías y proveedores por separado
+      const [categoriesData, suppliersData] = await Promise.all([
+        supabase.from('categorias_materiales').select('id, nombre'),
+        supabase.from('suppliers').select('id, name')
+      ]);
+
+      const categories = categoriesData.data || [];
+      const suppliers = suppliersData.data || [];
+
+      // Mapear los datos para incluir nombres de categoría y proveedor
+      return (data || []).map(item => ({
+        ...item,
+        categoria_nombre: categories.find(cat => cat.id === item.categoria_id)?.nombre,
+        proveedor_nombre: suppliers.find(sup => sup.id === item.proveedor_id)?.name
       })) as InventoryItem[]
     } catch (error) {
       console.error('Error fetching inventory items:', error)
@@ -80,22 +94,19 @@ export const inventoryService = {
   // Obtener artículos con bajo stock
   async getLowStockItems(thresholdPercentage: number = 20) {
     try {
-      const { data, error } = await supabase.rpc('get_low_stock_items', {
-        threshold_percentage: thresholdPercentage
-      })
+      const { data, error } = await supabase
+        .from('inventario')
+        .select('*')
+        .lte('stock_actual', supabase.rpc('get_min_stock_threshold', { threshold_percentage: thresholdPercentage }))
 
       if (error) throw error
 
-      return data.map((item: any) => ({
+      return (data || []).map((item: any) => ({
         id: item.id,
-        name: item.name,
-        sku: item.sku,
-        stock: item.stock,
-        minStock: item.min_stock,
-        status: 'low_stock',
-        category: item.category,
-        price: item.price,
-        lastRestocked: item.last_restocked
+        name: item.producto,
+        stock: item.stock_actual || 0,
+        minStock: item.stock_minimo || 0,
+        status: (item.stock_actual || 0) <= (item.stock_minimo || 0) ? 'low' : 'ok'
       })) as DashboardInventoryItem[]
     } catch (error) {
       console.error('Error fetching low stock items:', error)
@@ -107,7 +118,7 @@ export const inventoryService = {
   async getInventoryItemById(id: string): Promise<InventoryItem> {
     try {
       const { data, error } = await supabase
-        .from('inventory')
+        .from('inventario')
         .select('*')
         .eq('id', id)
         .single()
@@ -115,25 +126,19 @@ export const inventoryService = {
       if (error) throw error
       if (!data) throw new Error('Artículo no encontrado')
 
+      // Obtener categorías y proveedores por separado
+      const [categoriesData, suppliersData] = await Promise.all([
+        supabase.from('categorias_materiales').select('id, nombre'),
+        supabase.from('suppliers').select('id, name')
+      ]);
+
+      const categories = categoriesData.data || [];
+      const suppliers = suppliersData.data || [];
+
       return {
-        id: data.id,
-        name: data.name,
-        description: data.description,
-        sku: data.sku,
-        barcode: data.barcode,
-        category: data.category,
-        type: INVENTORY_TYPES[data.type as keyof typeof INVENTORY_TYPES] || data.type,
-        stock: data.stock,
-        minStock: data.min_stock,
-        cost: data.cost,
-        price: data.price,
-        supplierId: data.supplier_id,
-        location: data.location,
-        status: INVENTORY_STATUS[data.status as keyof typeof INVENTORY_STATUS] || data.status,
-        notes: data.notes,
-        images: data.images || [],
-        createdAt: data.created_at,
-        updatedAt: data.updated_at
+        ...data,
+        categoria_nombre: categories.find(cat => cat.id === data.categoria_id)?.nombre,
+        proveedor_nombre: suppliers.find(sup => sup.id === data.proveedor_id)?.name
       }
     } catch (error) {
       console.error(`Error fetching inventory item ${id}:`, error)
@@ -145,24 +150,38 @@ export const inventoryService = {
   async createInventoryItem(itemData: InventoryItemFormData): Promise<InventoryItem> {
     try {
       const { data, error } = await supabase
-        .from('inventory')
+        .from('inventario')
         .insert([{
-          name: itemData.name,
-          description: itemData.description,
-          sku: itemData.sku,
-          barcode: itemData.barcode,
-          category: itemData.category,
-          type: itemData.type,
-          stock: itemData.stock || 0,
-          min_stock: itemData.minStock || 0,
-          cost: itemData.cost || 0,
-          price: itemData.price,
-          supplier_id: itemData.supplierId,
-          location: itemData.location,
-          status: itemData.stock <= 0 ? 'out_of_stock' : 
-                  (itemData.minStock && itemData.stock <= itemData.minStock ? 'low_stock' : 'in_stock'),
-          notes: itemData.notes,
-          images: itemData.images || []
+          // Solo campos que existen en el schema.sql de la tabla inventario
+          producto: itemData.producto,
+          proceso: itemData.proceso,
+          unidad_medida: itemData.unidad_medida,
+          lugar_compra: itemData.lugar_compra,
+          precio_unitario: itemData.precio_unitario,
+          cantidad: itemData.cantidad,
+          precio_total: itemData.precio_total,
+          rendi_hora_reparar: itemData.rendi_hora_reparar,
+          ren_veh: itemData.ren_veh,
+          costo: itemData.costo,
+          costo_total: itemData.costo_total,
+          rendi_hora_pin: itemData.rendi_hora_pin,
+          cantidad_veh: itemData.cantidad_veh,
+          cantidad_h_rep: itemData.cantidad_h_rep,
+          cantidad_h_pin: itemData.cantidad_h_pin,
+          ajuste: itemData.ajuste,
+          inv_inicial: itemData.inv_inicial,
+          com_1: itemData.com_1,
+          com_2: itemData.com_2,
+          com_3: itemData.com_3,
+          com_4: itemData.com_4,
+          inv_final: itemData.inv_final,
+          categoria_id: itemData.categoria_id,
+          material_pintura: itemData.material_pintura,
+          material_reparacion: itemData.material_reparacion,
+          proveedor_id: itemData.proveedor_id,
+          vehiculo_id: itemData.vehiculo_id,
+          proceso_id: itemData.proceso_id,
+          taller_id: itemData.taller_id
         }])
         .select()
         .single()
@@ -180,19 +199,18 @@ export const inventoryService = {
   async updateInventoryItem(id: string, updates: Partial<InventoryItemFormData>): Promise<InventoryItem> {
     try {
       const updateData: any = { ...updates }
-      
+
       // Mapear campos si es necesario
-      if ('minStock' in updates) updateData.min_stock = updates.minStock
-      if ('supplierId' in updates) updateData.supplier_id = updates.supplierId
-      
+      if ('stock_minimo' in updates) updateData.stock_minimo = updates.stock_minimo
+      if ('proveedor_id' in updates) updateData.proveedor_id = updates.proveedor_id
+
       // Actualizar estado según stock
-      if ('stock' in updates) {
-        updateData.status = updates.stock === 0 ? 'out_of_stock' : 
-                          (updates.minStock && updates.stock && updates.stock <= updates.minStock ? 'low_stock' : 'in_stock')
+      if ('stock_actual' in updates) {
+        updateData.estado = updates.stock_actual === 0 ? 'Inactivo' : 'Activo'
       }
 
       const { error } = await supabase
-        .from('inventory')
+        .from('inventario')
         .update(updateData)
         .eq('id', id)
 
@@ -209,7 +227,7 @@ export const inventoryService = {
   async deleteInventoryItem(id: string): Promise<void> {
     try {
       const { error } = await supabase
-        .from('inventory')
+        .from('inventario')
         .delete()
         .eq('id', id)
 
@@ -225,39 +243,25 @@ export const inventoryService = {
     try {
       // Primero obtenemos el stock actual
       const { data: currentItem } = await supabase
-        .from('inventory')
-        .select('stock')
+        .from('inventario')
+        .select('stock_actual, stock_minimo')
         .eq('id', id)
         .single()
 
       if (!currentItem) throw new Error('Artículo no encontrado')
 
-      const newStock = currentItem.stock + quantity
-      
+      const newStock = currentItem.stock_actual + quantity
+
       // Actualizamos el stock
       const { error } = await supabase
-        .from('inventory')
-        .update({ 
-          stock: newStock,
-          status: newStock === 0 ? 'out_of_stock' : 
-                 (currentItem.min_stock && newStock <= currentItem.min_stock ? 'low_stock' : 'in_stock')
+        .from('inventario')
+        .update({
+          stock_actual: newStock,
+          estado: newStock === 0 ? 'Inactivo' : 'Activo'
         })
         .eq('id', id)
 
       if (error) throw error
-
-      // Registramos el movimiento de inventario
-      await supabase
-        .from('inventory_movements')
-        .insert([{
-          inventory_id: id,
-          type: quantity > 0 ? 'in' : 'out',
-          quantity: Math.abs(quantity),
-          previous_stock: currentItem.stock,
-          new_stock: newStock,
-          notes: notes || (quantity > 0 ? 'Entrada de inventario' : 'Salida de inventario'),
-          user_id: (await supabase.auth.getUser()).data.user?.id
-        }])
 
       return this.getInventoryItemById(id)
     } catch (error) {
@@ -267,47 +271,45 @@ export const inventoryService = {
   },
 
   // Obtener categorías de inventario
-  async getInventoryCategories(): Promise<string[]> {
+  async getInventoryCategories(): Promise<MaterialCategory[]> {
     try {
       const { data, error } = await supabase
-        .from('inventory')
-        .select('category')
-        .not('category', 'is', null)
+        .from('categorias_materiales')
+        .select('*')
+        .order('nombre', { ascending: true })
 
       if (error) throw error
 
-      // Eliminar duplicados y devolver array de categorías únicas
-      return [...new Set(data.map((item: any) => item.category))].sort() as string[]
+      return data || []
     } catch (error) {
       console.error('Error fetching inventory categories:', error)
       throw error
     }
   },
 
-  // Obtener historial de movimientos de un artículo
-  async getInventoryHistory(itemId: string) {
+  // Obtener proveedores
+  async getSuppliers(): Promise<Supplier[]> {
     try {
       const { data, error } = await supabase
-        .from('inventory_movements')
-        .select('*, user:profiles(full_name, email)')
-        .eq('inventory_id', itemId)
-        .order('created_at', { ascending: false })
+        .from('suppliers')
+        .select('*')
+        .order('name', { ascending: true })
 
       if (error) throw error
 
-      return data.map((movement: any) => ({
-        id: movement.id,
-        type: movement.type,
-        quantity: movement.quantity,
-        previousStock: movement.previous_stock,
-        newStock: movement.new_stock,
-        notes: movement.notes,
-        user: movement.user,
-        createdAt: movement.created_at
-      }))
+      return data || []
     } catch (error) {
-      console.error(`Error fetching history for item ${itemId}:`, error)
+      console.error('Error fetching suppliers:', error)
       throw error
+    }
+  },
+
+  async initializeInventory(): Promise<void> {
+    try {
+      const inventory = await inventoryService.getAllInventory();
+    } catch (error) {
+      console.error('Error initializing inventory:', error);
+      throw new Error('Failed to initialize inventory. Please check your connection and try again.');
     }
   }
 }

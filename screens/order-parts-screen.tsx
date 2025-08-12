@@ -19,40 +19,21 @@ import { Feather } from "@expo/vector-icons"
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
 // Usar los servicios que realmente existen  
-import * as orderService from "../services/order-service"  
-import * as inventoryService from "../services/inventory-service"  
-  
+import * as orderService from "../services/supabase/order-service"  
+import * as inventoryService from "../services/supabase/inventory-service"  
+// Importar tipos consolidados
+import type { Order, OrderItem, OrderType, OrderPartType } from "../types"
+
 // Tipos TypeScript para resolver errores  
 interface OrderPartsScreenProps {  
   route: any  
   navigation: any  
 }  
-  
-interface OrderType {  
-  id: string  
-  number: string  
-  description: string  
-  status: string  
-  clientId: string  
-  vehicleId: string  
-  total?: number  
-  dates: {  
-    created: string  
-    updated?: string  
-  }  
-}  
-  
-interface OrderPartType {  
-  id: string  
-  orderId: string  
-  inventoryItemId: string  
-  name: string  
-  sku: string  
-  quantity: number  
-  unitPrice: number  
-  total: number  
-}  
-  
+
+// Usar tipos consolidados en lugar de interfaces locales
+// interface OrderType { ... } - ELIMINADO
+// interface OrderPartType { ... } - ELIMINADO
+
 interface InventoryItemType {  
   id: string  
   name: string  
@@ -62,13 +43,13 @@ interface InventoryItemType {
   priceUSD?: number  
   category?: string  
 }  
-  
+
 export default function OrderPartsScreen({ route, navigation }: OrderPartsScreenProps) {  
   const { orderId } = route.params  
   const { user } = useAuth()  
     
-  const [order, setOrder] = useState<OrderType | null>(null)  
-  const [orderParts, setOrderParts] = useState<OrderPartType[]>([])  
+  const [order, setOrder] = useState<Order | null>(null)  
+  const [orderParts, setOrderParts] = useState<OrderItem[]>([])  
   const [inventory, setInventory] = useState<InventoryItemType[]>([])  
   const [loading, setLoading] = useState(true)  
   const [saving, setSaving] = useState(false)  
@@ -96,7 +77,7 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
       }  
   
       // Cargar datos de la orden usando el servicio existente  
-      const orderData = await orderService.getOrderById(orderId)  
+      const orderData = await orderService.orderService.getOrderById(orderId)  
       if (!orderData) {  
         setError("Orden no encontrada")  
         return  
@@ -104,11 +85,11 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
       setOrder(orderData)  
   
       // Cargar repuestos de la orden  
-      const parts = await orderService.getOrderParts(orderId)  
+      const parts = await orderService.orderService.getOrderParts(orderId)  
       setOrderParts(parts)  
   
       // Cargar inventario disponible usando el servicio existente  
-      const inventoryItems = await inventoryService.getInventoryItems()  
+      const inventoryItems = await inventoryService.inventoryService.getInventoryItems()  
       const availableItems = inventoryItems.filter((item: InventoryItemType) => item.stock > 0)  
       setInventory(availableItems)  
       setFilteredInventory(availableItems)  
@@ -158,14 +139,21 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
       }  
   
       // Agregar repuesto a la orden  
-      await orderService.addPartToOrder(orderId, {  
-        inventoryItemId: inventoryItem.id,  
+      await orderService.orderService.addPartToOrder(orderId, {  
+        name: inventoryItem.name,
         quantity: quantity,  
-        unitPrice: unitPrice,  
+        unitPrice: unitPrice,
+        total: quantity * unitPrice,
+        status: 'pending',
+        partNumber: inventoryItem.sku,
+        inventoryItemId: inventoryItem.id,
+        sku: inventoryItem.sku,
+        category: inventoryItem.category,
+        stock: inventoryItem.stock
       })  
   
       // Actualizar inventario  
-      await inventoryService.updateInventoryItem(inventoryItem.id, {  
+      await inventoryService.inventoryService.updateInventoryItem(inventoryItem.id, {  
         stock: inventoryItem.stock - quantity,  
       })  
   
@@ -205,7 +193,7 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
       }  
   
       // Actualizar repuesto en la orden  
-      await orderService.updateOrderPart(partId, {  
+      await orderService.orderService.updateOrderPart(partId, {  
         quantity: newQuantity,  
         total: newQuantity * part.unitPrice,  
       })  
@@ -214,7 +202,7 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
       if (quantityDiff !== 0) {  
         const inventoryItem = inventory.find(item => item.id === part.inventoryItemId)  
         if (inventoryItem) {  
-          await inventoryService.updateInventoryItem(inventoryItem.id, {  
+          await inventoryService.inventoryService.updateInventoryItem(inventoryItem.id, {  
             stock: inventoryItem.stock - quantityDiff,  
           })  
         }  
@@ -249,12 +237,12 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
               if (!part) return  
   
               // Remover repuesto de la orden  
-              await orderService.removePartFromOrder(partId)  
+              await orderService.orderService.removePartFromOrder(partId)  
   
               // Devolver stock al inventario  
               const inventoryItem = inventory.find(item => item.id === part.inventoryItemId)  
               if (inventoryItem) {  
-                await inventoryService.updateInventoryItem(inventoryItem.id, {  
+                await inventoryService.inventoryService.updateInventoryItem(inventoryItem.id, {  
                   stock: inventoryItem.stock + part.quantity,  
                 })  
               }  
@@ -282,7 +270,7 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
   }  
   
   // Renderizar item de repuesto en la orden  
-  const renderOrderPartItem = ({ item }: { item: OrderPartType }) => (  
+  const renderOrderPartItem = ({ item }: { item: OrderItem }) => (  
     <View style={styles.partCard}>  
       <View style={styles.partHeader}>  
         <View style={styles.partInfo}>  
@@ -414,13 +402,16 @@ export default function OrderPartsScreen({ route, navigation }: OrderPartsScreen
   
   if (error) {  
     return (  
-      <View style={styles.errorContainer}>
-  <Text style={styles.errorText}>{error}</Text>
-  <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>
-    <Text style={styles.retryButtonText}>Reintentar</Text>
-  </TouchableOpacity>
-</View>
-
+      <View style={styles.errorContainer}>  
+        <Feather name="alert-circle" size={64} color="#f44336" />  
+        <Text style={styles.errorText}>{error}</Text>  
+        <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>  
+          <Text style={styles.retryButtonText}>Reintentar</Text>          
+        </TouchableOpacity>  
+        <TouchableOpacity style={styles.retryButton} onPress={loadOrderData}>  
+          <Text style={styles.retryButtonText}>Reintentar</Text>  
+        </TouchableOpacity>
+      </View>  
     )  
   }  
   

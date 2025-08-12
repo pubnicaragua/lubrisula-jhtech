@@ -20,7 +20,8 @@ import { useAuth } from "../context/auth-context"
 import * as inventoryService from "../services/supabase/inventory-service"  
 import * as accessService from "../services/supabase/access-service"  
 import * as userService from "../services/supabase/user-service"  
-  
+import { InventoryItem } from "../types/inventory"  
+
 // Tipos TypeScript para resolver errores  
 interface SectionProps {  
   title: string  
@@ -33,41 +34,16 @@ interface InfoRowProps {
 }  
   
 interface HistoryItemProps {  
-  history: InventoryHistoryType[]  
+  history: any[] // Using any for now since InventoryHistory type isn't defined
 }  
   
-interface InventoryItemType {  
-  id: string  
-  nombre: string  
-  codigo: string  
-  descripcion?: string  
-  stock_actual: number  
-  stock_minimo?: number  
-  stock_maximo?: number  
-  precio_compra?: number  
-  precio_venta?: number  
-  categoria?: string  
-  proveedor?: string  
-  ubicacion?: string  
-  fecha_creacion?: string  
-  fecha_actualizacion?: string  
-  activo?: boolean  
-}  
-  
-interface InventoryHistoryType {  
-  id: string  
-  inventory_item_id: string  
-  tipo: 'entrada' | 'salida' | 'ajuste'  
-  cantidad: number  
-  motivo?: string  
-  fecha: string  
-  usuario_id?: string  
-  usuario_nombre?: string  
-}  
-  
-interface InventoryItemDetailScreenProps {  
-  route: any  
-  navigation: any  
+interface InventoryItemDetailScreenProps {
+  route: {
+    params: {
+      itemId: string
+    }
+  }
+  navigation: any
 }  
   
 // Componente para sección  
@@ -95,21 +71,21 @@ const HistorySection = ({ history }: HistoryItemProps) => (
           <View style={styles.historyHeader}>  
             <View style={[  
               styles.historyTypeIndicator,  
-              { backgroundColor: getHistoryTypeColor(item.tipo) }  
+              { backgroundColor: getHistoryTypeColor(item.type) }  
             ]} />  
-            <Text style={styles.historyType}>{getHistoryTypeLabel(item.tipo)}</Text>  
+            <Text style={styles.historyType}>{getHistoryTypeLabel(item.type)}</Text>  
             <Text style={styles.historyDate}>  
-              {new Date(item.fecha).toLocaleDateString("es-ES")}  
+              {new Date(item.createdAt).toLocaleDateString("es-ES")}  
             </Text>  
           </View>  
           <Text style={styles.historyQuantity}>  
-            {item.tipo === 'salida' ? '-' : '+'}{item.cantidad} unidades  
+            {item.type === 'out' ? '-' : '+'}{item.quantity} unidades  
           </Text>  
-          {item.motivo && (  
-            <Text style={styles.historyReason}>{item.motivo}</Text>  
+          {item.notes && (  
+            <Text style={styles.historyReason}>{item.notes}</Text>  
           )}  
-          {item.usuario_nombre && (  
-            <Text style={styles.historyUser}>Por: {item.usuario_nombre}</Text>  
+          {item.user?.full_name && (  
+            <Text style={styles.historyUser}>Por: {item.user.full_name}</Text>  
           )}  
         </View>  
       ))  
@@ -122,11 +98,11 @@ const HistorySection = ({ history }: HistoryItemProps) => (
 // Funciones auxiliares para el historial  
 const getHistoryTypeColor = (tipo: string) => {  
   switch (tipo) {  
-    case 'entrada':  
+    case 'in':  
       return '#4caf50'  
-    case 'salida':  
+    case 'out':  
       return '#f44336'  
-    case 'ajuste':  
+    case 'adjustment':  
       return '#ff9800'  
     default:  
       return '#666'  
@@ -135,11 +111,11 @@ const getHistoryTypeColor = (tipo: string) => {
   
 const getHistoryTypeLabel = (tipo: string) => {  
   switch (tipo) {  
-    case 'entrada':  
+    case 'in':  
       return 'Entrada'  
-    case 'salida':  
+    case 'out':  
       return 'Salida'  
-    case 'ajuste':  
+    case 'adjustment':  
       return 'Ajuste'  
     default:  
       return tipo  
@@ -150,8 +126,8 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
   const { itemId } = route.params  
   const { user } = useAuth()  
     
-  const [item, setItem] = useState<InventoryItemType | null>(null)  
-  const [history, setHistory] = useState<InventoryHistoryType[]>([])  
+  const [item, setItem] = useState<InventoryItem | null>(null)  
+  const [history, setHistory] = useState<any[]>([]) // Using any for now since InventoryHistory type isn't defined
   const [loading, setLoading] = useState(true)  
   const [saving, setSaving] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
@@ -159,7 +135,7 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
     
   // Estados del modal de ajuste  
   const [showAdjustModal, setShowAdjustModal] = useState(false)  
-  const [adjustType, setAdjustType] = useState<'entrada' | 'salida'>('entrada')  
+  const [adjustType, setAdjustType] = useState<'in' | 'out'>('in')  
   const [adjustQuantity, setAdjustQuantity] = useState('')  
   const [adjustReason, setAdjustReason] = useState('')  
   
@@ -172,8 +148,13 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await userService.getTallerId(user.id)  
-      const userPermissions = await accessService.getUserPermissions(user.id, userTallerId)  
+      const userTallerId = await userService.userService.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {
+        setError("No tienes permisos para ver detalles de inventario")  
+        return  
+      }
+
+      const userPermissions = await accessService.accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       if (userPermissions?.rol === 'client') {  
@@ -182,7 +163,7 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
       }  
   
       // Cargar item del inventario  
-      const itemData = await inventoryService.getInventoryItemById(itemId)  
+      const itemData = await inventoryService.inventoryService.getInventoryItemById(itemId)  
       if (!itemData) {  
         setError("Item no encontrado")  
         return  
@@ -191,7 +172,13 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
       setItem(itemData)  
   
       // Cargar historial de movimientos  
-      const itemHistory = await inventoryService.getInventoryHistory(itemId)  
+      const itemHistory = await inventoryService.inventoryService.getInventoryHistory(itemId)  
+      
+      if (!itemHistory) {
+        setError("No se pudieron cargar los datos del item")  
+        return  
+      }  
+      
       setHistory(itemHistory)  
   
     } catch (error) {  
@@ -215,7 +202,7 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
       return false  
     }  
   
-    if (adjustType === 'salida' && item && parseInt(adjustQuantity) > item.stock_actual) {  
+    if (adjustType === 'out' && item && parseInt(adjustQuantity) > item.stock) {  
       Alert.alert("Error", "No puedes sacar más stock del disponible")  
       return false  
     }  
@@ -236,24 +223,12 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
       setSaving(true)  
   
       const quantity = parseInt(adjustQuantity)  
-      const newStock = adjustType === 'entrada'   
-        ? item.stock_actual + quantity   
-        : item.stock_actual - quantity  
+      const newStock = adjustType === 'in'   
+        ? item.stock + quantity   
+        : item.stock - quantity  
   
       // Actualizar stock en la base de datos  
-      await inventoryService.updateInventoryItem(itemId, {  
-        stock_actual: newStock  
-      })  
-  
-      // Registrar movimiento en el historial  
-      await inventoryService.addInventoryMovement({  
-        inventory_item_id: itemId,  
-        tipo: adjustType,  
-        cantidad: quantity,  
-        motivo: adjustReason.trim(),  
-        fecha: new Date().toISOString(),  
-        usuario_id: user?.id  
-      })  
+      await inventoryService.inventoryService.updateStock(itemId, adjustType === 'in' ? quantity : -quantity, adjustReason.trim())  
   
       // Recargar datos  
       loadItemData()  
@@ -277,8 +252,8 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
   const getStockColor = () => {  
     if (!item) return '#666'  
       
-    if (item.stock_actual <= 0) return '#f44336' // Rojo - Sin stock  
-    if (item.stock_minimo && item.stock_actual <= item.stock_minimo) return '#ff9800' // Naranja - Bajo stock  
+    if (item.stock <= 0) return '#f44336' // Rojo - Sin stock  
+    if (item.minStock && item.stock <= item.minStock) return '#ff9800' // Naranja - Bajo stock  
     return '#4caf50' // Verde - Stock normal  
   }  
   
@@ -286,8 +261,8 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
   const getStockStatus = () => {  
     if (!item) return 'Desconocido'  
       
-    if (item.stock_actual <= 0) return 'Sin Stock'  
-    if (item.stock_minimo && item.stock_actual <= item.stock_minimo) return 'Stock Bajo'  
+    if (item.stock <= 0) return 'Sin Stock'  
+    if (item.minStock && item.stock <= item.minStock) return 'Stock Bajo'  
     return 'Stock Normal'  
   }  
   
@@ -333,14 +308,14 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
         {/* Header del item */}  
         <View style={styles.itemHeader}>  
           <View style={styles.itemInfo}>  
-            <Text style={styles.itemName}>{item.nombre}</Text>  
-            <Text style={styles.itemCode}>Código: {item.codigo}</Text>  
+            <Text style={styles.itemName}>{item.name}</Text>  
+            <Text style={styles.itemCode}>Código: {item.sku}</Text>  
             <Text style={[styles.stockStatus, { color: getStockColor() }]}>  
               {getStockStatus()}  
             </Text>  
           </View>  
           <View style={[styles.stockBadge, { backgroundColor: getStockColor() }]}>  
-            <Text style={styles.stockText}>{item.stock_actual}</Text>  
+            <Text style={styles.stockText}>{item.stock}</Text>  
           </View>  
         </View>  
   
@@ -365,37 +340,38 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
   
         {/* Información general */}  
         <Section title="Información General">  
-          <InfoRow label="Nombre" value={item.nombre} />  
-          <InfoRow label="Código" value={item.codigo} />  
-          {item.categoria && <InfoRow label="Categoría" value={item.categoria} />}  
-          {item.proveedor && <InfoRow label="Proveedor" value={item.proveedor} />}  
-          {item.ubicacion && <InfoRow label="Ubicación" value={item.ubicacion} />}  
+          <InfoRow label="Nombre" value={item.name} />  
+          <InfoRow label="Código" value={item.sku} />  
+          {item.category && <InfoRow label="Categoría" value={item.category} />}  
+          {item.supplier && <InfoRow label="Proveedor" value={item.supplier} />}  
+          {item.location && <InfoRow label="Ubicación" value={item.location} />}  
         </Section>  
   
         {/* Información de stock */}  
         <Section title="Stock e Inventario">  
-          <InfoRow label="Stock Actual" value={`${item.stock_actual} unidades`} />  
-          {item.stock_minimo && <InfoRow label="Stock Mínimo" value={`${item.stock_minimo} unidades`} />}  
-          {item.stock_maximo && <InfoRow label="Stock Máximo" value={`${item.stock_maximo} unidades`} />}  
+          <InfoRow label="Stock Actual" value={`${item.stock} unidades`} />  
+          {item.minStock && <InfoRow label="Stock Mínimo" value={`${item.minStock} unidades`} />}  
+          {item.maxStock && <InfoRow label="Stock Máximo" value={`${item.maxStock} unidades`} />}  
           <InfoRow label="Estado" value={getStockStatus()} />  
         </Section>  
   
         {/* Información de precios */}  
         <Section title="Precios">  
-          {item.precio_compra && <InfoRow label="Precio de Compra" value={`$${item.precio_compra.toFixed(2)}`} />}  
-          {item.precio_venta && <InfoRow label="Precio de Venta" value={`$${item.precio_venta.toFixed(2)}`} />}  
-          {item.precio_compra && item.precio_venta && (  
+          {item.cost && <InfoRow label="Precio de Compra" value={`$${item.cost.toFixed(2)}`} />}  
+          {item.priceUSD && <InfoRow label="Precio de Venta USD" value={`$${item.priceUSD.toFixed(2)}`} />}  
+          {item.priceHNL && <InfoRow label="Precio de Venta HNL" value={`L${item.priceHNL.toFixed(2)}`} />}  
+          {item.cost && item.priceUSD && (  
             <InfoRow   
-              label="Margen"   
-              value={`${(((item.precio_venta - item.precio_compra) / item.precio_compra) * 100).toFixed(1)}%`}   
+              label="Margen USD"   
+              value={`${(((item.priceUSD - item.cost) / item.cost) * 100).toFixed(1)}%`}   
             />  
           )}  
         </Section>  
   
         {/* Descripción */}  
-        {item.descripcion && (  
+        {item.description && (  
           <Section title="Descripción">  
-            <Text style={styles.descriptionText}>{item.descripcion}</Text>  
+            <Text style={styles.descriptionText}>{item.description}</Text>  
           </Section>  
         )}  
   
@@ -420,23 +396,23 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
             </View>  
   
             <View style={styles.modalContent}>  
-              <Text style={styles.modalItemName}>{item.nombre}</Text>  
-              <Text style={styles.modalItemCode}>Stock actual: {item.stock_actual} unidades</Text>  
+              <Text style={styles.modalItemName}>{item.name}</Text>  
+              <Text style={styles.modalItemCode}>Stock actual: {item.stock} unidades</Text>  
   
               {/* Tipo de ajuste */}  
               <View style={styles.adjustTypeContainer}>  
                 <TouchableOpacity  
                   style={[  
                     styles.adjustTypeButton,  
-                    adjustType === 'entrada' && styles.adjustTypeButtonActive,  
+                    adjustType === 'in' && styles.adjustTypeButtonActive,  
                     { borderColor: '#4caf50' }  
                   ]}  
-                  onPress={() => setAdjustType('entrada')}  
+                  onPress={() => setAdjustType('in')}  
                 >  
-                  <Feather name="plus-circle" size={20} color={adjustType === 'entrada' ? '#4caf50' : '#666'} />  
+                  <Feather name="plus-circle" size={20} color={adjustType === 'in' ? '#4caf50' : '#666'} />  
                   <Text style={[  
                     styles.adjustTypeText,  
-                    adjustType === 'entrada' && { color: '#4caf50' }  
+                    adjustType === 'in' && { color: '#4caf50' }  
                   ]}>  
                     Entrada  
                   </Text>  
@@ -445,15 +421,15 @@ export default function InventoryItemDetailScreen({ route, navigation }: Invento
                 <TouchableOpacity  
                   style={[  
                     styles.adjustTypeButton,  
-                    adjustType === 'salida' && styles.adjustTypeButtonActive,  
+                    adjustType === 'out' && styles.adjustTypeButtonActive,  
                     { borderColor: '#f44336' }  
                   ]}  
-                  onPress={() => setAdjustType('salida')}  
+                  onPress={() => setAdjustType('out')}  
                 >  
-                  <Feather name="minus-circle" size={20} color={adjustType === 'salida' ? '#f44336' : '#666'} />  
+                  <Feather name="minus-circle" size={20} color={adjustType === 'out' ? '#f44336' : '#666'} />  
                   <Text style={[  
                     styles.adjustTypeText,  
-                    adjustType === 'salida' && { color: '#f44336' }  
+                    adjustType === 'out' && { color: '#f44336' }  
                   ]}>  
                     Salida  
                   </Text>  

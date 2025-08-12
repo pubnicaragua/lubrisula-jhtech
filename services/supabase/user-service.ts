@@ -1,5 +1,6 @@
 import { supabase } from '../../lib/supabase'
-import type { User, UserRole, UserProfile } from '../../types/user'
+import type { User, USER_ROLES_TYPE, UserProfile } from '../../types/user'
+import { UserPermissions } from '../../types/user'
 
 // Mapeo de roles
 export const USER_ROLES = {
@@ -11,6 +12,14 @@ export const USER_ROLES = {
 } as const
 
 export const userService = {
+  initializeUsers: async (): Promise<void> => {
+    try {
+      const { data, error } = await supabase.auth.getSession()
+      console.log('Users initialized:', data)
+    } catch (error) {
+      console.error('Error initializing users:', error)
+    }
+  },
   // Obtener perfil de usuario actual
   async getCurrentUserProfile(): Promise<UserProfile | null> {
     try {
@@ -23,7 +32,7 @@ export const userService = {
 
       // Obtener el perfil extendido del usuario
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .select('*')
         .eq('id', user.id)
         .single()
@@ -36,16 +45,16 @@ export const userService = {
       return {
         id: user.id,
         email: user.email || '',
-        phone: user.phone || '',
-        firstName: profile.first_name || '',
-        lastName: profile.last_name || '',
-        fullName: profile.full_name || '',
-        avatarUrl: profile.avatar_url || '',
+        phone: profile.phone || '',
+        first_name: profile.first_name || '',
+        last_name: profile.last_name || '',
+        full_name: profile.full_name || '',
+        avatar_url: profile.avatar_url || '',
         role: profile.role || 'client',
-        isActive: profile.is_active !== false, // Por defecto true si no está definido
-        lastLogin: profile.last_login_at ? new Date(profile.last_login_at) : null,
-        createdAt: profile.created_at ? new Date(profile.created_at) : new Date(),
-        updatedAt: profile.updated_at ? new Date(profile.updated_at) : new Date()
+        is_active: profile.is_active !== false, // Por defecto true si no está definido
+        last_login_at: profile.last_login_at || undefined,
+        created_at: profile.created_at || new Date().toISOString(),
+        updated_at: profile.updated_at || new Date().toISOString()
       }
     } catch (error) {
       console.error('Error in getCurrentUserProfile:', error)
@@ -71,7 +80,7 @@ export const userService = {
 
       // Actualizar último inicio de sesión
       await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .update({ last_login_at: new Date().toISOString() })
         .eq('id', data.user.id)
 
@@ -118,7 +127,7 @@ export const userService = {
     firstName: string;
     lastName: string;
     phone?: string;
-    role?: UserRole;
+    role?: USER_ROLES_TYPE;
   }): Promise<{ user: User | null; error: Error | null }> {
     try {
       // Crear usuario en Auth
@@ -143,7 +152,7 @@ export const userService = {
 
       // Crear perfil en la base de datos
       const { error: profileError } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .insert([{
           id: authData.user.id,
           email: userData.email,
@@ -207,7 +216,7 @@ export const userService = {
       // Si se actualiza el nombre o apellido, actualizar también el full_name
       if (updates.firstName || updates.lastName) {
         const { data: currentProfile } = await supabase
-          .from('profiles')
+          .from('perfil_usuario')
           .select('first_name, last_name')
           .eq('id', userId)
           .single()
@@ -218,7 +227,7 @@ export const userService = {
       }
 
       const { data, error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .update(updateData)
         .eq('id', userId)
         .select()
@@ -287,10 +296,10 @@ export const userService = {
   },
 
   // Verificar si el usuario tiene un rol específico
-  async hasRole(userId: string, requiredRole: UserRole): Promise<boolean> {
+  async hasRole(userId: string, requiredRole: USER_ROLES_TYPE): Promise<boolean> {
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .select('role')
         .eq('id', userId)
         .single()
@@ -314,10 +323,10 @@ export const userService = {
   },
 
   // Verificar si el usuario tiene al menos uno de los roles requeridos
-  async hasAnyRole(userId: string, requiredRoles: UserRole[]): Promise<boolean> {
+  async hasAnyRole(userId: string, requiredRoles: USER_ROLES_TYPE[]): Promise<boolean> {
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .select('role')
         .eq('id', userId)
         .single()
@@ -344,7 +353,7 @@ export const userService = {
   async getAllUsers(): Promise<UserProfile[]> {
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .select('*')
         .order('created_at', { ascending: false })
 
@@ -374,10 +383,10 @@ export const userService = {
   },
 
   // Actualizar rol de usuario (solo para administradores)
-  async updateUserRole(userId: string, role: UserRole): Promise<{ success: boolean; error?: Error }> {
+  async updateUSER_ROLES_TYPE(userId: string, role: USER_ROLES_TYPE): Promise<{ success: boolean; error?: Error }> {
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .update({ role })
         .eq('id', userId)
 
@@ -388,7 +397,7 @@ export const userService = {
 
       return { success: true }
     } catch (error) {
-      console.error('Error in updateUserRole:', error)
+      console.error('Error in updateUSER_ROLES_TYPE:', error)
       return { 
         success: false, 
         error: error instanceof Error ? error : new Error('Error al actualizar el rol del usuario') 
@@ -400,7 +409,7 @@ export const userService = {
   async toggleUserStatus(userId: string, isActive: boolean): Promise<{ success: boolean; error?: Error }> {
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from('perfil_usuario')
         .update({ is_active: isActive })
         .eq('id', userId)
 
@@ -491,6 +500,170 @@ export const userService = {
     return () => {
       subscription.unsubscribe()
     }
+  },
+
+  async GET_TALLER_ID(userId: string): Promise<string | null> {  
+    try {  
+      // Por ahora, asumimos que todos los usuarios pertenecen al mismo taller
+      // En el futuro, esto se puede expandir para incluir múltiples talleres
+      return 'default-taller-id'
+    } catch (error) {  
+      console.error('Error in GET_TALLER_ID:', error)  
+      return null  
+    }  
+  },
+  async VERIFY_USER_CREDENTIALS(email: string, password: string) {  
+    try {  
+      const { data, error } = await supabase.auth.signInWithPassword({  
+        email,  
+        password  
+      })  
+  
+      if (error) {  
+        console.error('Error verifying credentials:', error)  
+        return null  
+      }  
+  
+      return data.user  
+    } catch (error) {  
+      console.error('Error in VERIFY_USER_CREDENTIALS:', error)  
+      return null  
+    }  
+  },
+  async GET_PERMISOS_USUARIO(userId: string, tallerId: string): Promise<UserPermissions | null> {  
+    try {  
+      const { data, error } = await supabase  
+        .from('roles_usuario')  
+        .select(`  
+          rol,  
+          permisos,  
+          taller_id,  
+          roles (  
+            id,  
+            nombre,  
+            permisos  
+          )  
+        `)  
+        .eq('usuario_id', userId)  
+        .eq('taller_id', tallerId)  
+        .single()  
+  
+      if (error) {  
+        console.error('Error getting user permissions:', error)  
+        return null  
+      }  
+  
+      return {  
+        rol: data?.rol || 'client',  
+        permisos: data?.permisos || [],  
+        taller_id: data?.taller_id || tallerId  
+      }  
+    } catch (error) {  
+      console.error('Error in GET_PERMISOS_USUARIO:', error)  
+      return null  
+    }  
+  },  
+  
+  async VERIFICAR_PERMISO(userId: string, tallerId: string, permiso: string): Promise<boolean> {  
+    try {  
+      const userPermissions = await this.GET_PERMISOS_USUARIO(userId, tallerId)  
+      return userPermissions?.permisos?.includes(permiso) || false  
+    } catch (error) {  
+      console.error('Error verifying permission:', error)  
+      return false  
+    }  
+  },  
+  
+  // Método adicional para verificar roles usando la función RPC de Supabase  
+  async USER_HAS_ROLE(roleName: string): Promise<boolean> {  
+    try {  
+      const { data, error } = await supabase.rpc('user_has_role', {  
+        role_name: roleName  
+      })  
+  
+      if (error) {  
+        console.error('Error checking user role:', error)  
+        return false  
+      }  
+  
+      return data || false  
+    } catch (error) {  
+      console.error('Error in USER_HAS_ROLE:', error)  
+      return false  
+    }  
+  }, 
+  async GetUserById(userId: string): Promise<User | null> {  
+    try {  
+            const { data, error } = await supabase
+        .from('perfil_usuario')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (error) {
+        console.error('Error fetching user by ID:', error)
+        return null
+      }
+
+      return {
+        id: data.id,
+        email: data.email || '',
+        firstName: data.first_name || '',
+        lastName: data.last_name || '',
+        fullName: data.full_name || '',
+        avatarUrl: data.avatar_url || '',
+        role: data.role || 'client',
+        isActive: data.is_active !== false
+      }
+    } catch (error) {
+      console.error('Error in GetUserById:', error)
+      return null
+    }
+  },
+
+  // Get taller ID for a user (alias for GET_TALLER_ID)
+  async getTallerId(userId: string): Promise<string | null> {
+    return this.GET_TALLER_ID(userId)
+  },
+
+  // Get all technicians
+  async getAllTechnicians(): Promise<UserProfile[]> {
+    try {
+      const { data, error } = await supabase
+        .from('perfil_usuario')
+        .select('*')
+        .eq('role', 'technician')
+        .eq('is_active', true)
+        .order('full_name', { ascending: true })
+
+      if (error) {
+        console.error('Error fetching technicians:', error)
+        return []
+      }
+
+      return (data || []).map(profile => ({
+        id: profile.id,
+        email: profile.email || '',
+        phone: profile.phone || '',
+        firstName: profile.first_name || '',
+        lastName: profile.last_name || '',
+        fullName: profile.full_name || '',
+        avatarUrl: profile.avatar_url || '',
+        role: profile.role || 'technician',
+        isActive: profile.is_active !== false,
+        lastLogin: profile.last_login_at ? new Date(profile.last_login_at) : null,
+        createdAt: profile.created_at ? new Date(profile.created_at) : new Date(),
+        updatedAt: profile.updated_at ? new Date(profile.updated_at) : new Date()
+      }))
+    } catch (error) {
+      console.error('Error in getAllTechnicians:', error)
+      return []
+    }
+  },
+
+  // Get user taller (alias for GET_TALLER_ID)
+  async getUserTaller(userId: string): Promise<string | null> {
+    return this.GET_TALLER_ID(userId)
   }
 }
 

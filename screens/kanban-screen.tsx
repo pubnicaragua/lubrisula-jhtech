@@ -22,63 +22,8 @@ import * as orderService from "../services/supabase/order-service"
 import * as clientService from "../services/supabase/client-service"  
 import * as vehicleService from "../services/supabase/vehicle-service"  
 import * as accessService from "../services/supabase/access-service"  
-import * as userService from "../services/supabase/user-service"  
-  
-// Tipos TypeScript para resolver errores implícitos  
-interface OrderType {  
-  id: string  
-  numero_orden: string  
-  descripcion: string  
-  estado: string  
-  prioridad: string  
-  client_id: string  
-  vehiculo_id: string  
-  tecnico_id?: string  
-  costo?: number  
-  fecha_creacion: string  
-  observacion?: string  
-  client_info?: {  
-    name: string  
-  }  
-  vehiculo_info?: {  
-    marca: string  
-    modelo: string  
-    placa: string  
-  }  
-  tecnico_info?: {  
-    nombre: string  
-  }  
-}  
-  
-interface KanbanCardProps {  
-  card: OrderType  
-  onPress: () => void  
-  onLongPress: () => void  
-}  
-  
-interface KanbanColumnProps {  
-  column: {  
-    id: string  
-    title: string  
-    color: string  
-    description: string  
-    cards: OrderType[]  
-  }  
-  onCardPress: (card: OrderType, column: any) => void  
-  onCardLongPress: (card: OrderType, column: any) => void  
-  onDrop: (cardId: string) => void  
-  isDropArea: boolean  
-  onAddCard: (column: any) => void  
-}  
-  
-interface KanbanScreenProps {  
-  navigation: any  
-}  
-  
-interface TechnicianType {  
-  id: string  
-  nombre: string  
-}  
+import * as userService from "../services/supabase/user-service"
+import { KanbanCardProps, KanbanColumnProps, KanbanOrderType, KanbanScreenProps, TechnicianType } from "../types/canvan"
   
 // Estados disponibles para las órdenes  
 const KANBAN_COLUMNS = [  
@@ -210,9 +155,9 @@ const KanbanColumn = ({ column, onCardPress, onCardLongPress, onDrop, isDropArea
   
 export default function KanbanScreen({ navigation }: KanbanScreenProps) {  
   const { user } = useAuth()  
-  const [columns, setColumns] = useState(KANBAN_COLUMNS.map(col => ({ ...col, cards: [] })))  
-  const [orders, setOrders] = useState<OrderType[]>([])  
-  const [selectedCard, setSelectedCard] = useState<OrderType | null>(null)  
+  const [columns, setColumns] = useState(KANBAN_COLUMNS.map(col => ({ ...col, cards: [] as KanbanOrderType[] })))  
+  const [orders, setOrders] = useState<KanbanOrderType[]>([])  
+  const [selectedCard, setSelectedCard] = useState<KanbanOrderType | null>(null)  
   const [selectedColumn, setSelectedColumn] = useState<any>(null)  
   const [showCardModal, setShowCardModal] = useState(false)  
   const [showMoveModal, setShowMoveModal] = useState(false)  
@@ -232,8 +177,12 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await userService.getTallerId(user.id)  
-      const userPermissions = await accessService.getUserPermissions(user.id, userTallerId)  
+      const userTallerId = await userService.userService.GET_TALLER_ID(user.id)
+      if (!userTallerId) {
+        setError("No se pudo cargar la información del cliente")  
+        return
+      }    
+      const userPermissions = await accessService.accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       if (userPermissions?.rol === 'client') {  
@@ -242,15 +191,15 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
       }  
   
       // Cargar todas las órdenes  
-      const allOrders = await orderService.getAllOrders()  
+      const allOrders = await orderService.orderService.getAllOrders()  
         
       // Enriquecer órdenes con información adicional  
       const enrichedOrders = await Promise.all(  
         allOrders.map(async (order: any) => {  
           const [clientInfo, vehicleInfo, technicianInfo] = await Promise.all([  
-            order.client_id ? clientService.getClientById(order.client_id) : null,  
-            order.vehiculo_id ? vehicleService.getVehicleById(order.vehiculo_id) : null,  
-            order.tecnico_id ? userService.getUserById(order.tecnico_id) : null  
+            order.client_id ? clientService.clientService.getClientById(order.client_id) : null,  
+            order.vehiculo_id ? vehicleService.vehicleService.getVehicleById(order.vehiculo_id) : null,  
+            order.tecnico_id ? userService.userService.GetUserById(order.tecnico_id) : null  
           ])  
   
           return {  
@@ -267,7 +216,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
       // Organizar órdenes por columnas  
       const updatedColumns = KANBAN_COLUMNS.map(column => ({  
         ...column,  
-        cards: enrichedOrders.filter((order: OrderType) => {  
+        cards: enrichedOrders.filter((order: KanbanOrderType) => {  
           // Mapear estados de órdenes a columnas del Kanban  
           const statusMapping: Record<string, string> = {  
             "Pendiente": "reception",  
@@ -299,14 +248,14 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
   )  
   
   // Función para manejar el clic en una tarjeta  
-  const handleCardPress = (card: OrderType, column: any) => {  
+  const handleCardPress = (card: KanbanOrderType, column: any) => {  
     setSelectedCard(card)  
     setSelectedColumn(column)  
     setShowCardModal(true)  
   }  
   
   // Función para manejar el clic largo en una tarjeta  
-  const handleCardLongPress = (card: OrderType, column: any) => {  
+  const handleCardLongPress = (card: KanbanOrderType, column: any) => {  
     setShowMoveModal(true)  
     setSelectedCard(card)  
     setSelectedColumn(column)  
@@ -319,7 +268,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
       if (!targetColumn) return  
   
       // Actualizar estado en Supabase  
-      await orderService.updateOrderStatus(cardId, targetColumn.status)  
+      await orderService.orderService.updateOrderStatus(cardId, targetColumn.status)  
         
       // Recargar datos  
       loadKanbanData()  
@@ -354,7 +303,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
           style: "destructive",  
           onPress: async () => {  
             try {  
-              await orderService.deleteOrder(selectedCard.id)  
+              await orderService.orderService.deleteOrder(selectedCard.id)  
               setShowCardModal(false)  
               loadKanbanData()  
               Alert.alert("Éxito", "Orden eliminada correctamente")  
@@ -372,7 +321,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
   const getFilteredColumns = () => {  
     return columns.map(column => ({  
       ...column,  
-      cards: column.cards?.filter((card: OrderType) => {  
+      cards: column.cards?.filter((card: KanbanOrderType) => {  
         if (filterPriority !== "all" && card.prioridad !== filterPriority) return false  
         if (filterAssignee !== "all" && card.tecnico_id !== filterAssignee) return false  
         return true  
@@ -383,7 +332,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
   // Obtener técnicos para filtro  
   const getTechnicians = (): TechnicianType[] => {  
     const technicians = new Set()  
-    orders.forEach((order: OrderType) => {  
+    orders.forEach((order: KanbanOrderType) => {  
       if (order.tecnico_info) {  
         technicians.add({  
           id: order.tecnico_id,  
@@ -642,7 +591,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
                     styles.moveModalOption,  
                     selectedColumn?.id === column.id && styles.moveModalOptionDisabled  
                   ]}  
-                  onPress={() => moveCard(column.id, selectedCard?.id)}  
+                  onPress={() => moveCard(column.id, selectedCard?.id || '')}  
                   disabled={selectedColumn?.id === column.id}  
                 >  
                   <View style={[styles.moveModalOptionColor, { backgroundColor: column.color }]} />  

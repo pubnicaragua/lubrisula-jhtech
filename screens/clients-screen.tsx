@@ -24,53 +24,23 @@ import * as orderService from "../services/supabase/order-service"
 import * as vehicleService from "../services/supabase/vehicle-service"  
 import * as accessService from "../services/supabase/access-service"  
 import * as userService from "../services/supabase/user-service"  
-  
+import { Client } from "../services/supabase/client-service"
+import { Order } from '../types/order';
+import { ClientScreenProps } from "../types"
+
 // Tipos TypeScript para resolver errores  
-interface ClientsScreenProps {  
-  navigation: any  
-}  
-  
-interface ClientType {  
-  id: string  
-  nombre: string  
-  email?: string  
-  telefono?: string  
-  direccion?: string  
-  fecha_registro?: string  
-  activo?: boolean  
-}  
-  
-interface OrderType {  
-  id: string  
-  numero_orden: string  
-  descripcion: string  
-  estado: string  
-  client_id: string  
-  costo?: number  
-  fecha_creacion: string  
-}  
-  
-interface VehicleType {  
-  id: string  
-  marca: string  
-  modelo: string  
-  año: number  
-  placa: string  
-  client_id: string  
-}  
-  
 interface ClientStatsType {  
   totalOrders: number  
   totalSpent: number  
   lastOrderDate?: string  
   vehicleCount: number  
 }  
-  
-export default function ClientsScreen({ navigation }: ClientsScreenProps) {  
+
+export default function ClientsScreen({ navigation }: ClientScreenProps) {  
   const { user } = useAuth()  
     
-  const [clients, setClients] = useState<ClientType[]>([])  
-  const [filteredClients, setFilteredClients] = useState<ClientType[]>([])  
+  const [clients, setClients] = useState<Client[]>([])  
+  const [filteredClients, setFilteredClients] = useState<Client[]>([])  
   const [clientStats, setClientStats] = useState<Record<string, ClientStatsType>>({})  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
@@ -93,17 +63,21 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await userService.getTallerId(user.id)  
-      const userPermissions = await accessService.getUserPermissions(user.id, userTallerId)  
+      const userTallerId = await userService.userService.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {
+        setError("No se pudo obtener la información del taller")
+        return
+      }
+      const userPermissions = await accessService.accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
-      if (userPermissions?.rol === 'client') {  
+      if (userPermissions?.rol !== 'client') {  
         setError("No tienes permisos para ver la lista de clientes")  
         return  
       }  
   
       // Cargar clientes  
-      const allClients = await clientService.getAllClients()  
+      const allClients = await clientService.clientService.getAllClients()  
       setClients(allClients)  
   
       // Cargar estadísticas para cada cliente  
@@ -111,18 +85,18 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
         
       for (const client of allClients) {  
         const [clientOrders, clientVehicles] = await Promise.all([  
-          orderService.getOrdersByClientId(client.id),  
-          vehicleService.getVehiclesByClientId(client.id)  
+          orderService.orderService.getOrdersByClientId(client.id),  
+          vehicleService.vehicleService.getVehiclesByClientId(client.id)  
         ])  
   
-        const totalSpent = clientOrders.reduce((sum: number, order: OrderType) => sum + (order.costo || 0), 0)  
+        const totalSpent = clientOrders.reduce((sum: number, order: Order) => sum + (order.total || 0), 0)  
         const lastOrder = clientOrders  
-          .sort((a: OrderType, b: OrderType) => new Date(b.fecha_creacion).getTime() - new Date(a.fecha_creacion).getTime())[0]  
+          .sort((a: Order, b: Order) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]  
   
         stats[client.id] = {  
           totalOrders: clientOrders.length,  
           totalSpent,  
-          lastOrderDate: lastOrder?.fecha_creacion,  
+          lastOrderDate: lastOrder?.createdAt,  
           vehicleCount: clientVehicles.length  
         }  
       }  
@@ -146,24 +120,24 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
   )  
   
   // Aplicar filtros y ordenamiento  
-  const applyFiltersAndSort = (clientsList: ClientType[], query: string, sortField: string, order: string) => {  
-    let filtered = clientsList.filter((client: ClientType) =>  
-      client.nombre.toLowerCase().includes(query.toLowerCase()) ||  
+  const applyFiltersAndSort = (clientsList: Client[], query: string, sortField: string, order: string) => {  
+    let filtered = clientsList.filter((client: Client) =>  
+      client.name.toLowerCase().includes(query.toLowerCase()) ||  
       (client.email && client.email.toLowerCase().includes(query.toLowerCase())) ||  
-      (client.telefono && client.telefono.includes(query))  
+      (client.phone && client.phone.includes(query))  
     )  
   
     // Ordenar  
-    filtered.sort((a: ClientType, b: ClientType) => {  
+    filtered.sort((a: Client, b: Client) => {  
       let comparison = 0  
         
       switch (sortField) {  
         case "name":  
-          comparison = a.nombre.localeCompare(b.nombre)  
+          comparison = a.name.localeCompare(b.name)  
           break  
         case "date":  
-          const dateA = new Date(a.fecha_registro || 0).getTime()  
-          const dateB = new Date(b.fecha_registro || 0).getTime()  
+          const dateA = new Date(a.created_at || 0).getTime()  
+          const dateB = new Date(b.created_at || 0).getTime()  
           comparison = dateA - dateB  
           break  
         case "orders":  
@@ -194,22 +168,22 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
   }  
   
   // Renderizar item de cliente  
-  const renderClientItem = ({ item }: { item: ClientType }) => {  
+  const renderClientItem = ({ item }: { item: Client }) => {  
     const stats = clientStats[item.id] || { totalOrders: 0, totalSpent: 0, vehicleCount: 0 }  
       
     return (  
       <TouchableOpacity  
         style={styles.clientCard}  
-        onPress={() => navigation.navigate("ClientDetail", { clientId: item.id })}  
+        onPress={() => navigation.navigate("ClientDetail", { clientId: item.user_id || "" })}  
       >  
         <View style={styles.clientHeader}>  
           <View style={styles.clientAvatar}>  
           <Feather name="user" size={24} color="#1a73e8" />  
           </View>  
           <View style={styles.clientInfo}>  
-            <Text style={styles.clientName}>{item.nombre}</Text>  
+            <Text style={styles.clientName}>{item.name}</Text>  
             <Text style={styles.clientEmail}>{item.email}</Text>  
-            <Text style={styles.clientPhone}>{item.telefono}</Text>  
+            <Text style={styles.clientPhone}>{item.phone}</Text>  
           </View>  
         </View>  
   

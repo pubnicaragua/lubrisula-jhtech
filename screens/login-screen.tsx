@@ -16,8 +16,6 @@ import {
 } from "react-native"
 import { useAuth } from "../context/auth-context"
 import { isValidEmail } from "../utils/helpers"
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE"
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"
 
 export default function LoginScreen() {
   const { login } = useAuth()
@@ -62,53 +60,27 @@ export default function LoginScreen() {
 
     setIsLoading(true)
     try {
-      // Verificar credenciales usando servicios de Supabase  
-      const user = await USER_SERVICE.VERIFY_USER_CREDENTIALS(email, password)
-
-      if (user) {
-        // Obtener permisos del usuario  
-        const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)
-        if (!userTallerId) {
-          Alert.alert("Error", "No se pudo obtener el taller del usuario")
-          return
-        }
-        const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)
-
-        // Crear objeto de usuario completo  
-        const authenticatedUser = {
-          ...user,
-          permissions: userPermissions?.permisos || [],
-          role: userPermissions?.rol || 'client',
-          tallerId: userTallerId
-        }
-
-        if (!authenticatedUser.email) {
-          Alert.alert("Error", "No se pudo obtener el email del usuario")
-          return
-        }
-
-        const success = await login(authenticatedUser.email, password)
-        if (!success) {
-          Alert.alert("Error de inicio de sesión", "No se pudo completar el inicio de sesión.")
-        }
+      // Usar el contexto de autenticación para iniciar sesión
+      const success = await login(email, password)
+      
+      if (success) {
+        // El login exitoso se maneja automáticamente en el contexto
+        // No necesitamos hacer nada más aquí
+        console.log("Inicio de sesión exitoso")
       } else {
         Alert.alert("Error de inicio de sesión", "Credenciales incorrectas. Por favor, inténtelo de nuevo.")
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error al iniciar sesión:", error)
-      Alert.alert("Error", "No se pudo iniciar sesión. Por favor, inténtelo de nuevo más tarde.")
+      Alert.alert("Error", error.message || "No se pudo iniciar sesión. Por favor, inténtelo de nuevo más tarde.")
     } finally {
       setIsLoading(false)
     }
   }
 
   // Mostrar credenciales de demostración  
-  const showDemoCredentials = () => {
-    Alert.alert(
-      "Credenciales de demostración",
-      "Cliente: cliente1@gmail.com\nContraseña: 123456\n\nTécnico: tecnico1@gmail.com\nContraseña: 123456\n\nAdmin: admin@autoflowx.com\nContraseña: 123456",
-      [{ text: "OK" }],
-    )
+  const showDemoCredentials = async () => {
+    Alert.alert("Credenciales de demostración", "Correo: demo@demo.com\nContraseña: 123456")
   }
 
   return (

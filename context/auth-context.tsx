@@ -5,34 +5,13 @@ import { createContext, useContext, useState, useEffect } from "react"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { Alert } from "react-native"
 import { supabase } from "../lib/supabase"
-
-// Definir tipos
-type UserRole = "client" | "technician" | "manager" | "admin"
-
-type User = {
-  id: string
-  email: string
-  name: string
-  role: UserRole
-  permissions: string[]
-  profilePic?: string
-  phone?: string
-}
-
-type AuthContextType = {
-  user: User | null
-  isLoading: boolean
-  login: (email: string, password: string) => Promise<boolean>
-  logout: () => Promise<void>
-  isAuthenticated: boolean
-  hasPermission: (permission: string) => boolean
-}
+import type { User, USER_ROLES_TYPE, AuthContextType } from "../types/user"
 
 // Crear contexto
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 // Mapeo de roles a permisos
-const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
+const ROLE_PERMISSIONS: Record<USER_ROLES_TYPE, string[]> = {
   admin: ["*"], // Admin tiene todos los permisos
   manager: [
     "view_orders",
@@ -51,6 +30,12 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     "view_inventory",
     "view_clients"
   ],
+  advisor: [
+    "view_orders",
+    "create_orders",
+    "view_clients",
+    "view_reports"
+  ],
   client: [
     "view_own_orders",
     "create_orders"
@@ -68,30 +53,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        
+
         if (session?.user) {
-          // Obtener perfil del usuario
+          // Obtener perfil del usuario desde la tabla perfil_usuario
           const { data: profile, error } = await supabase
-            .from('profiles')
+            .from('perfil_usuario')
             .select('*')
-            .eq('id', session.user.id)
+            .eq('user_id', session.user.id)
             .single()
-          
-          if (error) throw error
-          
-          // Crear objeto de usuario con permisos
-          const userData: User = {
-            id: session.user.id,
-            email: session.user.email || '',
-            name: profile.full_name || 'Usuario',
-            role: (profile.role as UserRole) || 'client',
-            permissions: ROLE_PERMISSIONS[profile.role as UserRole] || [],
-            phone: profile.phone,
-            profilePic: profile.avatar_url
+
+          if (error) {
+            console.error("Error al obtener perfil:", error)
+            // Si no existe el perfil, crear uno básico
+            const userData: User = {
+              id: session.user.id,
+              email: session.user.email || '',
+              name: session.user.email?.split('@')[0] || 'Usuario',
+              role: 'client',
+              permissions: ROLE_PERMISSIONS.client,
+              phone: '',
+              profilePic: ''
+            }
+            setUser(userData)
+            await AsyncStorage.setItem("user", JSON.stringify(userData))
+          } else {
+            // Crear objeto de usuario con permisos
+            const userData: User = {
+              id: session.user.id,
+              email: session.user.email || '',
+              name: profile.full_name || profile.first_name || session.user.email?.split('@')[0] || 'Usuario',
+              role: (profile.role as USER_ROLES_TYPE) || 'client',
+              permissions: ROLE_PERMISSIONS[profile.role as USER_ROLES_TYPE] || ROLE_PERMISSIONS.client,
+              phone: profile.phone || '',
+              profilePic: profile.avatar_url || ''
+            }
+
+            setUser(userData)
+            await AsyncStorage.setItem("user", JSON.stringify(userData))
           }
-          
-          setUser(userData)
-          await AsyncStorage.setItem("user", JSON.stringify(userData))
         }
       } catch (error) {
         console.error("Error al verificar sesión:", error)
@@ -108,31 +107,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Escuchar cambios en la autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        // Obtener perfil del usuario
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-        
-        if (error) {
-          console.error("Error al cargar perfil:", error)
-          return
+        try {
+          // Obtener perfil del usuario desde la tabla perfil_usuario
+          const { data: profile, error } = await supabase
+            .from('perfil_usuario')
+            .select('*')
+            .eq('user_id', session.user.id)
+            .single()
+
+          if (error) {
+            console.error("Error al cargar perfil:", error)
+            // Si no existe el perfil, crear uno básico
+            const userData: User = {
+              id: session.user.id,
+              email: session.user.email || '',
+              name: session.user.email?.split('@')[0] || 'Usuario',
+              role: 'client',
+              permissions: ROLE_PERMISSIONS.client,
+              phone: '',
+              profilePic: ''
+            }
+            setUser(userData)
+            await AsyncStorage.setItem("user", JSON.stringify(userData))
+          } else {
+            // Crear objeto de usuario con permisos
+            const userData: User = {
+              id: session.user.id,
+              email: session.user.email || '',
+              name: profile.full_name || profile.first_name || session.user.email?.split('@')[0] || 'Usuario',
+              role: (profile.role as USER_ROLES_TYPE) || 'client',
+              permissions: ROLE_PERMISSIONS[profile.role as USER_ROLES_TYPE] || ROLE_PERMISSIONS.client,
+              phone: profile.phone || '',
+              profilePic: profile.avatar_url || ''
+            }
+
+            setUser(userData)
+            await AsyncStorage.setItem("user", JSON.stringify(userData))
+          }
+        } catch (error) {
+          console.error("Error al procesar inicio de sesión:", error)
+          // Crear usuario básico en caso de error
+          const userData: User = {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: session.user.email?.split('@')[0] || 'Usuario',
+            role: 'client',
+            permissions: ROLE_PERMISSIONS.client,
+            phone: '',
+            profilePic: ''
+          }
+          setUser(userData)
+          await AsyncStorage.setItem("user", JSON.stringify(userData))
         }
-        
-        // Crear objeto de usuario con permisos
-        const userData: User = {
-          id: session.user.id,
-          email: session.user.email || '',
-          name: profile.full_name || 'Usuario',
-          role: (profile.role as UserRole) || 'client',
-          permissions: ROLE_PERMISSIONS[profile.role as UserRole] || [],
-          phone: profile.phone,
-          profilePic: profile.avatar_url
-        }
-        
-        setUser(userData)
-        await AsyncStorage.setItem("user", JSON.stringify(userData))
       } else if (event === 'SIGNED_OUT') {
         await AsyncStorage.removeItem("user")
         setUser(null)
@@ -185,7 +211,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { error } = await supabase.auth.signOut()
       if (error) throw error
-      
+
       await AsyncStorage.removeItem("user")
       setUser(null)
     } catch (error) {

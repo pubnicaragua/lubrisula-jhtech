@@ -13,19 +13,26 @@ import {
 } from "react-native"  
 import { Feather } from "@expo/vector-icons"  
 import { useAuth } from "../context/auth-context"  
-import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
-  
-export default function NewClientScreen({ navigation }) {  
+import CLIENTS_SERVICES, { Client } from "../services/supabase/client-service"  
+import { UiScreenNavProp, CreateClientType } from "../types"
+
+
+export default function NewClientScreen({ navigation }: UiScreenNavProp) {  
   const { user } = useAuth()  
   const [loading, setLoading] = useState(false)  
-  const [formData, setFormData] = useState<Partial<ClienteType>>({  
-    name: "",  
-    email: "",  
-    phone: "",  
-    company: "",  
-    client_type: "individual",  
-    status: "Activo",  
-  })  
+  const [formData, setFormData] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    company: string;
+    client_type: 'Individual' | 'Empresa';
+  }>({
+    name: "",
+    email: "",
+    phone: "",
+    company: "",
+    client_type: "Individual",
+  })
   
   const [errors, setErrors] = useState<Record<string, string>>({})  
   
@@ -50,38 +57,42 @@ export default function NewClientScreen({ navigation }) {
     return Object.keys(newErrors).length === 0  
   }  
   
-  const handleSave = async () => {  
-    if (!validateForm()) return  
+  const handleSubmit = async () => {
+    if (!formData.name.trim()) {
+      Alert.alert("Error", "El nombre es obligatorio");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const clientData: CreateClientType = {
+        name: formData.name,
+        email: formData.email || undefined,
+        phone: formData.phone || undefined,
+        company: formData.company || undefined,
+        client_type: formData.client_type,
+        user_id: user?.id,
+        taller_id: user?.taller_id,
+      };
+
+      await CLIENTS_SERVICES.createClient(clientData);
+      Alert.alert("Éxito", "Cliente creado correctamente");
+      navigation.goBack();
+    } catch (error) {
+      console.error("Error creating client:", error);
+      Alert.alert("Error", "No se pudo crear el cliente");
+    } finally {
+      setLoading(false);
+    }
+  };
   
-    try {  
-      setLoading(true)  
-        
-      const newClient = await CLIENTS_SERVICES.ADD_NEW_CLIENTE(formData as ClienteType)  
-        
-      Alert.alert(  
-        "Éxito",  
-        "Cliente creado correctamente",  
-        [  
-          {  
-            text: "OK",  
-            onPress: () => navigation.goBack()  
-          }  
-        ]  
-      )  
-    } catch (error) {  
-      console.error("Error creating client:", error)  
-      Alert.alert("Error", "No se pudo crear el cliente")  
-    } finally {  
-      setLoading(false)  
-    }  
-  }  
-  
-  const updateFormData = (field: keyof ClienteType, value: string) => {  
-    setFormData(prev => ({ ...prev, [field]: value }))  
-    if (errors[field]) {  
-      setErrors(prev => ({ ...prev, [field]: "" }))  
-    }  
-  }  
+  const updateFormData = (field: keyof typeof formData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    // Clear error for this field
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: "" }))
+    }
+  }
   
   return (  
     <ScrollView style={styles.container}>  
@@ -145,13 +156,13 @@ export default function NewClientScreen({ navigation }) {
             <TouchableOpacity  
               style={[  
                 styles.radioOption,  
-                formData.client_type === "individual" && styles.radioOptionSelected  
+                formData.client_type === "Individual" && styles.radioOptionSelected  
               ]}  
-              onPress={() => updateFormData('client_type', 'individual')}  
+              onPress={() => updateFormData('client_type', 'Individual')}  
             >  
               <View style={[  
                 styles.radioCircle,  
-                formData.client_type === "individual" && styles.radioCircleSelected  
+                formData.client_type === "Individual" && styles.radioCircleSelected  
               ]} />  
               <Text style={styles.radioText}>Individual</Text>  
             </TouchableOpacity>  
@@ -159,13 +170,13 @@ export default function NewClientScreen({ navigation }) {
             <TouchableOpacity  
               style={[  
                 styles.radioOption,  
-                formData.client_type === "empresa" && styles.radioOptionSelected  
+                formData.client_type === "Empresa" && styles.radioOptionSelected  
               ]}  
-              onPress={() => updateFormData('client_type', 'empresa')}  
+              onPress={() => updateFormData('client_type', 'Empresa')}  
             >  
               <View style={[  
                 styles.radioCircle,  
-                formData.client_type === "empresa" && styles.radioCircleSelected  
+                formData.client_type === "Empresa" && styles.radioCircleSelected  
               ]} />  
               <Text style={styles.radioText}>Empresa</Text>  
             </TouchableOpacity>  
@@ -184,7 +195,7 @@ export default function NewClientScreen({ navigation }) {
   
         <TouchableOpacity  
           style={[styles.button, styles.saveButton]}  
-          onPress={handleSave}  
+          onPress={handleSubmit}  
           disabled={loading}  
         >  
           {loading ? (  

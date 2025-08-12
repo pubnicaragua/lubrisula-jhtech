@@ -13,18 +13,20 @@ import {
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useAuth } from "../context/auth-context"  
-import ORDENES_TRABAJO_SERVICES, { OrdenTrabajoType } from "../services/supabase/order-service"  
-import VEHICULO_SERVICES, { VehiculoType } from "../services/"  
-import CLIENTS_SERVICES, { ClienteType } from "../services/CLIENTES_SERVICES.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
+import { orderService } from "../services/supabase/order-service"
+import { vehicleService, Vehicle } from "../services/supabase/vehicle-service"
+import { clientService, Client } from "../services/supabase/client-service"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service" 
+import { UiScreenProps } from "../types"
+import { Order } from "../types/order"
   
-export default function OrderDetailScreen({ route, navigation }) {  
+export default function OrderDetailScreen({ route, navigation }: UiScreenProps) {  
   const { orderId } = route.params  
   const { user } = useAuth()  
-  const [order, setOrder] = useState<OrdenTrabajoType | null>(null)  
-  const [vehicle, setVehicle] = useState<VehiculoType | null>(null)  
-  const [client, setClient] = useState<ClienteType | null>(null)  
+  const [order, setOrder] = useState<Order | null>(null)
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null)
+  const [client, setClient] = useState<Client | null>(null)  
   const [loading, setLoading] = useState(true)  
   const [updating, setUpdating] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
@@ -40,12 +42,16 @@ export default function OrderDetailScreen({ route, navigation }) {
   
       // Validar permisos del usuario  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {
+        setError("No se pudo obtener el taller del usuario")
+        return
+      }
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       // Obtener datos de la orden  
-      const allOrders = await ORDENES_TRABAJO_SERVICES.GET_ALL_ORDENES()  
-      const orderData = allOrders.find(o => o.id === orderId)  
+      const allOrders = await orderService.getAllOrders()  
+      const orderData = allOrders.find((o: Order) => o.id === orderId)  
         
       if (!orderData) {  
         setError("Orden no encontrada")  
@@ -53,7 +59,7 @@ export default function OrderDetailScreen({ route, navigation }) {
       }  
   
       // Verificar permisos de acceso  
-      if (userPermissions?.rol === 'client' && orderData.client_id !== user.id) {  
+      if (userPermissions?.rol === 'client' && orderData.clientId !== user.id) {  
         setError("No tienes permisos para ver esta orden")  
         return  
       }  
@@ -62,8 +68,8 @@ export default function OrderDetailScreen({ route, navigation }) {
   
       // Obtener datos del vehículo y cliente  
       const [vehicleData, clientData] = await Promise.all([  
-        VEHICULO_SERVICES.GET_VEHICULOS_BY_ID(orderData.vehiculo_id),  
-        CLIENTS_SERVICES.GET_CLIENTS_BY_ID(orderData.client_id)  
+        vehicleService.getVehicleById(orderData.vehicleId),  
+        clientService.getClientById(orderData.clientId)  
       ])  
   
       setVehicle(vehicleData)  
@@ -85,14 +91,19 @@ export default function OrderDetailScreen({ route, navigation }) {
     try {  
       setUpdating(true)  
         
+      if (!orderId || !order) {
+        setError("No se pudo obtener el ID de la orden")
+        return
+      }
+      
       const updatedOrder = {  
         ...order,  
-        estado: newStatus,  
-        fecha_actualizacion: new Date().toISOString()  
+        status: newStatus as any, // Cast to any to avoid type issues with OrderStatus
+        updatedAt: new Date().toISOString()  
       }  
   
-      await ORDENES_TRABAJO_SERVICES.UPDATE_ORDEN(orderId, updatedOrder)  
-      setOrder(prev => ({ ...prev, estado: newStatus }))  
+      await orderService.updateOrder(orderId, updatedOrder)  
+      setOrder(prev => prev ? { ...prev, status: newStatus as any } : null)  
       setStatusModalVisible(false)  
         
       Alert.alert("Éxito", "Estado de la orden actualizado correctamente")  
@@ -149,7 +160,7 @@ export default function OrderDetailScreen({ route, navigation }) {
                 key={status}  
                 style={[  
                   styles.statusOption,  
-                  order?.estado === status && styles.statusOptionSelected  
+                  order?.status === status && styles.statusOptionSelected  
                 ]}  
                 onPress={() => handleStatusUpdate(status)}  
                 disabled={updating}  
@@ -160,11 +171,11 @@ export default function OrderDetailScreen({ route, navigation }) {
                 ]} />  
                 <Text style={[  
                   styles.statusOptionText,  
-                  order?.estado === status && styles.statusOptionTextSelected  
+                  order?.status === status && styles.statusOptionTextSelected  
                 ]}>  
                   {status}  
                 </Text>  
-                {order?.estado === status && (  
+                {order?.status === status && (  
                   <Feather name="check" size={20} color="#1a73e8" />  
                 )}  
               </TouchableOpacity>  
@@ -202,37 +213,37 @@ export default function OrderDetailScreen({ route, navigation }) {
     <ScrollView style={styles.container}>  
       <View style={styles.header}>  
         <View style={styles.orderHeader}>  
-          <Text style={styles.orderNumber}>Orden #{order.numero_orden}</Text>  
+          <Text style={styles.orderNumber}>Orden #{order.number}</Text>  
           <TouchableOpacity  
-            style={[styles.statusBadge, { backgroundColor: getStatusColor(order.estado) }]}  
+            style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}  
             onPress={() => userRole !== 'client' && setStatusModalVisible(true)}  
             disabled={userRole === 'client'}  
           >  
-            <Text style={styles.statusText}>{order.estado}</Text>  
+            <Text style={styles.statusText}>{order.status}</Text>  
             {userRole !== 'client' && (  
               <Feather name="chevron-down" size={16} color="#fff" style={{ marginLeft: 4 }} />  
             )}  
           </TouchableOpacity>  
         </View>  
           
-        <Text style={styles.orderDescription}>{order.descripcion}</Text>  
+        <Text style={styles.orderDescription}>{order.description || 'Sin descripción'}</Text>  
           
         <View style={styles.orderMeta}>  
           <View style={styles.metaItem}>  
             <Feather name="calendar" size={16} color="#666" />  
             <Text style={styles.metaText}>  
-              Creada: {new Date(order.fecha_creacion).toLocaleDateString("es-ES")}  
+              Creada: {new Date(order.createdAt).toLocaleDateString("es-ES")}  
             </Text>  
           </View>  
           <View style={styles.metaItem}>  
             <Feather name="clock" size={16} color="#666" />  
             <Text style={styles.metaText}>  
-              Entrega: {new Date(order.fecha_entrega).toLocaleDateString("es-ES")}  
+              Entrega: {order.estimatedCompletionDate ? new Date(order.estimatedCompletionDate).toLocaleDateString("es-ES") : 'No definida'}  
             </Text>  
           </View>  
           <View style={styles.metaItem}>  
             <Feather name="flag" size={16} color="#666" />  
-            <Text style={styles.metaText}>Prioridad: {order.prioridad}</Text>  
+            <Text style={styles.metaText}>Prioridad: {order.priority || 'Media'}</Text>  
           </View>  
         </View>  
       </View>  
@@ -263,13 +274,13 @@ export default function OrderDetailScreen({ route, navigation }) {
               </View>  
               <View style={styles.vehicleDetails}>  
                 <Text style={styles.vehicleName}>  
-                  {vehicle.marca} {vehicle.modelo}  
+                  {vehicle.make} {vehicle.model}  
                 </Text>  
                 <Text style={styles.vehicleSpecs}>  
-                  {vehicle.ano} • {vehicle.placa}  
+                  {vehicle.year} • {vehicle.licensePlate}  
                 </Text>  
                 <Text style={styles.vehicleSpecs}>  
-                  {vehicle.kilometraje?.toLocaleString()} km  
+                  {vehicle.mileage?.toLocaleString()} km  
                 </Text>  
               </View>  
             </View>  
@@ -282,25 +293,25 @@ export default function OrderDetailScreen({ route, navigation }) {
         <View style={styles.serviceDetails}>  
           <View style={styles.detailRow}>  
             <Text style={styles.detailLabel}>Servicio:</Text>  
-            <Text style={styles.detailValue}>{order.servicio_name}</Text>  
+            <Text style={styles.detailValue}>{order.description || 'No especificado'}</Text>  
           </View>  
           <View style={styles.detailRow}>  
             <Text style={styles.detailLabel}>Técnico Asignado:</Text>  
-            <Text style={styles.detailValue}>{order.tecnico_name || "No asignado"}</Text>  
+            <Text style={styles.detailValue}>{order.technicianId || "No asignado"}</Text>  
           </View>  
           <View style={styles.detailRow}>  
             <Text style={styles.detailLabel}>Costo Total:</Text>  
             <Text style={[styles.detailValue, styles.costValue]}>  
-              {formatCurrency(order.costo)}  
+              {formatCurrency(order.total)}  
             </Text>  
           </View>  
         </View>  
       </View>  
   
-      {order.observacion && (  
+      {order.notes && (  
         <View style={styles.section}>  
           <Text style={styles.sectionTitle}>Observaciones</Text>  
-          <Text style={styles.observationText}>{order.observacion}</Text>  
+          <Text style={styles.observationText}>{order.notes}</Text>  
         </View>  
       )}  
   

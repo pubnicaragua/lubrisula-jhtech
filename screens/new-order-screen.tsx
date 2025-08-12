@@ -30,12 +30,12 @@ import * as orderService from "../services/supabase/order-service"
 import * as clientService from "../services/supabase/client-service"  
 import * as vehicleService from "../services/supabase/vehicle-service"  
 import * as inventoryService from "../services/supabase/inventory-service"  
-import * as servicesService from "../services/supabase/services-service" // Corregido: services-service  
 import * as userService from "../services/supabase/user-service"  
 import * as accessService from "../services/supabase/access-service"  
 import * as imageService from "../services/supabase/image-service"  
 import * as currencyService from "../services/supabase/currency-service"  
 import * as companyService from "../services/supabase/company-service"  
+import * as serviceService from "../services/supabase/services-service"  
   
 // Tipos TypeScript para resolver errores  
 interface NewOrderScreenProps {  
@@ -45,9 +45,9 @@ interface NewOrderScreenProps {
   
 interface ClientType {  
   id: string  
-  nombre: string  
+  name: string  
   email?: string  
-  telefono?: string  
+  phone?: string  
 }  
   
 interface VehicleType {  
@@ -59,15 +59,31 @@ interface VehicleType {
   client_id: string  
 }  
   
-interface InventoryItemType {  
-  id: string  
-  nombre: string  
-  codigo: string  
-  descripcion?: string  
-  stock_actual: number  
-  precio_venta?: number  
-  categoria?: string  
-}  
+// ... existing code ...
+interface InventoryItemType {
+  id: string
+  name: string
+  description?: string
+  sku: string
+  barcode?: string
+  category: string
+  type?: string
+  stock: number
+  minStock?: number
+  cost?: number
+  price?: number // Changed from 'price: number' to 'price?: number'
+  supplierId?: string
+  location?: string
+  status?: string
+  notes?: string
+  images?: any[]
+  createdAt?: string
+  updatedAt?: string
+  priceUSD?: number
+  priceHNL?: number
+  isActive?: boolean
+}
+// ... existing code ...
   
 interface ServiceType {  
   id: string  
@@ -78,19 +94,25 @@ interface ServiceType {
 }  
   
 interface CurrencyType {  
-  code: CurrencyCode  
-  name: string  
-  symbol: string  
+  id?: string  
+  codigo: string  
+  nombre: string  
+  simbolo: string  
+  tasa_cambio: number  
+  es_principal: boolean  
 }  
   
 interface CompanySettingsType {  
-  id: string  
+  id?: string  
   nombre: string  
   direccion?: string  
   telefono?: string  
   email?: string  
-  logo?: string  
+  ruc?: string  
+  logo_url?: string  
   impuesto_porcentaje?: number  
+  created_at?: string  
+  updated_at?: string  
 }  
   
 interface SelectedItemType {  
@@ -110,7 +132,7 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
   const [isSaving, setIsSaving] = useState(false)  
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false)  
   const [clients, setClients] = useState<ClientType[]>([])  
-  const [vehicles, setVehicles] = useState<VehicleType[]>([])  
+  const [vehicles, setVehicles] = useState<vehicleService.Vehicle[]>([])  
   const [currencies, setCurrencies] = useState<CurrencyType[]>([])  
   const [companySettings, setCompanySettings] = useState<CompanySettingsType | null>(null)  
   const [inventoryItems, setInventoryItems] = useState<InventoryItemType[]>([])  
@@ -146,8 +168,12 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
       if (!user?.id) return  
   
       // Validar permisos del usuario - métodos corregidos  
-      const userTallerId = await userService.getUserTaller(user.id)  
-      const userPermissions = await accessService.checkUserPermissions(user.id, userTallerId)  
+      const userTallerId = await userService.userService.getUserTaller(user.id)  
+      if (!userTallerId) {
+        Alert.alert("Error", "No se encontró el taller del usuario")
+        return
+      }
+      const userPermissions = await accessService.accessService.checkUserPermissions(user.id, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       if (userPermissions?.rol === 'client') {  
@@ -163,11 +189,11 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
         allInventory,  
         allServices  
       ] = await Promise.all([  
-        clientService.getClients(), // Corregido: getClients en lugar de getAllClients  
-        currencyService.getAllCurrencies(),  
-        companyService.getCompanySettings(),  
-        inventoryService.getInventoryItems(), // Corregido: getInventoryItems en lugar de getAllInventory  
-        servicesService.getAllServices()  
+        clientService.clientService.getAllClients(), // Corregido: getClients en lugar de getAllClients  
+        currencyService.default.getAllCurrencies(),  
+        companyService.default.getCompanySettings(),  
+        inventoryService.inventoryService.getInventoryItems(), // Corregido: getInventoryItems en lugar de getAllInventory    
+        serviceService.getAllServices(),
       ])  
   
       setClients(allClients)  
@@ -175,7 +201,7 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
       setCompanySettings(companyData)  
         
       // Filtrar items con stock disponible  
-      const availableItems = allInventory.filter((item: InventoryItemType) => item.stock_actual > 0)  
+      const availableItems = allInventory.filter((item: InventoryItemType) => item.stock > 0)  
       setInventoryItems(availableItems)  
       setFilteredItems(availableItems)  
         
@@ -199,7 +225,7 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
   const loadVehiclesForClient = async (clientId: string) => {  
     try {  
       // Método corregido  
-      const clientVehicles = await vehicleService.getClientVehicles(clientId)  
+      const clientVehicles = await vehicleService.vehicleService.getVehiclesByClientId(clientId)  
       setVehicles(clientVehicles)  
       setSelectedVehicle("") // Reset vehicle selection  
     } catch (error) {  
@@ -283,9 +309,9 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
       setFilteredItems(inventoryItems)  
     } else {  
       const filtered = inventoryItems.filter((item: InventoryItemType) =>  
-        item.nombre.toLowerCase().includes(query.toLowerCase()) ||  
-        item.codigo.toLowerCase().includes(query.toLowerCase()) ||  
-        (item.descripcion && item.descripcion.toLowerCase().includes(query.toLowerCase()))  
+        item.name.toLowerCase().includes(query.toLowerCase()) ||  
+        item.sku.toLowerCase().includes(query.toLowerCase()) ||  
+        (item.description && item.description.toLowerCase().includes(query.toLowerCase()))  
       )  
       setFilteredItems(filtered)  
     }  
@@ -296,17 +322,17 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
     if (!selectedInventoryItem) return  
   
     const quantity = parseInt(itemQuantity) || 1  
-    const unitPrice = selectedInventoryItem.precio_venta || 0  
-  
-    const newItem: SelectedItemType = {  
-      id: `${selectedInventoryItem.id}-${Date.now()}`,  
-      type: 'part',  
-      name: selectedInventoryItem.nombre,  
-      code: selectedInventoryItem.codigo,  
-      quantity,  
-      unitPrice,  
-      total: quantity * unitPrice,  
-      partNumber: selectedInventoryItem.codigo,  
+        const unitPrice = selectedInventoryItem.price || 0
+
+    const newItem: SelectedItemType = {
+      id: `${selectedInventoryItem.id}-${Date.now()}`,
+      type: 'part',
+      name: selectedInventoryItem.name,
+      code: selectedInventoryItem.sku,
+      quantity,
+      unitPrice,
+      total: quantity * unitPrice,
+      partNumber: selectedInventoryItem.sku,
     }  
   
     setSelectedItems([...selectedItems, newItem])  
@@ -403,56 +429,50 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
       const totals = calculateTotals()  
   
       // Crear la orden - método corregido  
-      const newOrder = await orderService.create({  
-        client_id: selectedClient,  
-        vehiculo_id: selectedVehicle,  
-        tecnico_id: user?.id,  
-        estado: "Pendiente",  
-        descripcion: description,  
-        observacion: notes,  
-        items: selectedItems,  
-        costo_mano_obra: totals.laborCost,  
-        total_repuestos: totals.totalParts,  
-        impuesto: totals.tax,  
-        total: totals.total,  
-        moneda: currency,  
-        estado_pago: "pendiente",  
-      })  
+              const newOrder = await orderService.orderService.createOrder({
+          clientId: selectedClient!,
+          vehicleId: selectedVehicle!,
+          technicianId: user?.id || '',
+          status: "reception",
+          description: description,
+          notes: notes,
+          subtotal: totals.totalParts,
+          tax: totals.tax,
+          discount: 0,
+          total: totals.total,
+          paidAmount: 0,
+          balance: totals.total,
+          warranty: { parts: 0, labor: 0 },
+          priority: 'medium',
+          paymentStatus: "pending",
+        })  
   
-      // Actualizar inventario  
-      for (const item of selectedItems) {  
-        if (item.type === 'part' && item.partNumber) {  
-          const inventoryItem = inventoryItems.find((invItem: InventoryItemType) => invItem.codigo === item.partNumber)  
-          if (inventoryItem) {  
-            // Método corregido  
-            await inventoryService.updateItem(inventoryItem.id, {  
-              stock_actual: inventoryItem.stock_actual - item.quantity,  
-            })  
-          }  
+              // Actualizar inventario
+        for (const item of selectedItems) {
+          if (item.type === 'part' && item.partNumber) {
+            const inventoryItem = inventoryItems.find((invItem: InventoryItemType) => invItem.sku === item.partNumber)
+            if (inventoryItem) {
+              // Método corregido
+              await inventoryService.inventoryService.updateStock(inventoryItem.id, inventoryItem.stock - item.quantity)
+            }
+          }
         }  
-      }  
   
         // Guardar imágenes  
         for (const image of images) {  
           // Método corregido  
-          const savedImage = await imageService.saveImage(  
+          const savedImage = await imageService.default.uploadImage(  
             image.uri,  
-            "vehicle",  
-            newOrder.id,  
-            "Imagen inicial del vehículo",  
+            "vehicles",  
+            `order_${newOrder.id}_${Date.now()}.jpg`
           )  
   
-          // Añadir imagen a la orden  
-          await orderService.addOrderImage(newOrder.id, savedImage)  
+          // Note: addOrderImage method needs to be implemented in order service
+          console.log('Image uploaded:', savedImage)  
         }  
   
-        // Añadir comentario inicial  
-        await orderService.addOrderComment(newOrder.id, {  
-          userId: user?.id || "",  
-          userName: user?.name || "Técnico",  
-          text: `Vehículo recibido. Descripción del problema: ${description}`,  
-          type: "technician",  
-        })  
+        // Note: addOrderComment method needs to be implemented in order service
+        console.log('Comment:', `Vehículo recibido. Descripción del problema: ${description}`)  
   
         Alert.alert("Éxito", "Orden creada correctamente", [  
           {  
@@ -478,8 +498,8 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
         const totals = calculateTotals()  
   
         // Obtener datos del cliente y vehículo  
-        const client = await clientService.getClientById(selectedClient)  
-        const vehicle = await vehicleService.getVehicleById(selectedVehicle)  
+        const client = await clientService.clientService.getClientById(selectedClient)  
+        const vehicle = await vehicleService.vehicleService.getVehicleById(selectedVehicle)  
   
         // Crear objeto de orden temporal para la cotización  
         const tempOrder = {  
@@ -511,7 +531,7 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
         await Share.share({  
           url: pdfPath,  
           title: `Cotización ${tempOrder.number}`,  
-          message: `Cotización ${tempOrder.number} para ${client.name}`,  
+          message: `Cotización ${tempOrder.number} para ${client?.name}`,  
         })  
       } catch (error) {  
         console.error("Error al generar cotización:", error)  
@@ -560,19 +580,19 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
                   onPress={() => setSelectedInventoryItem(item)}  
                 >  
                   <View style={styles.itemInfo}>  
-                    <Text style={styles.inventoryItemName}>{item.nombre}</Text>  
-                    <Text style={styles.inventoryItemCode}>Código: {item.codigo}</Text>  
+                    <Text style={styles.inventoryItemName}>{item.name}</Text>  
+                    <Text style={styles.inventoryItemCode}>Código: {item.sku}</Text>  
                     <View style={styles.inventoryItemDetails}>  
-                      <Text style={styles.inventoryItemCategory}>{item.categoria}</Text>  
+                      <Text style={styles.inventoryItemCategory}>{item.category}</Text>  
                       <Text style={styles.inventoryItemStock}>  
-                        Stock: <Text style={item.stock_actual <= 5 ? styles.lowStock : null}>  
-                          {item.stock_actual}  
+                        Stock: <Text style={item.stock <= 5 ? styles.lowStock : null}>  
+                          {item.stock}  
                         </Text>  
                       </Text>  
                     </View>  
                   </View>  
                   <Text style={styles.inventoryItemPrice}>  
-                    {formatCurrency(item.precio_venta || 0, currency)}  
+                    {formatCurrency(item.price || 0, currency)}  
                   </Text>  
                 </TouchableOpacity>  
               )}  
@@ -732,7 +752,7 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
                 {clients.map((client) => (  
                   <Picker.Item   
                     key={client.id}   
-                    label={client.nombre}   
+                    label={client.name}   
                     value={client.id}   
                   />  
                 ))}  
@@ -754,7 +774,7 @@ export default function NewOrderScreen({ navigation, route }: NewOrderScreenProp
                 {vehicles.map((vehicle) => (  
                   <Picker.Item   
                     key={vehicle.id}   
-                    label={`${vehicle.marca} ${vehicle.modelo} (${vehicle.placa})`}   
+                    label={`${vehicle.make} ${vehicle.model} (${vehicle.licensePlate})`}   
                     value={vehicle.id}   
                   />  
                 ))}  

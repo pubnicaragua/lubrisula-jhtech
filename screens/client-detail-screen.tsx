@@ -14,32 +14,69 @@ import {
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
+import { StackNavigationProp } from "@react-navigation/stack"
 import { useAuth } from "../context/auth-context"  
 import { clientService, Client } from "../services/supabase/client-service"
 import { vehicleService, Vehicle } from "../services/supabase/vehicle-service"  
 import { orderService } from "../services/supabase/order-service" 
-import OrdenTrabajo from "../services/supabase/order-service"
+import ORDER_SERVICE from "../services/supabase/order-service"
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
-import USER_SERVICE from "../services/supabase/user-service" 
+import USER_SERVICES from "../services/supabase/user-service" 
+import CLIENT_SERVICES from "../services/supabase/client-service";
+import { UiScreenProps } from "../types"
+import { Order } from '../types';
+
+export default function ClientDetailScreen({ route, navigation }: UiScreenProps) {  
+  const { user } = useAuth()
+  const [clientId, setClientId] = useState<string | null>(null)  
+
+  console.log("clientId", clientId)
   
-export default function ClientDetailScreen({ route, navigation }) {  
-  const { clientId } = route.params  
-  const { user } = useAuth()  
-  const [client, setClient] = useState<ClienteType | null>(null)  
-  const [vehicles, setVehicles] = useState<VehiculoType[]>([])  
-  const [orders, setOrders] = useState<OrdenTrabajoType[]>([])  
+  const [client, setClient] = useState<Client | null>(null)  
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])  
+  const [orders, setOrders] = useState<Order[]>([])  
   const [loading, setLoading] = useState(true)  
   const [updating, setUpdating] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
   const [editModalVisible, setEditModalVisible] = useState(false)  
+
+  useEffect(() => {
+    const getClientId = async () => {
+      if (user?.id) {
+        try {
+          const client = await clientService.getClientById(user.id)
+          setClientId(client?.id || null)
+        } catch (error) {
+          console.error('Error getting client:', error)
+          setClientId(null)
+        }
+      }
+    }
     
-  const [editFormData, setEditFormData] = useState({  
+    getClientId()
+  }, [user?.id])
+
+  if (!clientId) {
+    return (
+      <View style={styles.container}>
+        <Text>Error: ID del cliente no válido id: {clientId}</Text>
+      </View>
+    )
+  }  
+    
+  const [editFormData, setEditFormData] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    company: string;
+    client_type: 'Individual' | 'Empresa';
+  }>({  
     name: "",  
     email: "",  
     phone: "",  
     company: "",  
-    client_type: "individual",  
+    client_type: "Individual",  
   })  
   
   const loadClientData = useCallback(async () => {  
@@ -49,13 +86,19 @@ export default function ClientDetailScreen({ route, navigation }) {
   
       if (!user?.id) return  
   
+      const userId = user.id as string // Type assertion to ensure it's treated as string
+  
       // Validar permisos del usuario  
-      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
-      const userPermissions = await ACCESOS_SERVICES.getPermisosUsuario(user.id, userTallerId)  
+      const userTallerId = await USER_SERVICES.GET_TALLER_ID(userId)  
+      if (!userTallerId) {
+        setError("No se pudo cargar la información del cliente")  
+        return
+      }
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       // Obtener datos del cliente  
-      const clientData = await clientService.getClientById(clientId)  
+      const clientData = await CLIENT_SERVICES.getClientById(clientId)  
         
       if (!clientData) {  
         setError("Cliente no encontrado")  
@@ -63,7 +106,7 @@ export default function ClientDetailScreen({ route, navigation }) {
       }  
   
       // Verificar permisos de acceso  
-      if (userPermissions?.rol === 'client' && clientId !== user.id) {  
+      if (userPermissions?.rol === 'client' && clientId !== userId) {  
         setError("No tienes permisos para ver este cliente")  
         return  
       }  
@@ -73,20 +116,20 @@ export default function ClientDetailScreen({ route, navigation }) {
         name: clientData.name || "",  
         email: clientData.email || "",  
         phone: clientData.phone || "",  
-        company: clientData.company || "",  
-        client_type: clientData.client_type || "individual",  
+        company: clientData.insuranceInfo?.company || "",  
+        client_type: "Individual",  
       })  
   
       // Cargar vehículos y órdenes del cliente  
       const [clientVehicles, allOrders] = await Promise.all([  
-        vehicleService.getAllVehiculosByClient(clientId),  
-        orderService.getAllOrdenes()  
+        vehicleService.getVehiclesByClientId(clientId),  
+        orderService.getAllOrders()  
       ])  
   
       setVehicles(clientVehicles)  
         
       // Filtrar órdenes del cliente  
-      const clientOrders = allOrders.filter(order => order.client_id === clientId)  
+      const clientOrders = allOrders.filter(order => order.clientId === clientId)  
       setOrders(clientOrders)  
   
     } catch (error) {  
@@ -110,11 +153,11 @@ export default function ClientDetailScreen({ route, navigation }) {
       const updatedClient = {  
         ...client,  
         ...editFormData,  
-        updated_at: new Date().toISOString()  
+        updatedAt: new Date().toISOString()  
       }  
   
-      await clientService.updateCliente(clientId, updatedClient)  
-      setClient(updatedClient)  
+      await CLIENT_SERVICES.updateClient(clientId as string, updatedClient)  
+      setClient(updatedClient as Client)  
       setEditModalVisible(false)  
   
       Alert.alert("Éxito", "Cliente actualizado correctamente")  
@@ -127,6 +170,11 @@ export default function ClientDetailScreen({ route, navigation }) {
   }  
   
   const handleDeleteClient = () => {  
+    if (!clientId) {
+      Alert.alert("Error", "ID del cliente no válido")
+      return
+    }
+    
     Alert.alert(  
       "Eliminar Cliente",  
       "¿Estás seguro de que quieres eliminar este cliente? Esta acción no se puede deshacer.",  
@@ -137,7 +185,7 @@ export default function ClientDetailScreen({ route, navigation }) {
           style: "destructive",  
           onPress: async () => {  
             try {  
-              await clientService.deleteCliente(clientId)  
+              await CLIENT_SERVICES.deleteClient(clientId)  
               Alert.alert("Éxito", "Cliente eliminado correctamente")  
               navigation.goBack()  
             } catch (error) {  
@@ -246,13 +294,13 @@ export default function ClientDetailScreen({ route, navigation }) {
                 <TouchableOpacity  
                   style={[  
                     styles.radioOption,  
-                    editFormData.client_type === "individual" && styles.radioOptionSelected  
+                    editFormData.client_type === "Individual" && styles.radioOptionSelected  
                   ]}  
-                  onPress={() => setEditFormData(prev => ({ ...prev, client_type: "individual" }))}  
+                  onPress={() => setEditFormData(prev => ({ ...prev, client_type: "Individual" }))}  
                 >  
                   <View style={[  
                     styles.radioCircle,  
-                    editFormData.client_type === "individual" && styles.radioCircleSelected  
+                    editFormData.client_type === "Individual" && styles.radioCircleSelected  
                   ]} />  
                   <Text style={styles.radioText}>Individual</Text>  
                 </TouchableOpacity>  
@@ -260,13 +308,13 @@ export default function ClientDetailScreen({ route, navigation }) {
                 <TouchableOpacity  
                   style={[  
                     styles.radioOption,  
-                    editFormData.client_type === "empresa" && styles.radioOptionSelected  
+                    editFormData.client_type === "Empresa" && styles.radioOptionSelected  
                   ]}  
-                  onPress={() => setEditFormData(prev => ({ ...prev, client_type: "empresa" }))}  
+                  onPress={() => setEditFormData(prev => ({ ...prev, client_type: "Empresa" }))}  
                 >  
                   <View style={[  
                     styles.radioCircle,  
-                    editFormData.client_type === "empresa" && styles.radioCircleSelected  
+                    editFormData.client_type === "Empresa" && styles.radioCircleSelected  
                   ]} />  
                   <Text style={styles.radioText}>Empresa</Text>  
                 </TouchableOpacity>  
@@ -373,18 +421,18 @@ export default function ClientDetailScreen({ route, navigation }) {
               <View style={styles.infoItem}>  
                 <Feather name="briefcase" size={16} color="#1a73e8" />  
                 <Text style={styles.infoLabel}>Empresa:</Text>  
-                <Text style={styles.infoValue}>{client.company || "No especificada"}</Text>  
+                <Text style={styles.infoValue}>{client.insuranceInfo?.company || "No especificada"}</Text>  
               </View>  
               <View style={styles.infoItem}>  
                 <Feather name="user" size={16} color="#1a73e8" />  
                 <Text style={styles.infoLabel}>Tipo:</Text>  
-                <Text style={styles.infoValue}>{client.client_type === "empresa" ? "Empresa" : "Individual"}</Text>  
+                <Text style={styles.infoValue}>Individual</Text>  
               </View>  
               <View style={styles.infoItem}>  
                 <Feather name="calendar" size={16} color="#1a73e8" />  
                 <Text style={styles.infoLabel}>Cliente desde:</Text>  
                 <Text style={styles.infoValue}>  
-                  {client.created_at ? new Date(client.created_at).toLocaleDateString("es-ES") : "No disponible"}  
+                  {client.createdAt ? new Date(client.createdAt).toLocaleDateString("es-ES") : "No disponible"}  
                 </Text>  
               </View>  
             </View>  
@@ -405,7 +453,7 @@ export default function ClientDetailScreen({ route, navigation }) {
               <View style={styles.statDivider} />  
               <View style={styles.statItem}>  
                 <Text style={styles.statValue}>  
-                  {formatCurrency(orders.reduce((sum, order) => sum + (order.costo || 0), 0))}  
+                  {formatCurrency(orders.reduce((sum, order) => sum + (order.total || 0), 0))}  
                 </Text>  
                 <Text style={styles.statLabel}>Total Gastado</Text>  
               </View>  
@@ -436,10 +484,10 @@ export default function ClientDetailScreen({ route, navigation }) {
                   </View>  
                   <View style={styles.vehicleInfo}>  
                     <Text style={styles.vehicleName}>  
-                      {vehicle.marca} {vehicle.modelo}  
+                      {vehicle.make} {vehicle.model}  
                     </Text>  
                     <Text style={styles.vehicleDetails}>  
-                      {vehicle.ano} • {vehicle.placa}  
+                      {vehicle.year} • {vehicle.licensePlate}  
                     </Text>  
                   </View>  
                   <Feather name="chevron-right" size={20} color="#ccc" />  
@@ -473,19 +521,19 @@ export default function ClientDetailScreen({ route, navigation }) {
                   onPress={() => navigation.navigate("OrderDetail", { orderId: order.id })}  
                 >  
                   <View style={styles.orderHeader}>  
-                    <Text style={styles.orderNumber}>Orden #{order.numero_orden}</Text>  
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.estado) }]}>  
-                      <Text style={styles.statusText}>{order.estado}</Text>  
+                    <Text style={styles.orderNumber}>Orden #{order.number}</Text>  
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>  
+                      <Text style={styles.statusText}>{order.status}</Text>  
                     </View>  
                   </View>  
                   <Text style={styles.orderDescription} numberOfLines={2}>  
-                    {order.descripcion}  
+                    {order.description || ""}  
                   </Text>  
                   <View style={styles.orderFooter}>  
                     <Text style={styles.orderDate}>  
-                      {new Date(order.fecha_creacion).toLocaleDateString("es-ES")}  
+                      {new Date(order.createdAt).toLocaleDateString("es-ES")}  
                     </Text>  
-                    <Text style={styles.orderAmount}>{formatCurrency(order.costo)}</Text>  
+                    <Text style={styles.orderAmount}>{formatCurrency(order.total)}</Text>  
                   </View>  
                 </TouchableOpacity>  
               ))  

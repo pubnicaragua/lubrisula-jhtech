@@ -4,24 +4,24 @@ import type { AppImage } from '../../types';
 // Define types
 export type Vehicle = {
   id: string;
-  clientId: string;
+  client_id: string;
   make: string;
   model: string;
   year: string;
   vin?: string;
-  licensePlate: string;
+  license_plate: string;
   color?: string;
   mileage?: number;
-  fuelType?: 'gasoline' | 'diesel' | 'electric' | 'hybrid' | 'other';
+  fuel_type?: 'gasoline' | 'diesel' | 'electric' | 'hybrid' | 'other';
   transmission?: 'manual' | 'automatic' | 'cvt' | 'other';
-  engineSize?: string;
+  engine_size?: string;
   images: AppImage[];
   notes?: string;
-  createdAt: string;
-  updatedAt?: string;
-  lastServiceDate?: string;
-  nextServiceDate?: string;
-  serviceHistory?: {
+  created_at: string;
+  updated_at?: string;
+  last_service_date?: string;
+  next_service_date?: string;
+  service_history?: {
     date: string;
     mileage: number;
     description: string;
@@ -75,9 +75,9 @@ export const vehicleService = {
       const { data, error } = await supabase
         .from('vehicles')
         .select('*')
-        .eq('clientId', clientId)
-        .order('make')
-        .order('model');
+        .eq('client_id', clientId)
+        .order('marca')
+        .order('modelo');
         
       if (error) throw error;
       return data || [];
@@ -88,14 +88,14 @@ export const vehicleService = {
   },
   
   // Create a new vehicle
-  createVehicle: async (vehicleData: Omit<Vehicle, 'id' | 'createdAt' | 'images' | 'serviceHistory'>): Promise<Vehicle> => {
+  createVehicle: async (vehicleData: Omit<Vehicle, 'id' | 'created_at' | 'images' | 'service_history'>): Promise<Vehicle> => {
     try {
       const newVehicle = {
         ...vehicleData,
         images: [],
-        serviceHistory: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        service_history: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       
       const { data, error } = await supabase
@@ -117,7 +117,7 @@ export const vehicleService = {
     try {
       const updateData = {
         ...updates,
-        updatedAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       
       const { data, error } = await supabase
@@ -155,7 +155,7 @@ export const vehicleService = {
         .from('vehicles')
         .update({ 
           images: updatedImages,
-          updatedAt: new Date().toISOString() 
+          updated_at: new Date().toISOString() 
         })
         .eq('id', vehicleId)
         .select()
@@ -189,7 +189,7 @@ export const vehicleService = {
         .from('vehicles')
         .update({ 
           images: updatedImages,
-          updatedAt: new Date().toISOString() 
+          updated_at: new Date().toISOString() 
         })
         .eq('id', vehicleId)
         .select()
@@ -220,7 +220,7 @@ export const vehicleService = {
       
       // Add the new service record to the service history
       const updatedServiceHistory = [
-        ...(vehicle.serviceHistory || []), 
+        ...(vehicle.service_history || []), 
         { ...serviceRecord, id: crypto.randomUUID() }
       ];
       
@@ -228,9 +228,9 @@ export const vehicleService = {
       const { data, error } = await supabase
         .from('vehicles')
         .update({ 
-          serviceHistory: updatedServiceHistory,
-          lastServiceDate: serviceRecord.date,
-          updatedAt: new Date().toISOString() 
+          service_history: updatedServiceHistory,
+          last_service_date: serviceRecord.date,
+          updated_at: new Date().toISOString() 
         })
         .eq('id', vehicleId)
         .select()
@@ -290,6 +290,15 @@ export const vehicleService = {
         .insert(mockVehicles);
         
       if (error) throw error;
+    } catch (error) {
+      console.error('Error initializing mock vehicle data:', error);
+      throw error;
+    }
+  },
+
+  initializeVehicles: async (): Promise<void> => {
+    try {
+      const vehicles = await vehicleService.getAllVehicles()
     } catch (error) {
       console.error('Error initializing mock vehicle data:', error);
       throw error;

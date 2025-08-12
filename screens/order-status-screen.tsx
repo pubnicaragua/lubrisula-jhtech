@@ -16,30 +16,32 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import ORDENES_TRABAJO_SERVICES, { OrdenTrabajoType } from "../services/ORDENES.SERVICE"  
-import ACCESOS_SERVICES from "../services/ACCESOS_SERVICES.service"  
-import USER_SERVICE from "../services/USER_SERVICES.SERVICE" 
+import ORDENES_TRABAJO_SERVICES from "../services/supabase/order-service"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service" 
+import { UiScreenNavProp } from "../types"
+import { Order } from "../types/order"
   
 // Estados disponibles para las órdenes  
 const ORDER_STATUSES = [  
-  { id: "Pendiente", label: "Pendiente", color: "#1a73e8", icon: "clock" },  
-  { id: "En Diagnóstico", label: "En Diagnóstico", color: "#f5a623", icon: "search" },  
-  { id: "Esperando Repuestos", label: "Esperando Repuestos", color: "#9c27b0", icon: "package" },  
-  { id: "En Proceso", label: "En Proceso", color: "#ff9800", icon: "tool" },  
-  { id: "Control Calidad", label: "Control Calidad", color: "#607d8b", icon: "check-circle" },  
-  { id: "Completada", label: "Completada", color: "#4caf50", icon: "check-square" },  
-  { id: "Entregada", label: "Entregada", color: "#607d8b", icon: "truck" },  
-  { id: "Cancelada", label: "Cancelada", color: "#e53935", icon: "x-circle" },  
+  { id: "reception", label: "Recepción", color: "#1a73e8", icon: "clock" as const },  
+  { id: "diagnosis", label: "En Diagnóstico", color: "#f5a623", icon: "search" as const },  
+  { id: "waiting_parts", label: "Esperando Repuestos", color: "#9c27b0", icon: "package" as const },  
+  { id: "in_progress", label: "En Proceso", color: "#ff9800", icon: "tool" as const },  
+  { id: "quality_check", label: "Control Calidad", color: "#607d8b", icon: "check-circle" as const },  
+  { id: "completed", label: "Completada", color: "#4caf50", icon: "check-square" as const },  
+  { id: "delivered", label: "Entregada", color: "#607d8b", icon: "truck" as const },  
+  { id: "cancelled", label: "Cancelada", color: "#e53935", icon: "x-circle" as const },  
 ]  
   
-export default function OrderStatusScreen({ navigation }) {  
+export default function OrderStatusScreen({ navigation }: UiScreenNavProp) {  
   const { user } = useAuth()  
-  const [orders, setOrders] = useState<OrdenTrabajoType[]>([])  
+  const [orders, setOrders] = useState<Order[]>([])  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
-  const [selectedOrder, setSelectedOrder] = useState<OrdenTrabajoType | null>(null)  
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)  
   const [showStatusModal, setShowStatusModal] = useState(false)  
   const [statusNote, setStatusNote] = useState("")  
   const [filterStatus, setFilterStatus] = useState("all")  
@@ -53,18 +55,26 @@ export default function OrderStatusScreen({ navigation }) {
   
       // Validar permisos del usuario  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {
+        setError("No se pudo obtener la información del taller")
+        return
+      }
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      if (!userPermissions) {
+        setError("No se pudo obtener los permisos del usuario")
+        return
+      }
       setUserRole(userPermissions?.rol || 'client')  
   
       // Cargar órdenes según el rol  
       let allOrders = []  
       if (userPermissions?.rol === 'client') {  
         // Cliente solo ve sus órdenes  
-        const clientOrders = await ORDENES_TRABAJO_SERVICES.GET_ALL_ORDENES()  
-        allOrders = clientOrders.filter(order => order.client_id === user.id)  
+        const clientOrders = await ORDENES_TRABAJO_SERVICES.getAllOrders()  
+        allOrders = clientOrders.filter(order => order.clientId === user.id)  
       } else {  
         // Admin/técnico ve todas las órdenes  
-        allOrders = await ORDENES_TRABAJO_SERVICES.GET_ALL_ORDENES()  
+        allOrders = await ORDENES_TRABAJO_SERVICES.getAllOrders()  
       }  
   
       setOrders(allOrders)  
@@ -88,7 +98,7 @@ export default function OrderStatusScreen({ navigation }) {
     return ORDER_STATUSES.find(s => s.id === status) || ORDER_STATUSES[0]  
   }  
   
-  const handleStatusChange = (order: OrdenTrabajoType, newStatus: string) => {  
+  const handleStatusChange = (order: Order, newStatus: string) => {  
     if (userRole === 'client') {  
       Alert.alert("Error", "No tienes permisos para cambiar el estado de las órdenes")  
       return  
@@ -103,7 +113,7 @@ export default function OrderStatusScreen({ navigation }) {
     if (!selectedOrder) return  
   
     try {  
-      await ORDENES_TRABAJO_SERVICES.UPDATE_ORDEN_STATUS(selectedOrder.id!, newStatus, statusNote)  
+      await ORDENES_TRABAJO_SERVICES.updateOrderStatus(selectedOrder.id!, newStatus)  
         
       // Actualizar orden local  
       setOrders(prev =>   
@@ -127,11 +137,11 @@ export default function OrderStatusScreen({ navigation }) {
   
   const filteredOrders = orders.filter(order => {  
     if (filterStatus === "all") return true  
-    return order.estado === filterStatus  
+    return order.status === filterStatus  
   })  
   
-  const renderOrderItem = ({ item }: { item: OrdenTrabajoType }) => {  
-    const statusInfo = getStatusInfo(item.estado)  
+  const renderOrderItem = ({ item }: { item: Order }) => {  
+    const statusInfo = getStatusInfo(item.status)  
   
     return (  
       <TouchableOpacity  
@@ -139,7 +149,7 @@ export default function OrderStatusScreen({ navigation }) {
         onPress={() => navigation.navigate("OrderDetail", { orderId: item.id })}  
       >  
         <View style={styles.orderHeader}>  
-          <Text style={styles.orderNumber}>Orden #{item.numero_orden}</Text>  
+          <Text style={styles.orderNumber}>Orden #{item.number}</Text>  
           <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>  
             <Feather name={statusInfo.icon} size={12} color="#fff" />  
             <Text style={styles.statusText}>{statusInfo.label}</Text>  
@@ -147,22 +157,22 @@ export default function OrderStatusScreen({ navigation }) {
         </View>  
   
         <Text style={styles.orderDescription} numberOfLines={2}>  
-          {item.descripcion}  
+          {item.description}  
         </Text>  
   
         <View style={styles.orderDetails}>  
           <View style={styles.orderDetail}>  
             <Feather name="user" size={16} color="#666" />  
-            <Text style={styles.orderDetailText}>{item.client_name || "Cliente"}</Text>  
+            <Text style={styles.orderDetailText}>Cliente #{item.clientId}</Text>  
           </View>  
           <View style={styles.orderDetail}>  
             <Feather name="truck" size={16} color="#666" />  
-            <Text style={styles.orderDetailText}>{item.vehiculo_info || "Vehículo"}</Text>  
+            <Text style={styles.orderDetailText}>Vehículo #{item.vehicleId}</Text>  
           </View>  
           <View style={styles.orderDetail}>  
             <Feather name="calendar" size={16} color="#666" />  
             <Text style={styles.orderDetailText}>  
-              {new Date(item.fecha_creacion).toLocaleDateString("es-ES")}  
+              {new Date(item.createdAt).toLocaleDateString("es-ES")}  
             </Text>  
           </View>  
         </View>  
@@ -175,10 +185,10 @@ export default function OrderStatusScreen({ navigation }) {
                 style={[  
                   styles.statusButton,  
                   { backgroundColor: status.color },  
-                  item.estado === status.id && styles.statusButtonActive  
+                  item.status === status.id && styles.statusButtonActive  
                 ]}  
                 onPress={() => handleStatusChange(item, status.id)}  
-                disabled={item.estado === status.id}  
+                disabled={item.status === status.id}  
               >  
                 <Feather name={status.icon} size={14} color="#fff" />  
               </TouchableOpacity>  
@@ -269,7 +279,7 @@ export default function OrderStatusScreen({ navigation }) {
             {selectedOrder && (  
               <>  
                 <Text style={styles.modalOrderInfo}>  
-                  Orden #{selectedOrder.numero_orden}  
+                  Orden #{selectedOrder.number}  
                 </Text>  
                   
                 <View style={styles.statusGrid}>  
@@ -279,16 +289,16 @@ export default function OrderStatusScreen({ navigation }) {
                       style={[  
                         styles.statusOption,  
                         { borderColor: status.color },  
-                        selectedOrder.estado === status.id && styles.statusOptionDisabled  
+                        selectedOrder.status === status.id && styles.statusOptionDisabled  
                       ]}  
                       onPress={() => confirmStatusChange(status.id)}  
-                      disabled={selectedOrder.estado === status.id}  
+                      disabled={selectedOrder.status === status.id}  
                     >  
                       <Feather name={status.icon} size={20} color={status.color} />  
                       <Text style={[styles.statusOptionText, { color: status.color }]}>  
                         {status.label}  
                       </Text>  
-                      {selectedOrder.estado === status.id && (  
+                      {selectedOrder.status === status.id && (  
                         <Text style={styles.currentStatusLabel}>Actual</Text>  
                       )}  
                     </TouchableOpacity>  
