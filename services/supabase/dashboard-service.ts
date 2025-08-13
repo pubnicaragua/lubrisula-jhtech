@@ -1,7 +1,9 @@
 import { orderService } from "../supabase/order-service"  
-import { clientService, Client } from "../supabase/client-service"  
+// ✅ CORREGIDO: Importar tipos centralizados en lugar de servicios individuales  
+import { Client, Vehicle } from "../../types"  
+import { clientService } from "../supabase/client-service"  
 import { inventoryService } from "../supabase/inventory-service"  
-import { vehicleService, Vehicle } from "../supabase/vehicle-service"  
+import { vehicleService } from "../supabase/vehicle-service"  
 import { CITAS_SERVICES } from "../supabase/citas-services"  
 import { supabase } from "../../lib/supabase"  
   
@@ -457,7 +459,7 @@ const dashboardService = {
     try {  
       const orders = await orderService.getAllOrders()  
       let filteredOrders = orders.filter(order => order.status === "completed")  
-          
+  
       if (startDate && endDate) {  
         filteredOrders = filteredOrders.filter(order => {  
           const orderDate = new Date(order.created_at || '')  
@@ -467,7 +469,7 @@ const dashboardService = {
   
       const totalRevenue = filteredOrders.reduce((sum, order) => sum + (order.total || 0), 0)  
       const averageOrderValue = filteredOrders.length > 0 ? totalRevenue / filteredOrders.length : 0  
-          
+  
       const monthlyRevenue = filteredOrders.reduce((acc, order) => {  
         const month = new Date(order.created_at || '').toISOString().slice(0, 7)  
         acc[month] = (acc[month] || 0) + (order.total || 0)  

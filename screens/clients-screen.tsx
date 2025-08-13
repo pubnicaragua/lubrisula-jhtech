@@ -2,209 +2,229 @@
   
 import { useState, useCallback, useEffect } from "react"  
 import {  
-  StyleSheet,  
   View,  
   Text,  
+  FlatList,  
   TouchableOpacity,  
-  ScrollView,  
+  StyleSheet,  
+  TextInput,  
   ActivityIndicator,  
   Alert,  
-  TextInput,  
-  Modal,  
-  FlatList,  
-  SafeAreaView,  
   RefreshControl,  
 } from "react-native"  
 import { Feather } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-// Importaciones corregidas para usar servicios de Supabase  
-import * as clientService from "../services/supabase/client-service"  
-import * as orderService from "../services/supabase/order-service"  
-import * as vehicleService from "../services/supabase/vehicle-service"  
-import * as accessService from "../services/supabase/access-service"  
-import * as userService from "../services/supabase/user-service"  
-import { Client } from "../services/supabase/client-service"
-import { Order } from '../types/order';
-import { ClientScreenProps } from "../types"
-
-// Tipos TypeScript para resolver errores  
+// ✅ CORREGIDO: Importar tipos centralizados  
+import { Client, EnhancedClient } from "../types"  
+import { clientService } from "../services/supabase/client-service"  
+import { vehicleService } from "../services/supabase/vehicle-service"  
+import { orderService } from "../services/supabase/order-service"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICES from "../services/supabase/user-service"  
+  
+interface ClientsScreenProps {  
+  navigation: any  
+}  
+  
 interface ClientStatsType {  
   totalOrders: number  
   totalSpent: number  
-  lastOrderDate?: string  
   vehicleCount: number  
+  lastOrderDate?: string  
 }  
-
-export default function ClientsScreen({ navigation }: ClientScreenProps) {  
+  
+export default function ClientsScreen({ navigation }: ClientsScreenProps) {  
   const { user } = useAuth()  
-    
-  const [clients, setClients] = useState<Client[]>([])  
-  const [filteredClients, setFilteredClients] = useState<Client[]>([])  
+  // ✅ CORREGIDO: Usar tipos centralizados  
+  const [clients, setClients] = useState<EnhancedClient[]>([])  
+  const [filteredClients, setFilteredClients] = useState<EnhancedClient[]>([])  
   const [clientStats, setClientStats] = useState<Record<string, ClientStatsType>>({})  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
-  const [error, setError] = useState<string | null>(null)  
-  const [userRole, setUserRole] = useState<string | null>(null)  
-    
-  // Estados de búsqueda y filtros  
   const [searchQuery, setSearchQuery] = useState("")  
-  const [showFilters, setShowFilters] = useState(false)  
   const [sortBy, setSortBy] = useState<"name" | "date" | "orders">("name")  
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")  
+  const [userRole, setUserRole] = useState<string | null>(null)  
   
-  // Cargar datos de clientes  
-  const loadClientsData = useCallback(async () => {  
+  const loadClients = useCallback(async () => {  
     try {  
       setLoading(true)  
-      setRefreshing(true)  
-      setError(null)  
   
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await userService.userService.GET_TALLER_ID(user.id)  
-      if (!userTallerId) {
-        setError("No se pudo obtener la información del taller")
-        return
-      }
-      const userPermissions = await accessService.accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
-  
-      if (userPermissions?.rol !== 'client') {  
-        setError("No tienes permisos para ver la lista de clientes")  
+      const userTallerId = await USER_SERVICES.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {  
+        Alert.alert("Error", "No se pudo cargar la información de permisos")  
         return  
       }  
   
-      // Cargar clientes  
-      const allClients = await clientService.clientService.getAllClients()  
-      setClients(allClients)  
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      setUserRole(userPermissions?.role || 'client')  
   
-      // Cargar estadísticas para cada cliente  
+      // Si es cliente, solo mostrar su información  
+      if (userPermissions?.role === 'client') {  
+        const clientData = await clientService.getClientByUserId(user.id)  
+        if (clientData) {  
+          setClients([clientData])  
+          setFilteredClients([clientData])  
+        }  
+        return  
+      }  
+  
+      // Para staff, cargar todos los clientes  
+      const [allClients, allOrders, allVehicles] = await Promise.all([  
+        clientService.getEnhancedClients(),  
+        orderService.getAllOrders(),  
+        vehicleService.getAllVehicles()  
+      ])  
+  
+      // Calcular estadísticas para cada cliente  
       const stats: Record<string, ClientStatsType> = {}  
         
-      for (const client of allClients) {  
-        const [clientOrders, clientVehicles] = await Promise.all([  
-          orderService.orderService.getOrdersByClientId(client.id),  
-          vehicleService.vehicleService.getVehiclesByClientId(client.id)  
-        ])  
-  
-        const totalSpent = clientOrders.reduce((sum: number, order: Order) => sum + (order.total || 0), 0)  
+      allClients.forEach(client => {  
+        const clientOrders = allOrders.filter(order => order.clientId === client.id)  
+        const clientVehicles = allVehicles.filter(vehicle => vehicle.client_id === client.id)  
+          
+        const totalSpent = clientOrders.reduce((sum, order) => sum + (order.total || 0), 0)  
         const lastOrder = clientOrders  
-          .sort((a: Order, b: Order) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]  
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]  
   
         stats[client.id] = {  
           totalOrders: clientOrders.length,  
           totalSpent,  
-          lastOrderDate: lastOrder?.createdAt,  
-          vehicleCount: clientVehicles.length  
+          vehicleCount: clientVehicles.length,  
+          lastOrderDate: lastOrder?.created_at  
         }  
-      }  
+      })  
   
       setClientStats(stats)  
-      applyFiltersAndSort(allClients, searchQuery, sortBy, sortOrder)  
+      setClients(allClients)  
+      setFilteredClients(allClients)  
   
     } catch (error) {  
-      console.error("Error loading clients data:", error)  
-      setError("No se pudieron cargar los datos de clientes")  
+      console.error('Error loading clients:', error)  
+      Alert.alert('Error', 'No se pudieron cargar los clientes')  
     } finally {  
       setLoading(false)  
-      setRefreshing(false)  
     }  
-  }, [user, searchQuery, sortBy, sortOrder])  
+  }, [user?.id])  
   
   useFocusEffect(  
     useCallback(() => {  
-      loadClientsData()  
-    }, [loadClientsData])  
+      loadClients()  
+    }, [loadClients])  
   )  
   
-  // Aplicar filtros y ordenamiento  
-  const applyFiltersAndSort = (clientsList: Client[], query: string, sortField: string, order: string) => {  
-    let filtered = clientsList.filter((client: Client) =>  
-      client.name.toLowerCase().includes(query.toLowerCase()) ||  
-      (client.email && client.email.toLowerCase().includes(query.toLowerCase())) ||  
-      (client.phone && client.phone.includes(query))  
+  // Filtrar y ordenar clientes  
+  useEffect(() => {  
+    let filtered = clients.filter(client =>  
+      client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||  
+      client.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||  
+      client.phone?.toLowerCase().includes(searchQuery.toLowerCase())  
     )  
   
-    // Ordenar  
-    filtered.sort((a: Client, b: Client) => {  
-      let comparison = 0  
-        
-      switch (sortField) {  
+    // Ordenar según criterio seleccionado  
+    filtered.sort((a, b) => {  
+      switch (sortBy) {  
         case "name":  
-          comparison = a.name.localeCompare(b.name)  
-          break  
+          return a.name.localeCompare(b.name)  
         case "date":  
-          const dateA = new Date(a.created_at || 0).getTime()  
-          const dateB = new Date(b.created_at || 0).getTime()  
-          comparison = dateA - dateB  
-          break  
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()  
         case "orders":  
-          const ordersA = clientStats[a.id]?.totalOrders || 0  
-          const ordersB = clientStats[b.id]?.totalOrders || 0  
-          comparison = ordersA - ordersB  
-          break  
+          const aOrders = clientStats[a.id]?.totalOrders || 0  
+          const bOrders = clientStats[b.id]?.totalOrders || 0  
+          return bOrders - aOrders  
+        default:  
+          return 0  
       }  
-  
-      return order === "desc" ? -comparison : comparison  
     })  
   
     setFilteredClients(filtered)  
+  }, [clients, searchQuery, sortBy, clientStats])  
+  
+  const onRefresh = async () => {  
+    setRefreshing(true)  
+    await loadClients()  
+    setRefreshing(false)  
   }  
   
-  // Manejar búsqueda  
-  const handleSearch = (query: string) => {  
-    setSearchQuery(query)  
-    applyFiltersAndSort(clients, query, sortBy, sortOrder)  
+  const formatCurrency = (amount: number) => {  
+    return amount.toLocaleString("es-ES", {  
+      style: "currency",  
+      currency: "USD",  
+      minimumFractionDigits: 2,  
+    })  
   }  
   
-  // Manejar ordenamiento  
-  const handleSort = (field: "name" | "date" | "orders") => {  
-    const newOrder = sortBy === field && sortOrder === "asc" ? "desc" : "asc"  
-    setSortBy(field)  
-    setSortOrder(newOrder)  
-    applyFiltersAndSort(clients, searchQuery, field, newOrder)  
-  }  
+  const renderClientCard = ({ item: client }: { item: EnhancedClient }) => {  
+    const stats = clientStats[client.id] || {  
+      totalOrders: 0,  
+      totalSpent: 0,  
+      vehicleCount: 0  
+    }  
   
-  // Renderizar item de cliente  
-  const renderClientItem = ({ item }: { item: Client }) => {  
-    const stats = clientStats[item.id] || { totalOrders: 0, totalSpent: 0, vehicleCount: 0 }  
-      
     return (  
       <TouchableOpacity  
         style={styles.clientCard}  
-        onPress={() => navigation.navigate("ClientDetail", { clientId: item.user_id || "" })}  
+        onPress={() => navigation.navigate("ClientDetail", { clientId: client.id })}  
       >  
         <View style={styles.clientHeader}>  
           <View style={styles.clientAvatar}>  
-          <Feather name="user" size={24} color="#1a73e8" />  
+            <Text style={styles.clientInitials}>  
+              {client.name  
+                ?.split(" ")  
+                .map((n) => n[0])  
+                .join("") || "?"}  
+            </Text>  
           </View>  
+            
           <View style={styles.clientInfo}>  
-            <Text style={styles.clientName}>{item.name}</Text>  
-            <Text style={styles.clientEmail}>{item.email}</Text>  
-            <Text style={styles.clientPhone}>{item.phone}</Text>  
+            <Text style={styles.clientName}>{client.name}</Text>  
+            <View style={styles.clientContact}>  
+              <Feather name="phone" size={12} color="#666" />  
+              <Text style={styles.contactText}>{client.phone || "Sin teléfono"}</Text>  
+            </View>  
+            <View style={styles.clientContact}>  
+              <Feather name="mail" size={12} color="#666" />  
+              <Text style={styles.contactText}>{client.email || "Sin email"}</Text>  
+            </View>  
+          </View>  
+  
+          <View style={styles.clientStats}>  
+            <View style={styles.statItem}>  
+              <Text style={styles.statValue}>{stats.vehicleCount}</Text>  
+              <Text style={styles.statLabel}>Vehículos</Text>  
+            </View>  
+            <View style={styles.statItem}>  
+              <Text style={styles.statValue}>{stats.totalOrders}</Text>  
+              <Text style={styles.statLabel}>Órdenes</Text>  
+            </View>  
           </View>  
         </View>  
   
-        <View style={styles.clientStats}>  
-          <View style={styles.statItem}>  
-            <Text style={styles.statValue}>{stats.totalOrders}</Text>  
-            <Text style={styles.statLabel}>Órdenes</Text>  
+        <View style={styles.clientFooter}>  
+          <View style={styles.clientMeta}>  
+            <Text style={styles.clientType}>{client.client_type || "Individual"}</Text>  
+            <Text style={styles.clientDate}>  
+              Cliente desde: {new Date(client.created_at).toLocaleDateString("es-ES")}  
+            </Text>  
           </View>  
-          <View style={styles.statDivider} />  
-          <View style={styles.statItem}>  
-            <Text style={styles.statValue}>{stats.vehicleCount}</Text>  
-            <Text style={styles.statLabel}>Vehículos</Text>  
-          </View>  
-          <View style={styles.statDivider} />  
-          <View style={styles.statItem}>  
-            <Text style={styles.statValue}>${stats.totalSpent.toFixed(0)}</Text>  
-            <Text style={styles.statLabel}>Gastado</Text>  
+            
+          <View style={styles.clientAmount}>  
+            <Text style={styles.totalSpent}>{formatCurrency(stats.totalSpent)}</Text>  
+            <Text style={styles.amountLabel}>Total gastado</Text>  
           </View>  
         </View>  
   
-        <Feather name="chevron-right" size={20} color="#999" />  
+        {stats.lastOrderDate && (  
+          <View style={styles.lastOrderInfo}>  
+            <Feather name="clock" size={12} color="#999" />  
+            <Text style={styles.lastOrderText}>  
+              Última orden: {new Date(stats.lastOrderDate).toLocaleDateString("es-ES")}  
+            </Text>  
+          </View>  
+        )}  
       </TouchableOpacity>  
     )  
   }  
@@ -218,103 +238,88 @@ export default function ClientsScreen({ navigation }: ClientScreenProps) {
     )  
   }  
   
-  if (error) {  
-    return (  
-      <View style={styles.errorContainer}>  
-        <Feather name="alert-circle" size={64} color="#f44336" />  
-        <Text style={styles.errorText}>{error}</Text>  
-        <TouchableOpacity style={styles.retryButton} onPress={loadClientsData}>  
-          <Text style={styles.retryButtonText}>Reintentar</Text>  
-        </TouchableOpacity>  
-      </View>  
-    )  
-  }  
-  
   return (  
-    <SafeAreaView style={styles.container}>  
+    <View style={styles.container}>  
       <View style={styles.header}>  
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
-          <Feather name="arrow-left" size={24} color="#333" />  
-        </TouchableOpacity>  
         <Text style={styles.headerTitle}>Clientes</Text>  
-        <TouchableOpacity   
-          style={styles.addButton}   
-          onPress={() => navigation.navigate("NewClient")}  
-        >  
-          <Feather name="plus" size={24} color="#1a73e8" />  
-        </TouchableOpacity>  
+        {userRole !== 'client' && (  
+          <TouchableOpacity  
+            style={styles.addButton}  
+            onPress={() => navigation.navigate("NewClient")}  
+          >  
+            <Feather name="plus" size={24} color="#fff" />  
+          </TouchableOpacity>  
+        )}  
       </View>  
   
       <View style={styles.searchContainer}>  
         <View style={styles.searchInputContainer}>  
-          <Feather name="search" size={20} color="#666" />  
+          <Feather name="search" size={20} color="#666" style={styles.searchIcon} />  
           <TextInput  
             style={styles.searchInput}  
-            placeholder="Buscar cliente..."  
+            placeholder="Buscar clientes..."  
             value={searchQuery}  
-            onChangeText={handleSearch}  
+            onChangeText={setSearchQuery}  
           />  
-          {searchQuery.length > 0 && (  
-            <TouchableOpacity onPress={() => handleSearch("")}>  
-              <Feather name="x" size={20} color="#666" />  
-            </TouchableOpacity>  
-          )}  
         </View>  
-        <TouchableOpacity   
-          style={styles.filterButton}   
-          onPress={() => setShowFilters(true)}  
-        >  
-          <Feather name="filter" size={20} color="#1a73e8" />  
-        </TouchableOpacity>  
       </View>  
   
       <View style={styles.sortContainer}>  
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>  
+        <Text style={styles.sortLabel}>Ordenar por:</Text>  
+        <View style={styles.sortButtons}>  
           <TouchableOpacity  
             style={[styles.sortButton, sortBy === "name" && styles.sortButtonActive]}  
-            onPress={() => handleSort("name")}  
+            onPress={() => setSortBy("name")}  
           >  
             <Text style={[styles.sortButtonText, sortBy === "name" && styles.sortButtonTextActive]}>  
-              Nombre {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}  
+              Nombre  
             </Text>  
           </TouchableOpacity>  
             
           <TouchableOpacity  
             style={[styles.sortButton, sortBy === "date" && styles.sortButtonActive]}  
-            onPress={() => handleSort("date")}  
+            onPress={() => setSortBy("date")}  
           >  
             <Text style={[styles.sortButtonText, sortBy === "date" && styles.sortButtonTextActive]}>  
-              Fecha {sortBy === "date" && (sortOrder === "asc" ? "↑" : "↓")}  
+              Fecha  
             </Text>  
           </TouchableOpacity>  
             
           <TouchableOpacity  
             style={[styles.sortButton, sortBy === "orders" && styles.sortButtonActive]}  
-            onPress={() => handleSort("orders")}  
+            onPress={() => setSortBy("orders")}  
           >  
             <Text style={[styles.sortButtonText, sortBy === "orders" && styles.sortButtonTextActive]}>  
-              Órdenes {sortBy === "orders" && (sortOrder === "asc" ? "↑" : "↓")}  
+              Órdenes  
             </Text>  
           </TouchableOpacity>  
-        </ScrollView>  
+        </View>  
       </View>  
   
       <FlatList  
         data={filteredClients}  
+        renderItem={renderClientCard}  
         keyExtractor={(item) => item.id}  
-        renderItem={renderClientItem}  
+        contentContainerStyle={styles.listContainer}  
         refreshControl={  
-          <RefreshControl refreshing={refreshing} onRefresh={loadClientsData} />  
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#1a73e8"]} />  
         }  
         ListEmptyComponent={  
           <View style={styles.emptyContainer}>  
-            <Feather name="users" size={48} color="#ccc" />  
-            <Text style={styles.emptyText}>No se encontraron clientes</Text>  
+            <Feather name="users" size={64} color="#ccc" />  
+            <Text style={styles.emptyText}>No hay clientes registrados</Text>  
+            {userRole !== 'client' && (  
+              <TouchableOpacity  
+                style={styles.emptyButton}  
+                onPress={() => navigation.navigate("NewClient")}  
+              >  
+                <Text style={styles.emptyButtonText}>Agregar primer cliente</Text>  
+              </TouchableOpacity>  
+            )}  
           </View>  
         }  
-        contentContainerStyle={styles.listContent}  
       />  
-    </SafeAreaView>  
+    </View>  
   )  
 }  
   
@@ -334,59 +339,37 @@ const styles = StyleSheet.create({
     fontSize: 16,  
     color: "#666",  
   },  
-  errorContainer: {  
-    flex: 1,  
-    justifyContent: "center",  
-    alignItems: "center",  
-    padding: 20,  
-  },  
-  errorText: {  
-    fontSize: 16,  
-    color: "#f44336",  
-    textAlign: "center",  
-    marginTop: 16,  
-    marginBottom: 20,  
-  },  
-  retryButton: {  
-    backgroundColor: "#1a73e8",  
-    paddingHorizontal: 20,  
-    paddingVertical: 10,  
-    borderRadius: 8,  
-  },  
-  retryButtonText: {  
-    color: "#fff",  
-    fontWeight: "bold",  
-  },  
   header: {  
     flexDirection: "row",  
-    alignItems: "center",  
     justifyContent: "space-between",  
+    alignItems: "center",  
     paddingHorizontal: 16,  
     paddingVertical: 12,  
     backgroundColor: "#fff",  
     borderBottomWidth: 1,  
     borderBottomColor: "#e1e4e8",  
   },  
-  backButton: {  
-    padding: 8,  
-  },  
   headerTitle: {  
-    fontSize: 18,  
+    fontSize: 20,  
     fontWeight: "bold",  
     color: "#333",  
   },  
   addButton: {  
-    padding: 8,  
+    width: 40,  
+    height: 40,  
+    borderRadius: 20,  
+    backgroundColor: "#1a73e8",  
+    justifyContent: "center",  
+    alignItems: "center",  
   },  
   searchContainer: {  
-    flexDirection: "row",  
     paddingHorizontal: 16,  
     paddingVertical: 12,  
     backgroundColor: "#fff",  
-    gap: 12,  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
   },  
   searchInputContainer: {  
-    flex: 1,  
     flexDirection: "row",  
     alignItems: "center",  
     backgroundColor: "#f8f9fa",  
@@ -395,76 +378,83 @@ const styles = StyleSheet.create({
     borderWidth: 1,  
     borderColor: "#e1e4e8",  
   },  
+  searchIcon: {  
+    marginRight: 8,  
+  },  
   searchInput: {  
     flex: 1,  
     paddingVertical: 12,  
     fontSize: 16,  
     color: "#333",  
-    marginLeft: 8,  
-  },  
-  filterButton: {  
-    width: 44,  
-    height: 44,  
-    borderRadius: 8,  
-    backgroundColor: "#f8f9fa",  
-    justifyContent: "center",  
-    alignItems: "center",  
-    borderWidth: 1,  
-    borderColor: "#e1e4e8",  
   },  
   sortContainer: {  
-    backgroundColor: "#fff",  
+    paddingHorizontal: 16,  
     paddingVertical: 8,  
+    backgroundColor: "#fff",  
     borderBottomWidth: 1,  
     borderBottomColor: "#e1e4e8",  
   },  
+  sortLabel: {  
+    fontSize: 14,  
+    color: "#666",  
+    marginBottom: 8,  
+  },  
+  sortButtons: {  
+    flexDirection: "row",  
+    gap: 8,  
+  },  
   sortButton: {  
-    paddingHorizontal: 16,  
-    paddingVertical: 8,  
+    paddingHorizontal: 12,  
+    paddingVertical: 6,  
     borderRadius: 16,  
-    marginHorizontal: 4,  
     backgroundColor: "#f8f9fa",  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
   },  
   sortButtonActive: {  
-    backgroundColor: "#e6f0ff",  
+    backgroundColor: "#1a73e8",  
+    borderColor: "#1a73e8",  
   },  
   sortButtonText: {  
     fontSize: 14,  
     color: "#666",  
   },  
   sortButtonTextActive: {  
-    color: "#1a73e8",  
+    color: "#fff",  
     fontWeight: "500",  
   },  
-  listContent: {  
+  listContainer: {  
     padding: 16,  
   },  
   clientCard: {  
     backgroundColor: "#fff",  
-    borderRadius: 8,  
+    borderRadius: 12,  
     padding: 16,  
     marginBottom: 12,  
-    flexDirection: "row",  
-    alignItems: "center",  
     shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 1 },  
+    shadowOffset: { width: 0, height: 2 },  
     shadowOpacity: 0.1,  
-    shadowRadius: 2,  
-    elevation: 2,  
+    shadowRadius: 4,  
+    elevation: 3,  
   },  
   clientHeader: {  
     flexDirection: "row",  
     alignItems: "center",  
-    flex: 1,  
+    marginBottom: 12,  
   },  
   clientAvatar: {  
-    width: 48,  
-    height: 48,  
-    borderRadius: 24,  
-    backgroundColor: "#f5f5f5",  
+    width: 50,  
+    height: 50,  
+    borderRadius: 25,  
+    backgroundColor: "#1a73e8",  
     justifyContent: "center",  
     alignItems: "center",  
     marginRight: 12,  
+  },  
+  clientInitials: {  
+    fontSize: 18,  
+    fontWeight: "bold",  
+    color: "#fff",  
   },  
   clientInfo: {  
     flex: 1,  
@@ -473,28 +463,27 @@ const styles = StyleSheet.create({
     fontSize: 16,  
     fontWeight: "bold",  
     color: "#333",  
+    marginBottom: 4,  
+  },  
+  clientContact: {  
+    flexDirection: "row",  
+    alignItems: "center",  
     marginBottom: 2,  
   },  
-  clientEmail: {  
+  contactText: {  
     fontSize: 12,  
     color: "#666",  
-    marginBottom: 2,  
-  },  
-  clientPhone: {  
-    fontSize: 12,  
-    color: "#666",  
+    marginLeft: 4,  
   },  
   clientStats: {  
     flexDirection: "row",  
-    alignItems: "center",  
-    marginRight: 12,  
+    gap: 16,  
   },  
   statItem: {  
     alignItems: "center",  
-    paddingHorizontal: 8,  
   },  
   statValue: {  
-    fontSize: 14,  
+    fontSize: 16,  
     fontWeight: "bold",  
     color: "#333",  
   },  
@@ -502,19 +491,73 @@ const styles = StyleSheet.create({
     fontSize: 10,  
     color: "#666",  
   },  
-  statDivider: {  
-    width: 1,  
-    height: 24,  
-    backgroundColor: "#e1e4e8",  
+  clientFooter: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "flex-end",  
+    borderTopWidth: 1,  
+    borderTopColor: "#f0f0f0",  
+    paddingTop: 12,  
+  },  
+  clientMeta: {  
+    flex: 1,  
+  },  
+  clientType: {  
+    fontSize: 12,  
+    color: "#1a73e8",  
+    fontWeight: "500",  
+    marginBottom: 2,  
+  },  
+  clientDate: {  
+    fontSize: 11,  
+    color: "#999",  
+  },  
+  clientAmount: {  
+    alignItems: "flex-end",  
+  },  
+  totalSpent: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#4caf50",  
+  },  
+  amountLabel: {  
+    fontSize: 10,  
+    color: "#666",  
+  },  
+  lastOrderInfo: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    marginTop: 8,  
+    paddingTop: 8,  
+    borderTopWidth: 1,  
+    borderTopColor: "#f0f0f0",  
+  },  
+  lastOrderText: {  
+    fontSize: 11,  
+    color: "#999",  
+    marginLeft: 4,  
   },  
   emptyContainer: {  
     alignItems: "center",  
     justifyContent: "center",  
-    paddingVertical: 40,  
+    paddingVertical: 60,  
   },  
   emptyText: {  
     fontSize: 16,  
     color: "#999",  
-    marginTop: 12,  
+    marginTop: 16,  
+    marginBottom: 20,  
+    textAlign: "center",  
+  },  
+  emptyButton: {  
+    backgroundColor: "#1a73e8",  
+    paddingHorizontal: 20,  
+    paddingVertical: 12,  
+    borderRadius: 8,  
+  },  
+  emptyButtonText: {  
+    color: "#fff",  
+    fontSize: 14,  
+    fontWeight: "bold",  
   },  
 })

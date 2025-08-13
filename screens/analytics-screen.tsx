@@ -23,8 +23,9 @@ import { clientService } from "../services/supabase/client-service"
 import { inventoryService } from "../services/supabase/inventory-service"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service"  
+// ✅ CORREGIDO: Importar tipos centralizados  
 import { Order } from '../types/order'  
-import { Client } from '../services/supabase/client-service'  
+import { Client } from '../types/entities'  
 import { InventoryItem } from '../types/inventory'  
   
 interface AnalyticsData {  
@@ -81,17 +82,18 @@ export default function AnalyticsScreen() {
       // Validar permisos del usuario  
       const userId = user.id as string  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(userId)  
-        
       if (!userTallerId) {  
         setError("No se pudo obtener la información del taller")  
         return  
       }  
-        
+  
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+        
+      // ✅ CORREGIDO: Usar 'role' en lugar de 'rol'  
+      setUserRole(userPermissions?.role || 'client')  
   
       // Solo staff puede ver analíticas  
-      if (userPermissions?.rol === 'client') {  
+      if (userPermissions?.role === 'client') {  
         setError("No tienes permisos para ver las analíticas")  
         return  
       }  
@@ -124,11 +126,11 @@ export default function AnalyticsScreen() {
   const processAnalyticsData = (orders: Order[], clients: Client[], inventory: InventoryItem[], period: string): AnalyticsData => {  
     const now = new Date()  
     const periodStart = getPeriodStart(now, period)  
-      
+  
     // Filtrar órdenes por período  
-    const periodOrders = orders.filter(order => new Date(order.createdAt) >= periodStart)  
+    const periodOrders = orders.filter(order => new Date(order.created_at) >= periodStart)  
     const completedOrders = periodOrders.filter(order => order.status === "completed" || order.status === "delivered")  
-      
+  
     // Calcular ingresos  
     const totalRevenue = completedOrders.reduce((sum, order) => sum + (order.total || 0), 0)  
     const monthlyRevenue = calculateMonthlyRevenue(orders)  
@@ -136,7 +138,7 @@ export default function AnalyticsScreen() {
     const revenueGrowth = previousPeriodRevenue > 0 ? ((totalRevenue - previousPeriodRevenue) / previousPeriodRevenue) * 100 : 0  
   
     // Calcular métricas de órdenes  
-    const pendingOrders = periodOrders.filter(order =>   
+    const pendingOrders = periodOrders.filter(order =>  
       !["completed", "delivered", "cancelled"].includes(order.status)  
     ).length  
     const cancelledOrders = periodOrders.filter(order => order.status === "cancelled").length  
@@ -144,12 +146,12 @@ export default function AnalyticsScreen() {
   
     // Calcular métricas de clientes  
     const activeClients = getActiveClients(clients, orders, periodStart)  
-    const newClients = clients.filter(client => new Date(client.createdAt) >= periodStart).length  
+    const newClients = clients.filter(client => new Date(client.created_at) >= periodStart).length  
     const clientRetention = calculateClientRetention(clients, orders)  
   
     // Calcular métricas de inventario  
-    const totalInventoryValue = inventory.reduce((sum, item) => sum + (item.stock * (item.priceUSD || 0)), 0)  
-    const lowStockItems = inventory.filter(item => item.stock <= (item.minStock || 5)).length  
+    const totalInventoryValue = inventory.reduce((sum, item) => sum + (item.cantidad * (item.precio_unitario || 0)), 0)  
+    const lowStockItems = inventory.filter(item => item.cantidad <= (item.minStock || 5)).length  
     const topSellingItems = getTopSellingItems(orders, inventory)  
   
     // Calcular métricas de rendimiento  
@@ -211,16 +213,16 @@ export default function AnalyticsScreen() {
   const calculateMonthlyRevenue = (orders: Order[]): number[] => {  
     const months = Array(12).fill(0)  
     const currentYear = new Date().getFullYear()  
-      
+  
     orders.forEach(order => {  
       if (order.status === "completed" || order.status === "delivered") {  
-        const orderDate = new Date(order.createdAt)  
+        const orderDate = new Date(order.created_at)  
         if (orderDate.getFullYear() === currentYear) {  
           months[orderDate.getMonth()] += order.total || 0  
         }  
       }  
     })  
-      
+  
     return months  
   }  
   
@@ -228,20 +230,17 @@ export default function AnalyticsScreen() {
     const now = new Date()  
     const periodStart = getPeriodStart(now, period)  
     const previousPeriodStart = getPeriodStart(periodStart, period)  
-      
-    return orders  
-      .filter(order => {  
-        const orderDate = new Date(order.createdAt)  
-        return orderDate >= previousPeriodStart && orderDate < periodStart &&  
-               (order.status === "completed" || order.status === "delivered")  
-      })  
-      .reduce((sum, order) => sum + (order.total || 0), 0)  
+  
+    return orders.filter(order => {  
+      const orderDate = new Date(order.created_at)  
+      return orderDate >= previousPeriodStart && orderDate < periodStart &&  
+        (order.status === "completed" || order.status === "delivered")  
+    }).reduce((sum, order) => sum + (order.total || 0), 0)  
   }  
   
   const getActiveClients = (clients: Client[], orders: Order[], periodStart: Date): number => {  
     const activeClientIds = new Set(  
-      orders  
-        .filter(order => new Date(order.createdAt) >= periodStart)  
+      orders.filter(order => new Date(order.created_at) >= periodStart)  
         .map(order => order.clientId)  
     )  
     return activeClientIds.size  
@@ -250,52 +249,53 @@ export default function AnalyticsScreen() {
   const calculateClientRetention = (clients: Client[], orders: Order[]): number => {  
     const threeMonthsAgo = new Date()  
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)  
-      
-    const oldClients = clients.filter(client => new Date(client.createdAt) < threeMonthsAgo)  
-    const activeOldClients = oldClients.filter(client =>   
-      orders.some(order =>   
-        order.clientId === client.id &&   
-        new Date(order.createdAt) >= threeMonthsAgo  
+  
+    const oldClients = clients.filter(client => new Date(client.created_at) < threeMonthsAgo)  
+    const activeOldClients = oldClients.filter(client =>  
+      orders.some(order =>  
+        order.clientId === client.id &&  
+        new Date(order.created_at) >= threeMonthsAgo  
       )  
     )  
-      
+  
     return oldClients.length > 0 ? (activeOldClients.length / oldClients.length) * 100 : 0  
   }  
   
   const getTopSellingItems = (orders: Order[], inventory: InventoryItem[]) => {  
     // Placeholder - esto requeriría datos de order_parts  
     return inventory  
-      .sort((a, b) => (b.stock || 0) - (a.stock || 0))  
+      .sort((a, b) => (b.cantidad || 0) - (a.cantidad || 0))  
       .slice(0, 5)  
       .map(item => ({  
-        name: item.name,  
-        quantity: item.stock || 0  
+        name: item.producto,  
+        quantity: item.cantidad || 0  
       }))  
   }  
   
   const calculateAverageCompletionTime = (completedOrders: Order[]): number => {  
     if (completedOrders.length === 0) return 0  
-      
+  
     const totalDays = completedOrders.reduce((sum, order) => {  
-      const created = new Date(order.createdAt)  
-      const completed = new Date(order.completionDate || order.updatedAt)  
+      const created = new Date(order.created_at)  
+      const completed = new Date(order.completionDate || order.updated_at)  
       const days = Math.ceil((completed.getTime() - created.getTime()) / (1000 * 60 * 60 * 24))  
       return sum + days  
     }, 0)  
-      
+  
     return totalDays / completedOrders.length  
   }  
   
   const calculateEfficiency = (orders: Order[], period: string): number => {  
     const periodStart = getPeriodStart(new Date(), period)  
-    const periodOrders = orders.filter(order => new Date(order.createdAt) >= periodStart)  
+    const periodOrders = orders.filter(order => new Date(order.created_at) >= periodStart)  
+  
     const completedOnTime = periodOrders.filter(order => {  
       if (!order.estimatedCompletionDate) return true  
       const estimated = new Date(order.estimatedCompletionDate)  
-      const actual = new Date(order.completionDate || order.updatedAt)  
+      const actual = new Date(order.completionDate || order.updated_at)  
       return actual <= estimated  
     })  
-      
+  
     return periodOrders.length > 0 ? (completedOnTime.length / periodOrders.length) * 100 : 0  
   }  
   
@@ -340,10 +340,10 @@ export default function AnalyticsScreen() {
       <Text style={styles.metricValue}>{value}</Text>  
       {change !== undefined && (  
         <View style={styles.metricChange}>  
-          <Feather   
-            name={change >= 0 ? "trending-up" : "trending-down"}   
-            size={16}   
-            color={change >= 0 ? "#4caf50" : "#f44336"}   
+          <Feather  
+            name={change >= 0 ? "trending-up" : "trending-down"}  
+            size={16}  
+            color={change >= 0 ? "#4caf50" : "#f44336"}  
           />  
           <Text style={[styles.metricChangeText, { color: change >= 0 ? "#4caf50" : "#f44336" }]}>  
             {Math.abs(change).toFixed(1)}%  
@@ -369,11 +369,10 @@ export default function AnalyticsScreen() {
             <Feather name="x" size={24} color="#666" />  
           </TouchableOpacity>  
         </View>  
-  
         <ScrollView style={styles.modalContent}>  
           {selectedChart === "revenue" && analyticsData && (  
             <View style={styles.chartContainer}>  
-                            <Text style={styles.chartTitle}>Ingresos Mensuales</Text>  
+              <Text style={styles.chartTitle}>Ingresos Mensuales</Text>  
               <LineChart  
                 data={{  
                   labels: ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"],  
@@ -389,7 +388,6 @@ export default function AnalyticsScreen() {
               />  
             </View>  
           )}  
-  
           {selectedChart === "orders" && analyticsData && (  
             <View style={styles.chartContainer}>  
               <Text style={styles.chartTitle}>Distribución de Órdenes</Text>  
@@ -455,7 +453,7 @@ export default function AnalyticsScreen() {
                 styles.periodButtonText,  
                 selectedPeriod === period && styles.periodButtonTextSelected  
               ]}>  
-                {period === "week" ? "Semana" :   
+                {period === "week" ? "Semana" :  
                  period === "month" ? "Mes" :  
                  period === "quarter" ? "Trimestre" : "Año"}  
               </Text>  
@@ -473,7 +471,6 @@ export default function AnalyticsScreen() {
           "dollar-sign",  
           "#4caf50"  
         )}  
-          
         {renderMetricCard(  
           "Órdenes Completadas",  
           analyticsData.orders.completed.toString(),  
@@ -481,7 +478,6 @@ export default function AnalyticsScreen() {
           "check-circle",  
           "#1a73e8"  
         )}  
-          
         {renderMetricCard(  
           "Clientes Activos",  
           analyticsData.clients.active.toString(),  
@@ -489,7 +485,6 @@ export default function AnalyticsScreen() {
           "users",  
           "#9c27b0"  
         )}  
-          
         {renderMetricCard(  
           "Eficiencia",  
           formatPercentage(analyticsData.performance.efficiency),  
@@ -546,15 +541,21 @@ export default function AnalyticsScreen() {
             <Text style={styles.orderStatLabel}>Total</Text>  
           </View>  
           <View style={styles.orderStatCard}>  
-            <Text style={[styles.orderStatValue, { color: "#4caf50" }]}>{analyticsData.orders.completed}</Text>  
+            <Text style={[styles.orderStatValue, { color: "#4caf50" }]}>  
+              {analyticsData.orders.completed}  
+            </Text>  
             <Text style={styles.orderStatLabel}>Completadas</Text>  
           </View>  
           <View style={styles.orderStatCard}>  
-            <Text style={[styles.orderStatValue, { color: "#ff9800" }]}>{analyticsData.orders.pending}</Text>  
+            <Text style={[styles.orderStatValue, { color: "#ff9800" }]}>  
+              {analyticsData.orders.pending}  
+            </Text>  
             <Text style={styles.orderStatLabel}>Pendientes</Text>  
           </View>  
           <View style={styles.orderStatCard}>  
-            <Text style={[styles.orderStatValue, { color: "#f44336" }]}>{analyticsData.orders.cancelled}</Text>  
+            <Text style={[styles.orderStatValue, { color: "#f44336" }]}>  
+              {analyticsData.orders.cancelled}  
+            </Text>  
             <Text style={styles.orderStatLabel}>Canceladas</Text>  
           </View>  
         </View>  
@@ -566,17 +567,23 @@ export default function AnalyticsScreen() {
         <View style={styles.performanceGrid}>  
           <View style={styles.performanceCard}>  
             <Feather name="clock" size={24} color="#1a73e8" />  
-            <Text style={styles.performanceValue}>{analyticsData.performance.averageCompletionTime.toFixed(1)} días</Text>  
+            <Text style={styles.performanceValue}>  
+              {analyticsData.performance.averageCompletionTime.toFixed(1)} días  
+            </Text>  
             <Text style={styles.performanceLabel}>Tiempo Promedio</Text>  
           </View>  
           <View style={styles.performanceCard}>  
             <Feather name="star" size={24} color="#ff9800" />  
-            <Text style={styles.performanceValue}>{analyticsData.performance.customerSatisfaction.toFixed(1)}/5</Text>  
+            <Text style={styles.performanceValue}>  
+              {analyticsData.performance.customerSatisfaction.toFixed(1)}/5  
+            </Text>  
             <Text style={styles.performanceLabel}>Satisfacción</Text>  
           </View>  
           <View style={styles.performanceCard}>  
             <Feather name="percent" size={24} color="#4caf50" />  
-            <Text style={styles.performanceValue}>{formatPercentage(analyticsData.clients.retention)}</Text>  
+            <Text style={styles.performanceValue}>  
+              {formatPercentage(analyticsData.clients.retention)}  
+            </Text>  
             <Text style={styles.performanceLabel}>Retención</Text>  
           </View>  
         </View>  
@@ -603,6 +610,7 @@ export default function AnalyticsScreen() {
   )  
 }  
   
+// Los estilos permanecen igual que en el archivo original...  
 const styles = StyleSheet.create({  
   container: {  
     flex: 1,  

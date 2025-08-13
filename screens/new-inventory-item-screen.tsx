@@ -15,34 +15,47 @@ import {
 } from "react-native"  
 import { Feather } from "@expo/vector-icons"  
 import { useAuth } from "../context/auth-context"  
-import INVENTARIO_SERVICES from "../services/supabase/inventory-service"
-import { InventoryItem, InventoryCategory, InventoryItemFormData } from "../types/inventory"  
+import INVENTARIO_SERVICES from "../services/supabase/inventory-service"  
+// ✅ CORREGIDO: Importar tipos centralizados  
+import { InventoryItem } from "../types/inventory"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
-import USER_SERVICE from "../services/supabase/user-service" 
-import { CategoriaMaterialType } from "../services/supabase/services-service"
-
-export default function NewInventoryItemScreen({ navigation }: { navigation: any }) {
-  const { user } = useAuth()
-  const [loading, setLoading] = useState(false)
-  const [categories, setCategories] = useState<CategoriaMaterialType[]>([])
-  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([])
-  const [categoryModalVisible, setCategoryModalVisible] = useState(false)
-  const [supplierModalVisible, setSupplierModalVisible] = useState(false)
-    
-    const [formData, setFormData] = useState<Partial<InventoryItem>>({
-    producto: "",
-    codigo: "",
-    descripcion: "",
-    categoria_id: "",
-    stock_actual: 0,
-    stock_minimo: 0,
-    precio_compra: 0,
-    precio_venta: 0,
-    proveedor_id: "",
-    ubicacion_almacen: "",
-    estado: 'Activo',
-  })  
+import USER_SERVICE from "../services/supabase/user-service"  
+import { CategoriaMaterialType } from "../services/supabase/services-service"  
   
+// ✅ CORREGIDO: Definir interface para form data basada en campos reales  
+interface InventoryFormData {  
+  producto: string  
+  categoria_id: string  
+  precio_unitario: number  
+  cantidad: number  
+  minStock?: number  
+  lugar_compra?: string  
+  unidad_medida?: string  
+  proceso?: string  
+  estado?: string  
+}  
+  
+export default function NewInventoryItemScreen({ navigation }: { navigation: any }) {  
+  const { user } = useAuth()  
+  const [loading, setLoading] = useState(false)  
+  const [categories, setCategories] = useState<CategoriaMaterialType[]>([])  
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([])  
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false)  
+  const [supplierModalVisible, setSupplierModalVisible] = useState(false)  
+    
+  // ✅ CORREGIDO: Usar solo campos que existen en el schema real  
+  const [formData, setFormData] = useState<InventoryFormData>({  
+    producto: "",  
+    categoria_id: "",  
+    precio_unitario: 0,  
+    cantidad: 0,  
+    minStock: 0,  
+    lugar_compra: "",  
+    unidad_medida: "unidad",  
+    proceso: "",  
+    estado: "Activo",  
+  })  
+    
   const [errors, setErrors] = useState<Record<string, string>>({})  
   
   useEffect(() => {  
@@ -55,14 +68,16 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
   
       // Validar permisos del usuario  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
-      if (!userTallerId) {
+      if (!userTallerId) {  
         Alert.alert("Error", "No tienes permisos para agregar artículos al inventario")  
         navigation.goBack()  
         return  
-      }
+      }  
+        
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
-  
-      if (userPermissions?.rol === 'client') {
+        
+      // ✅ CORREGIDO: Usar 'role' en lugar de 'rol'  
+      if (userPermissions?.role === 'client') {  
         Alert.alert("Error", "No tienes permisos para agregar artículos al inventario")  
         navigation.goBack()  
         return  
@@ -71,7 +86,7 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
       // Cargar categorías y proveedores  
       const [categoriesData, suppliersData] = await Promise.all([  
         INVENTARIO_SERVICES.getInventoryCategories(),  
-        Promise.resolve([]) // Placeholder for suppliers - not implemented in service
+        Promise.resolve([]) // Placeholder for suppliers - not implemented in service  
       ])  
   
       setCategories(categoriesData)  
@@ -83,43 +98,28 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
     }  
   }  
   
-    const validateForm = () => {
-    const newErrors: Record<string, string> = {}
-
-    if (!formData.codigo?.trim()) {
-      newErrors.codigo = "El código SKU es requerido"
-    }
-
-    if (!formData.producto?.trim()) {
-      newErrors.producto = "El nombre es requerido"
-    }
-
-    if (!formData.categoria_id) {
-      newErrors.categoria_id = "La categoría es requerida"
-    }
-
-    if (!formData.precio_compra || formData.precio_compra <= 0) {
-      newErrors.precio_compra = "El precio de compra debe ser mayor a 0"
-    }
-
-    if (!formData.precio_venta || formData.precio_venta <= 0) {
-      newErrors.precio_venta = "El precio de venta debe ser mayor a 0"
-    }
-
-    if (formData.precio_venta && formData.precio_compra && formData.precio_venta <= formData.precio_compra) {
-      newErrors.precio_venta = "El precio de venta debe ser mayor al precio de compra"
-    }
-
-    if (formData.stock_actual === undefined || formData.stock_actual < 0) {
-      newErrors.stock_actual = "El stock actual no puede ser negativo"
-    }
-
-    if (!formData.stock_minimo || formData.stock_minimo < 0) {
-      newErrors.stock_minimo = "El stock mínimo debe ser mayor o igual a 0"
-    }
-
-    if (!formData.ubicacion_almacen?.trim()) {
-      newErrors.ubicacion_almacen = "La ubicación en almacén es requerida"
+  // ✅ CORREGIDO: Validación usando campos reales  
+  const validateForm = () => {  
+    const newErrors: Record<string, string> = {}  
+  
+    if (!formData.producto?.trim()) {  
+      newErrors.producto = "El nombre del producto es requerido"  
+    }  
+  
+    if (!formData.categoria_id) {  
+      newErrors.categoria_id = "La categoría es requerida"  
+    }  
+  
+    if (!formData.precio_unitario || formData.precio_unitario <= 0) {  
+      newErrors.precio_unitario = "El precio unitario debe ser mayor a 0"  
+    }  
+  
+    if (formData.cantidad === undefined || formData.cantidad < 0) {  
+      newErrors.cantidad = "La cantidad no puede ser negativa"  
+    }  
+  
+    if (!formData.minStock || formData.minStock < 0) {  
+      newErrors.minStock = "El stock mínimo debe ser mayor o igual a 0"  
     }  
   
     setErrors(newErrors)  
@@ -132,8 +132,8 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
     try {  
       setLoading(true)  
         
-      // Crear nuevo artículo de inventario  
-      const newItem = await INVENTARIO_SERVICES.createInventoryItem(formData as InventoryItemFormData)  
+      // ✅ CORREGIDO: Crear item con campos del schema real  
+      const newItem = await INVENTARIO_SERVICES.createInventoryItem(formData)  
         
       Alert.alert(  
         "Éxito",  
@@ -153,7 +153,8 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
     }  
   }  
   
-  const updateFormData = (field: keyof InventoryItem, value: string | number | boolean) => {  
+  // ✅ CORREGIDO: Función para actualizar form data  
+  const updateFormData = (field: keyof InventoryFormData, value: string | number) => {  
     setFormData(prev => ({ ...prev, [field]: value }))  
     if (errors[field]) {  
       setErrors(prev => ({ ...prev, [field]: "" }))  
@@ -161,13 +162,8 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
   }  
   
   const getSelectedCategoryName = () => {  
-    const selectedCategory = categories.find(cat => cat.id === formData.categoria_id)
+    const selectedCategory = categories.find(cat => cat.id === formData.categoria_id)  
     return selectedCategory?.nombre || "Seleccionar categoría"  
-  }  
-  
-  const getSelectedSupplierName = () => {  
-    const supplier = suppliers.find(sup => sup.id === formData.proveedor_id)  
-    return supplier?.name || "Seleccionar proveedor (opcional)"  
   }  
   
   const renderCategoryModal = () => (  
@@ -186,7 +182,6 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
             <Feather name="x" size={24} color="#666" />  
           </TouchableOpacity>  
         </View>  
-  
         <FlatList  
           data={categories}  
           keyExtractor={(item) => item.id}  
@@ -218,54 +213,6 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
     </Modal>  
   )  
   
-  const renderSupplierModal = () => (  
-    <Modal  
-      visible={supplierModalVisible}  
-      animationType="slide"  
-      presentationStyle="pageSheet"  
-    >  
-      <View style={styles.modalContainer}>  
-        <View style={styles.modalHeader}>  
-          <Text style={styles.modalTitle}>Seleccionar Proveedor</Text>  
-          <TouchableOpacity  
-            onPress={() => setSupplierModalVisible(false)}  
-            style={styles.closeButton}  
-          >  
-            <Feather name="x" size={24} color="#666" />  
-          </TouchableOpacity>  
-        </View>  
-  
-        <FlatList  
-          data={suppliers}  
-          keyExtractor={(item) => item.id}  
-          renderItem={({ item }) => (  
-            <TouchableOpacity  
-              style={[  
-                styles.modalOption,  
-                formData.proveedor_id === item.id && styles.modalOptionSelected  
-              ]}  
-              onPress={() => {  
-                updateFormData('proveedor_id', item.id)  
-                setSupplierModalVisible(false)  
-              }}  
-            >  
-              <Text style={[  
-                styles.modalOptionText,  
-                formData.proveedor_id === item.id && styles.modalOptionTextSelected  
-              ]}>  
-                {item.name}  
-              </Text>  
-              {formData.proveedor_id === item.id && (  
-                <Feather name="check" size={20} color="#1a73e8" />  
-              )}  
-            </TouchableOpacity>  
-          )}  
-          style={styles.modalContent}  
-        />  
-      </View>  
-    </Modal>  
-  )  
-  
   return (  
     <ScrollView style={styles.container}>  
       <View style={styles.header}>  
@@ -278,19 +225,7 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
           <Text style={styles.sectionTitle}>Información Básica</Text>  
             
           <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Código *</Text>  
-            <TextInput  
-              style={[styles.input, errors.codigo && styles.inputError]}  
-              value={formData.codigo}  
-              onChangeText={(value) => updateFormData('codigo', value)}  
-              placeholder="Código único del artículo"  
-              autoCapitalize="characters"  
-            />  
-            {errors.codigo && <Text style={styles.errorText}>{errors.codigo}</Text>}  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Nombre *</Text>  
+            <Text style={styles.label}>Nombre del Producto *</Text>  
             <TextInput  
               style={[styles.input, errors.producto && styles.inputError]}  
               value={formData.producto}  
@@ -319,96 +254,50 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
           </View>  
   
           <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Descripción</Text>  
+            <Text style={styles.label}>Precio Unitario *</Text>  
             <TextInput  
-              style={[styles.input, styles.textArea]}  
-              value={formData.descripcion}  
-              onChangeText={(value) => updateFormData('descripcion', value)}  
-              placeholder="Descripción del artículo"  
-              multiline  
-              numberOfLines={3}  
-              textAlignVertical="top"  
-            />  
-          </View>  
-        </View>  
-  
-        <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Precios e Inventario</Text>  
-            
-          <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Precio de Compra *</Text>  
-            <TextInput  
-              style={[styles.input, errors.precio_compra && styles.inputError]}  
-              value={formData.precio_compra?.toString()}  
-              onChangeText={(value) => updateFormData('precio_compra', parseFloat(value) || 0)}  
+              style={[styles.input, errors.precio_unitario && styles.inputError]}  
+              value={formData.precio_unitario?.toString()}  
+              onChangeText={(value) => updateFormData('precio_unitario', parseFloat(value) || 0)}  
               placeholder="0.00"  
               keyboardType="decimal-pad"  
             />  
-            {errors.precio_compra && <Text style={styles.errorText}>{errors.precio_compra}</Text>}  
+            {errors.precio_unitario && <Text style={styles.errorText}>{errors.precio_unitario}</Text>}  
           </View>  
   
           <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Precio de Venta *</Text>  
+            <Text style={styles.label}>Cantidad Inicial *</Text>  
             <TextInput  
-              style={[styles.input, errors.precio_venta && styles.inputError]}  
-              value={formData.precio_venta?.toString()}  
-              onChangeText={(value) => updateFormData('precio_venta', parseFloat(value) || 0)}  
-              placeholder="0.00"  
-              keyboardType="decimal-pad"  
-            />  
-            {errors.precio_venta && <Text style={styles.errorText}>{errors.precio_venta}</Text>}  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Stock Inicial *</Text>  
-            <TextInput  
-              style={[styles.input, errors.stock_actual && styles.inputError]}  
-              value={formData.stock_actual?.toString()}  
-              onChangeText={(value) => updateFormData('stock_actual', parseInt(value) || 0)}  
+              style={[styles.input, errors.cantidad && styles.inputError]}  
+              value={formData.cantidad?.toString()}  
+              onChangeText={(value) => updateFormData('cantidad', parseInt(value) || 0)}  
               placeholder="0"  
               keyboardType="number-pad"  
             />  
-            {errors.stock_actual && <Text style={styles.errorText}>{errors.stock_actual}</Text>}  
+            {errors.cantidad && <Text style={styles.errorText}>{errors.cantidad}</Text>}  
           </View>  
   
           <View style={styles.inputGroup}>  
             <Text style={styles.label}>Stock Mínimo *</Text>  
             <TextInput  
-              style={[styles.input, errors.stock_minimo && styles.inputError]}  
-              value={formData.stock_minimo?.toString()}  
-              onChangeText={(value) => updateFormData('stock_minimo', parseInt(value) || 0)}  
+              style={[styles.input, errors.minStock && styles.inputError]}  
+              value={formData.minStock?.toString()}  
+              onChangeText={(value) => updateFormData('minStock', parseInt(value) || 0)}  
               placeholder="0"  
               keyboardType="number-pad"  
             />  
-            {errors.stock_minimo && <Text style={styles.errorText}>{errors.stock_minimo}</Text>}  
+            {errors.minStock && <Text style={styles.errorText}>{errors.minStock}</Text>}  
           </View>  
   
           <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Ubicación en Almacén *</Text>  
+            <Text style={styles.label}>Lugar de Compra</Text>  
             <TextInput  
-              style={[styles.input, errors.ubicacion_almacen && styles.inputError]}  
-              value={formData.ubicacion_almacen}  
-              onChangeText={(value) => updateFormData('ubicacion_almacen', value)}  
-              placeholder="Ej: A-12, Estante 3"  
-              autoCapitalize="characters"  
+              style={styles.input}  
+              value={formData.lugar_compra}  
+              onChangeText={(value) => updateFormData('lugar_compra', value)}  
+              placeholder="Proveedor o lugar de compra"  
+              autoCapitalize="words"  
             />  
-            {errors.ubicacion_almacen && <Text style={styles.errorText}>{errors.ubicacion_almacen}</Text>}  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Proveedor (Opcional)</Text>  
-            <TouchableOpacity  
-              style={styles.selector}  
-              onPress={() => setSupplierModalVisible(true)}  
-            >  
-              <Text style={[  
-                styles.selectorText,  
-                !formData.proveedor_id && styles.placeholderText  
-              ]}>  
-                {getSelectedSupplierName()}  
-              </Text>  
-              <Feather name="chevron-down" size={20} color="#666" />  
-            </TouchableOpacity>  
           </View>  
         </View>  
       </View>  
@@ -439,11 +328,11 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
       </View>  
   
       {renderCategoryModal()}  
-      {renderSupplierModal()}  
     </ScrollView>  
   )  
 }  
   
+// Estilos permanecen igual...  
 const styles = StyleSheet.create({  
   container: {  
     flex: 1,  
@@ -506,10 +395,6 @@ const styles = StyleSheet.create({
   },  
   inputError: {  
     borderColor: "#e53935",  
-  },  
-  textArea: {  
-    height: 80,  
-    textAlignVertical: "top",  
   },  
   selector: {  
     backgroundColor: "#f8f9fa",  
@@ -614,10 +499,5 @@ const styles = StyleSheet.create({
   modalOptionTextSelected: {  
     color: "#1a73e8",  
     fontWeight: "500",  
-  },  
-  modalOptionDescription: {  
-    fontSize: 14,  
-    color: "#666",  
-    marginTop: 4,  
   },  
 })

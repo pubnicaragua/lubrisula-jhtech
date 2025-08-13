@@ -1,15 +1,26 @@
+// types/index.ts - Archivo maestro de re-exportaciones  
 import { StackNavigationProp } from "@react-navigation/stack"  
-import { RouteProp } from "@react-navigation/native"  
-import {   
-  ClientStackParamList,   
-  ClientVehiclesStackParamList,   
+import {  
+  ClientStackParamList,  
+  ClientVehiclesStackParamList,  
   ClientOrdersStackParamList,  
   InventoryStackParamList,  
   OrdersStackParamList,  
   ProfileStackParamList,  
-  ReportsStackParamList,  
-  RootStackParamList  
+  ReportsStackParamList  
 } from './navigation'  
+  
+// ✅ CORREGIDO: Re-exportar tipos centralizados (SIN DUPLICACIONES)  
+export * from './entities'  
+export * from './operations'  
+export * from './api'  
+export * from './user'  
+export * from './navigation'  
+export * from './inventory'  
+export * from './order'  
+export * from './services'  
+export * from './dashboard'  
+export * from './canvan'  
   
 // Tipos de moneda para los países de Centroamérica  
 export type CurrencyCode = "USD" | "GTQ" | "HNL" | "NIO" | "CRC" | "PAB" | "SVC" | "BZD"  
@@ -67,7 +78,7 @@ export type RepairProcess = {
   notes?: string  
 }  
   
-// Tipo para configuración de la empresa  
+// Tipo para configuración de empresa  
 export type CompanySettings = {  
   name: string  
   logo?: string  
@@ -84,33 +95,11 @@ export type CompanySettings = {
   invoiceNotes?: string  
 }  
   
-export interface CitasDetalleType {    
-  id: string    
-  client_id: string    
-  vehiculo_id: string    
-  fecha: string    
-  hora: string    
-  tipo_servicio: string    
-  estado: string    
-  notas?: string    
-  tecnico_id?: string    
-  costo?: number    
-  fecha_creacion: string    
-  // Related data properties  
-  tipos_operacion?: { nombre: string }  
-  clients?: { name: string }  
-  vehicles?: { marca: string; modelo: string; placa: string }  
-  tecnicos?: { nombre: string; apellido: string }  
-  hora_inicio?: string  
-  hora_fin?: string  
-  observaciones?: string  
-}  
-  
-// ✅ CORREGIDO: Eliminado 'any' y tipado estricto  
+// Tipos de navegación para pantallas  
 export type UiScreenNavProp = {  
   navigation: StackNavigationProp<  
-    | ClientStackParamList   
-    | ClientVehiclesStackParamList   
+    | ClientStackParamList  
+    | ClientVehiclesStackParamList  
     | ClientOrdersStackParamList  
     | InventoryStackParamList  
     | OrdersStackParamList  
@@ -119,66 +108,47 @@ export type UiScreenNavProp = {
   >  
 }  
   
-// ✅ CORREGIDO: Props tipadas específicamente para cada pantalla (eliminando 'any')  
+// Tipos específicos para cada stack  
 export type ClientScreenProps = {  
   navigation: StackNavigationProp<ClientStackParamList>  
-  route: RouteProp<ClientStackParamList, keyof ClientStackParamList>  
+  route: any  
 }  
   
 export type ClientVehiclesScreenProps = {  
   navigation: StackNavigationProp<ClientVehiclesStackParamList>  
-  route: RouteProp<ClientVehiclesStackParamList, keyof ClientVehiclesStackParamList>  
+  route: any  
 }  
   
 export type ClientOrdersScreenProps = {  
   navigation: StackNavigationProp<ClientOrdersStackParamList>  
-  route: RouteProp<ClientOrdersStackParamList, keyof ClientOrdersStackParamList>  
+  route: any  
 }  
   
 export type InventoryScreenProps = {  
   navigation: StackNavigationProp<InventoryStackParamList>  
-  route: RouteProp<InventoryStackParamList, keyof InventoryStackParamList>  
+  route: any  
 }  
   
 export type OrdersScreenProps = {  
   navigation: StackNavigationProp<OrdersStackParamList>  
-  route: RouteProp<OrdersStackParamList, keyof OrdersStackParamList>  
+  route: any  
 }  
   
 export type ProfileScreenProps = {  
   navigation: StackNavigationProp<ProfileStackParamList>  
-  route: RouteProp<ProfileStackParamList, keyof ProfileStackParamList>  
+  route: any  
 }  
   
 export type ReportsScreenProps = {  
   navigation: StackNavigationProp<ReportsStackParamList>  
-  route: RouteProp<ReportsStackParamList, keyof ReportsStackParamList>  
+  route: any  
 }  
   
-// ✅ CORREGIDO: Props genéricas completamente tipadas  
+// Common screen props type  
 export type UiScreenProps = {  
-  route: RouteProp<RootStackParamList, keyof RootStackParamList>  
-  navigation: StackNavigationProp<RootStackParamList>  
+  route: { params: any }  
+  navigation: StackNavigationProp<any>  
 }  
   
-// Re-exportar tipos de navegación  
-export * from './navigation'  
-  
-// Export all order-related types  
-export * from './order'  
-export * from './canvan'  
-export * from './services'  
-  
-// Tipo para crear un cliente según el schema de la base de datos  
-export type CreateClientType = {  
-  name: string                    // NOT NULL  
-  user_id?: string               // uuid, opcional  
-  company?: string               // text, opcional  
-  phone?: string                 // text, opcional  
-  email?: string                 // text, opcional  
-  client_type?: 'Individual' | 'Empresa'  // text, default 'Individual'  
-  taller_id?: string            // uuid, opcional, referencia a talleres(id)  
-}  
-  
-// Re-export Client type from client service  
-export type { Client } from '../services/supabase/client-service'
+// ✅ ELIMINADO: CreateClientType duplicado  
+// Este tipo ahora debe venir de './operations' como CreateClientData

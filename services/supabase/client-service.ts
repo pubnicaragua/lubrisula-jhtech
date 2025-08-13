@@ -1,185 +1,200 @@
-import { supabase, supabaseService } from '../../lib/supabase';
-import type { AppImage, CreateClientType } from '../../types';
-
-// Define types
-export type Client = {
-  id: string;
-  name: string;
-  user_id?: string;
-  company?: string;
-  phone?: string;
-  email?: string;
-  client_type?: 'Individual' | 'Empresa';
-  created_at: string;
-  updated_at?: string;
-  taller_id?: string;
-};
-
-// Client Service with Supabase integration
-export const clientService = {
-  // Get all clients with optional filtering
-  getAllClients: async (filters: Record<string, any> = {}): Promise<Client[]> => {
-    try {
-      let query = supabase.from('clients').select('*');
-
-      // Apply filters if provided
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          query = query.eq(key, value);
-        }
-      });
-
-      const { data, error } = await query.order('name');
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error('Error fetching clients:', error);
-      throw error;
-    }
-  },
-
-  // Get client by ID
-  getClientById: async (id: string): Promise<Client | null> => {
-    try {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('user_id', id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows returned
-      return data;
-    } catch (error) {
-      console.error(`Error fetching client with ID ${id}:`, error);
-      throw error;
-    }
-  },
-
-  // Get client by user ID
-  getClientByUserId: async (userId: string): Promise<Client | null> => {
-    try {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') throw error;
-      return data;
-    } catch (error) {
-      console.error(`Error fetching client for user ID ${userId}:`, error);
-      throw error;
-    }
-  },
-
-  // Create a new client
-  createClient: async (clientData: CreateClientType): Promise<Client> => {
-    try {
-      const newClient = {
-        ...clientData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      const { data, error } = await supabase
-        .from('clients')
-        .insert([newClient])
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Error creating client:', error);
-      throw error;
-    }
-  },
-
-  // Update an existing client
-  updateClient: async (id: string, updates: Partial<Client>): Promise<Client | null> => {
-    try {
-      const updateData = {
-        ...updates,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { data, error } = await supabase
-        .from('clients')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error(`Error updating client with ID ${id}:`, error);
-      throw error;
-    }
-  },
-
-  // Delete a client
-  deleteClient: async (id: string): Promise<boolean> => {
-    try {
-      const { error } = await supabase
-        .from('clients')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      return true;
-    } catch (error) {
-      console.error(`Error deleting client with ID ${id}:`, error);
-      throw error;
-    }
-  },
-
-  // Search clients by name, email, or phone
-  searchClients: async (query: string): Promise<Client[]> => {
-    try {
-      if (!query.trim()) return [];
-
-      const searchTerm = `%${query}%`;
-
-      const { data, error } = await supabase
-        .rpc('search_clients', { search_term: searchTerm });
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error('Error searching clients:', error);
-      throw error;
-    }
-  },
-
-  // Initialize with mock data (for development/testing)
-  initializeWithMockData: async (mockClients: Client[]): Promise<void> => {
-    try {
-      // First, clear existing data
-      await supabase.from('clients').delete().neq('id', '0');
-
-      // Insert mock data
-      const { error } = await supabase
-        .from('clients')
-        .insert(mockClients);
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error initializing mock client data:', error);
-      throw error;
-    }
-  },
-
-  initializeClients: async (userId: string): Promise<any> => {
-    try {
-      const clients = await clientService.getClientByUserId(userId);
-      return clients
-    } catch (error) {
-      console.error('Error initializing client service:', error);
-      throw error;
-    }
-  }
-};
-
-export default clientService;
+import { supabase } from '../../lib/supabase'  
+// ✅ CORREGIDO: Importar tipos centralizados  
+import {   
+  Client,   
+  EnhancedClient,   
+  CreateClientData,   
+  UpdateClientData,  
+  ClientFilters,  
+  ClientSearchResult   
+} from '../../types'  
+  
+// ❌ ELIMINADO: Definición duplicada de Client  
+// export type Client = { ... } - REMOVIDO  
+  
+export const clientService = {  
+  // ✅ CORREGIDO: Usar tipos centralizados  
+  async getAllClients(filters?: ClientFilters): Promise<Client[]> {  
+    try {  
+      let query = supabase.from('clients').select('*')  
+        
+      if (filters?.searchTerm) {  
+        query = query.or(`name.ilike.%${filters.searchTerm}%,email.ilike.%${filters.searchTerm}%`)  
+      }  
+        
+      if (filters?.client_type) {  
+        query = query.eq('client_type', filters.client_type)  
+      }  
+        
+      if (filters?.taller_id) {  
+        query = query.eq('taller_id', filters.taller_id)  
+      }  
+  
+      const { data, error } = await query.order('name')  
+        
+      if (error) throw error  
+      return data || []  
+    } catch (error) {  
+      console.error('Error getting all clients:', error)  
+      throw error  
+    }  
+  },  
+  
+  async getClientById(id: string): Promise<Client | null> {  
+    try {  
+      const { data, error } = await supabase  
+        .from('clients')  
+        .select('*')  
+        .eq('id', id)  
+        .single()  
+  
+      if (error && error.code !== 'PGRST116') throw error  
+      return data  
+    } catch (error) {  
+      console.error('Error getting client by ID:', error)  
+      throw error  
+    }  
+  },  
+  
+  async getClientByUserId(userId: string): Promise<Client | null> {  
+    try {  
+      const { data, error } = await supabase  
+        .from('clients')  
+        .select('*')  
+        .eq('user_id', userId)  
+        .single()  
+  
+      if (error && error.code !== 'PGRST116') throw error  
+      return data  
+    } catch (error) {  
+      console.error('Error getting client by user ID:', error)  
+      throw error  
+    }  
+  },  
+  
+  // ✅ CORREGIDO: Usar CreateClientData tipado  
+  async createClient(clientData: CreateClientData): Promise<Client> {  
+    try {  
+      const newClient = {  
+        ...clientData,  
+        created_at: new Date().toISOString(),  
+        updated_at: new Date().toISOString(),  
+      }  
+  
+      const { data, error } = await supabase  
+        .from('clients')  
+        .insert([newClient])  
+        .select()  
+        .single()  
+  
+      if (error) throw error  
+      return data  
+    } catch (error) {  
+      console.error('Error creating client:', error)  
+      throw error  
+    }  
+  },  
+  
+  // ✅ CORREGIDO: Usar UpdateClientData tipado  
+  async updateClient(id: string, updates: UpdateClientData): Promise<Client | null> {  
+    try {  
+      const updateData = {  
+        ...updates,  
+        updated_at: new Date().toISOString(),  
+      }  
+  
+      const { data, error } = await supabase  
+        .from('clients')  
+        .update(updateData)  
+        .eq('id', id)  
+        .select()  
+        .single()  
+  
+      if (error) throw error  
+      return data  
+    } catch (error) {  
+      console.error('Error updating client:', error)  
+      throw error  
+    }  
+  },  
+  
+  async deleteClient(id: string): Promise<boolean> {  
+    try {  
+      const { error } = await supabase  
+        .from('clients')  
+        .delete()  
+        .eq('id', id)  
+  
+      if (error) throw error  
+      return true  
+    } catch (error) {  
+      console.error('Error deleting client:', error)  
+      throw error  
+    }  
+  },  
+  
+  // ✅ CORREGIDO: Usar ClientSearchResult tipado  
+  async searchClients(query: string): Promise<ClientSearchResult> {  
+    try {  
+      const searchTerm = `%${query}%`  
+      const { data, error, count } = await supabase  
+        .rpc('search_clients', { search_term: searchTerm })  
+        .select('*', { count: 'exact' })  
+  
+      if (error) throw error  
+        
+      return {  
+        clients: data || [],  
+        total: count || 0,  
+        page: 1,  
+        limit: data?.length || 0  
+      }  
+    } catch (error) {  
+      console.error('Error searching clients:', error)  
+      throw error  
+    }  
+  },  
+  
+  // ✅ NUEVO: Obtener clientes enriquecidos con estadísticas  
+  async getEnhancedClients(filters?: ClientFilters): Promise<EnhancedClient[]> {  
+    try {  
+      const clients = await this.getAllClients(filters)  
+        
+      // Enriquecer con datos adicionales  
+      const enhancedClients = await Promise.all(  
+        clients.map(async (client) => {  
+          // Obtener estadísticas del cliente  
+          const { data: orders } = await supabase  
+            .from('orders')  
+            .select('id, total, created_at')  
+            .eq('client_id', client.id)  
+  
+          const { data: vehicles } = await supabase  
+            .from('vehicles')  
+            .select('id')  
+            .eq('client_id', client.id)  
+  
+          const orderCount = orders?.length || 0  
+          const vehicleCount = vehicles?.length || 0  
+          const totalSpent = orders?.reduce((sum, order) => sum + (order.total || 0), 0) || 0  
+          const lastOrderDate = orders?.[0]?.created_at  
+  
+          return {  
+            ...client,  
+            orderCount,  
+            vehicleCount,  
+            totalSpent,  
+            lastOrderDate  
+          } as EnhancedClient  
+        })  
+      )  
+  
+      return enhancedClients  
+    } catch (error) {  
+      console.error('Error getting enhanced clients:', error)  
+      throw error  
+    }  
+  }  
+}  
+  
+export default clientService
