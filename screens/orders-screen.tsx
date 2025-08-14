@@ -24,8 +24,9 @@ import ACCESOS_SERVICES from "../services/supabase/access-service"
 import USER_SERVICE from "../services/supabase/user-service"  
 import { RootStackParamList } from '../types/navigation'  
 import { Order } from '../types/order'  
-import { Client } from '../types/client'  
-import { Vehicle } from '../types/vehicle'  
+// ✅ CORREGIDO: Importar desde types/entities en lugar de types/client  
+import { Client } from '../types/entities'  
+import { Vehicle } from '../types/entities'  
   
 type OrdersNavigationProp = StackNavigationProp<RootStackParamList, 'Orders'>  
 type OrdersRouteProp = RouteProp<RootStackParamList, 'Orders'>  
@@ -61,19 +62,18 @@ export default function OrdersScreen({ navigation, route }: Props) {
       // Validar permisos del usuario  
       const userId = user.id as string  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(userId)  
-        
       if (!userTallerId) {  
         setError("No se pudo obtener la información del taller")  
         return  
       }  
-        
+  
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+      // ✅ CORREGIDO: Usar 'role' en lugar de 'rol'  
+      setUserRole(userPermissions?.role || 'client')  
   
       // Cargar órdenes según el rol  
       let ordersData: Order[] = []  
-        
-      if (userPermissions?.rol === 'client') {  
+      if (userPermissions?.role === 'client') {  
         // Cliente: solo sus órdenes  
         const client = await clientService.getClientByUserId(userId)  
         if (client) {  
@@ -94,17 +94,19 @@ export default function OrdersScreen({ navigation, route }: Props) {
       const enhancedOrders: EnhancedOrder[] = ordersData.map(order => {  
         const client = clients.find(c => c.id === order.clientId)  
         const vehicle = vehicles.find(v => v.id === order.vehicleId)  
-          
+  
         return {  
           ...order,  
           clientName: client?.name || "Cliente no especificado",  
-          vehicleInfo: vehicle ? `${vehicle.make} ${vehicle.model}` : "Vehículo no especificado"  
+          // ✅ CORREGIDO: Usar campos reales del schema de vehículos  
+          vehicleInfo: vehicle ? `${vehicle.marca} ${vehicle.modelo}` : "Vehículo no especificado"  
         }  
       })  
   
       // Ordenar por fecha de creación (más recientes primero)  
-      enhancedOrders.sort((a, b) =>   
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()  
+      enhancedOrders.sort((a, b) =>  
+        // ✅ CORREGIDO: Usar createdAt en lugar de created_at  
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()  
       )  
   
       setOrders(enhancedOrders)  
@@ -131,7 +133,8 @@ export default function OrdersScreen({ navigation, route }: Props) {
     // Filtrar por término de búsqueda  
     if (searchTerm) {  
       filtered = filtered.filter(order =>  
-        order.orderNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||  
+        // ✅ CORREGIDO: Usar 'id' en lugar de 'orderNumber' que no existe  
+        order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||  
         order.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||  
         order.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||  
         order.vehicleInfo?.toLowerCase().includes(searchTerm.toLowerCase())  
@@ -209,7 +212,8 @@ export default function OrdersScreen({ navigation, route }: Props) {
       onPress={() => handleOrderPress(item)}  
     >  
       <View style={styles.orderHeader}>  
-        <Text style={styles.orderNumber}>#{item.orderNumber || item.id.slice(0, 8)}</Text>  
+        {/* ✅ CORREGIDO: Usar 'id' en lugar de 'orderNumber' que no existe */}  
+        <Text style={styles.orderNumber}>#{item.id.slice(0, 8)}</Text>  
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>  
           <Text style={styles.statusText}>{getStatusText(item.status)}</Text>  
         </View>  
@@ -226,12 +230,11 @@ export default function OrdersScreen({ navigation, route }: Props) {
   
       <View style={styles.orderFooter}>  
         <Text style={styles.orderDate}>  
-          {new Date(item.created_at).toLocaleDateString('es-ES')}  
+          {/* ✅ CORREGIDO: Usar createdAt en lugar de created_at */}  
+          {new Date(item.createdAt).toLocaleDateString('es-ES')}  
         </Text>  
         {item.total && (  
-          <Text style={styles.orderTotal}>  
-            {formatCurrency(item.total)}  
-          </Text>  
+          <Text style={styles.orderTotal}>{formatCurrency(item.total)}</Text>  
         )}  
       </View>  
     </TouchableOpacity>  
@@ -271,7 +274,6 @@ export default function OrdersScreen({ navigation, route }: Props) {
             onChangeText={setSearchTerm}  
           />  
         </View>  
-          
         {userRole !== 'client' && (  
           <TouchableOpacity style={styles.addButton} onPress={handleAddOrder}>  
             <Feather name="plus" size={24} color="#fff" />  

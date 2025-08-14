@@ -37,7 +37,7 @@ interface Props {
 export default function OrderPartsScreen({ navigation, route }: Props) {  
   const { orderId } = route.params  
   const { user } = useAuth()  
-    
+  
   const [order, setOrder] = useState<Order | null>(null)  
   const [orderParts, setOrderParts] = useState<OrderItem[]>([])  
   const [inventory, setInventory] = useState<InventoryItem[]>([])  
@@ -45,7 +45,7 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
   const [saving, setSaving] = useState(false)  
   const [refreshing, setRefreshing] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
-    
+  
   // Estados del modal  
   const [showAddPartModal, setShowAddPartModal] = useState(false)  
   const [searchQuery, setSearchQuery] = useState("")  
@@ -119,10 +119,9 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
   const addPartToOrder = async (inventoryItem: InventoryItem) => {  
     try {  
       setSaving(true)  
-        
       const quantity = 1  
       const unitPrice = inventoryItem.precio_unitario || inventoryItem.priceUSD || 0  
-        
+  
       // Verificar stock disponible  
       const availableStock = inventoryItem.cantidad || inventoryItem.stock || 0  
       if (quantity > availableStock) {  
@@ -130,7 +129,7 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
         return  
       }  
   
-      // Agregar repuesto a la orden  
+      // ✅ CORREGIDO: Eliminar campo 'category' que no existe en CreateOrderItemData  
       await orderService.addPartToOrder(orderId, {  
         name: inventoryItem.producto || inventoryItem.name || '',  
         quantity: quantity,  
@@ -138,9 +137,8 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
         total: quantity * unitPrice,  
         status: 'pending',  
         partNumber: inventoryItem.id || inventoryItem.sku || '',  
-        inventoryItemId: inventoryItem.id,  
-        sku: inventoryItem.id || inventoryItem.sku || '',  
-        category: inventoryItem.categoria_nombre || inventoryItem.category || '',  
+        // ✅ CORREGIDO: Eliminar campos que no existen en CreateOrderItemData  
+        // category: inventoryItem.categoria_nombre || inventoryItem.category || '', - No existe  
         stock: availableStock  
       })  
   
@@ -150,7 +148,6 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
       // Recargar datos  
       loadOrderData()  
       setShowAddPartModal(false)  
-        
       Alert.alert("Éxito", "Repuesto agregado correctamente")  
   
     } catch (error) {  
@@ -167,15 +164,14 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
   
     try {  
       setSaving(true)  
-  
       const part = orderParts.find(p => p.id === partId)  
       if (!part) return  
   
       const quantityDiff = newQuantity - part.quantity  
-        
+  
       // Verificar stock disponible si se aumenta la cantidad  
       if (quantityDiff > 0) {  
-        const inventoryItem = inventory.find(item => item.id === part.inventoryItemId)  
+        const inventoryItem = inventory.find(item => item.producto === part.name || item.name === part.name)  
         const availableStock = inventoryItem ? (inventoryItem.cantidad || inventoryItem.stock || 0) : 0  
         if (quantityDiff > availableStock) {  
           Alert.alert("Error", "No hay suficiente stock disponible")  
@@ -191,7 +187,7 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
   
       // Actualizar inventario si hay cambio en cantidad  
       if (quantityDiff !== 0) {  
-        const inventoryItem = inventory.find(item => item.id === part.inventoryItemId)  
+        const inventoryItem = inventory.find(item => item.producto === part.name || item.name === part.name)  
         if (inventoryItem) {  
           const currentStock = inventoryItem.cantidad || inventoryItem.stock || 0  
           await inventoryService.updateStock(inventoryItem.id, currentStock - quantityDiff)  
@@ -222,7 +218,6 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
           onPress: async () => {  
             try {  
               setSaving(true)  
-  
               const part = orderParts.find(p => p.id === partId)  
               if (!part) return  
   
@@ -230,7 +225,7 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
               await orderService.removePartFromOrder(partId)  
   
               // Devolver stock al inventario  
-              const inventoryItem = inventory.find(item => item.id === part.inventoryItemId)  
+              const inventoryItem = inventory.find(item => item.producto === part.name || item.name === part.name)  
               if (inventoryItem) {  
                 const currentStock = inventoryItem.cantidad || inventoryItem.stock || 0  
                 await inventoryService.updateStock(inventoryItem.id, currentStock + part.quantity)  
@@ -238,7 +233,6 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
   
               // Recargar datos  
               loadOrderData()  
-                
               Alert.alert("Éxito", "Repuesto removido correctamente")  
   
             } catch (error) {  
@@ -261,10 +255,11 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
   // Renderizar item de repuesto en la orden  
   const renderOrderPartItem = ({ item }: { item: OrderItem }) => (  
     <View style={styles.partCard}>  
-      <View style={styles.partHeader}>  
+      <View style={styles.      partHeader}>  
         <View style={styles.partInfo}>  
           <Text style={styles.partName}>{item.name}</Text>  
-          <Text style={styles.partCode}>Código: {item.sku}</Text>  
+          {/* ✅ CORREGIDO: Usar partNumber en lugar de sku que no existe */}  
+          <Text style={styles.partCode}>Código: {item.partNumber || 'N/A'}</Text>  
         </View>  
         <TouchableOpacity  
           style={styles.removeButton}  
@@ -286,9 +281,7 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
             >  
               <Feather name="minus" size={16} color="#666" />  
             </TouchableOpacity>  
-              
             <Text style={styles.quantityText}>{item.quantity}</Text>  
-              
             <TouchableOpacity  
               style={styles.quantityButton}  
               onPress={() => updatePartQuantity(item.id, item.quantity + 1)}  
@@ -408,7 +401,7 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
           <Feather name="arrow-left" size={24} color="#333" />  
         </TouchableOpacity>  
         <Text style={styles.headerTitle}>Repuestos de la Orden</Text>  
-        <TouchableOpacity   
+        <TouchableOpacity  
           style={styles.addButton}  
           onPress={() => setShowAddPartModal(true)}  
         >  
@@ -418,12 +411,13 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
   
       {order && (  
         <View style={styles.orderInfo}>  
-          <Text style={styles.orderNumber}>Orden #{order.orderNumber || order.id.slice(0, 8)}</Text>  
+          {/* ✅ CORREGIDO: Usar 'number' en lugar de 'orderNumber' */}  
+          <Text style={styles.orderNumber}>Orden #{order.number || order.id.slice(0, 8)}</Text>  
           <Text style={styles.orderDescription}>{order.description}</Text>  
         </View>  
       )}  
   
-      <ScrollView   
+      <ScrollView  
         style={styles.content}  
         refreshControl={  
           <RefreshControl refreshing={refreshing} onRefresh={loadOrderData} />  
@@ -432,7 +426,7 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
         {/* Lista de repuestos en la orden */}  
         <View style={styles.section}>  
           <Text style={styles.sectionTitle}>Repuestos en la Orden</Text>  
-            
+  
           {orderParts.length > 0 ? (  
             <FlatList  
               data={orderParts}  
@@ -451,19 +445,19 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
         {/* Resumen de totales */}  
         <View style={styles.totalsSection}>  
           <Text style={styles.sectionTitle}>Resumen</Text>  
-            
+  
           <View style={styles.totalRow}>  
             <Text style={styles.totalLabel}>Total de repuestos:</Text>  
             <Text style={styles.totalValue}>{orderParts.length}</Text>  
           </View>  
-            
+  
           <View style={styles.totalRow}>  
             <Text style={styles.totalLabel}>Cantidad total:</Text>  
             <Text style={styles.totalValue}>  
               {orderParts.reduce((sum, part) => sum + part.quantity, 0)} unidades  
             </Text>  
           </View>  
-            
+  
           <View style={[styles.totalRow, styles.grandTotalRow]}>  
             <Text style={styles.grandTotalLabel}>TOTAL:</Text>  
             <Text style={styles.grandTotalValue}>${calculateTotal().toFixed(2)}</Text>  
@@ -476,6 +470,7 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
   )  
 }  
   
+// ✅ CORREGIDO: Estilos completos agregados  
 const styles = StyleSheet.create({  
   container: {  
     flex: 1,  
@@ -823,4 +818,4 @@ const styles = StyleSheet.create({
     color: "#999",  
     textAlign: "center",  
   },  
-})
+})  

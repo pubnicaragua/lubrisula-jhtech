@@ -1,34 +1,17 @@
 import { supabase } from '../../lib/supabase';  
-// ✅ CORREGIDO: Importar solo tipos que existen  
-import type {  
-  Order,  
-  OrderItem,  
-  OrderStatus,  
-  PaymentStatus,  
-  OrderImage,  
-  OrderComment,  
+import type {   
+  Order,   
+  OrderItem,   
+  OrderStatus,   
+  PaymentStatus,   
+  OrderImage,   
+  OrderComment,   
   RepairProcess,  
   CreateOrderData,  
-  UpdateOrderData  
-} from '../../types';  
-  
-// ✅ CORREGIDO: Definir tipos que faltan localmente  
-interface CreateOrderItemData {  
-  name: string  
-  quantity: number  
-  unitPrice: number  
-  total: number  
-  partNumber?: string  
-  supplier?: string  
-  status?: string  
-}  
-  
-interface CreateOrderCommentData {  
-  userId: string  
-  userName: string  
-  userAvatar?: string  
-  content: string  
-}  
+  UpdateOrderData,  
+  CreateOrderItemData,  
+  CreateOrderCommentData  
+} from '../../types/order';  
   
 const handleSupabaseError = (error: any, context: string) => {  
   console.error(`Error ${context}:`, error);  
@@ -47,21 +30,22 @@ export const orderService = {
         }  
       });  
   
-      const { data, error } = await query.order('fecha_creacion', { ascending: false });  
-  
+      const { data, error } = await query.order('created_at', { ascending: false });  
       if (error) throw error;  
   
       return (data || []).map(order => ({  
         ...order,  
-        // Map database fields to our type  
+        // ✅ CORREGIDO: Mapear campos de base de datos a tipos  
         clientId: order.client_id,  
         vehicleId: order.vehicle_id,  
         technicianId: order.technician_id,  
         estimatedCompletionDate: order.estimated_completion_date,  
-        completionDate: order.completion_date,  
-        // ✅ CORREGIDO: Usar campos del schema real  
-        created_at: order.created_at,  
-        updated_at: order.updated_at,  
+        paymentStatus: order.payment_status,  
+        paymentMethod: order.payment_method,  
+        paymentNotes: order.payment_notes,  
+        paidAmount: order.paid_amount,  
+        createdAt: order.created_at,  
+        updatedAt: order.updated_at,  
         // Initialize empty arrays that will be populated by separate queries  
         images: [],  
         comments: [],  
@@ -96,41 +80,58 @@ export const orderService = {
         supabase.from('order_images').select('*').eq('order_id', id),  
         supabase.from('order_comments').select('*').eq('order_id', id).order('created_at', { ascending: false }),  
         supabase.from('order_items').select('*').eq('order_id', id),  
-        supabase.from('repair_processes').select('*, images:process_images(*)').eq('order_id', id).order('start_date', { ascending: true }),  
+        supabase.from('repair_processes')  
+          .select('*, images:process_images(*)')  
+          .eq('order_id', id)  
+          .order('start_date', { ascending: true }),  
       ]);  
   
       return {  
         ...order,  
+        clientId: order.client_id,  
+        vehicleId: order.vehicle_id,  
+        technicianId: order.technician_id,  
         estimatedCompletionDate: order.estimated_completion_date,  
-        completionDate: order.completion_date,  
-        created_at: order.created_at,  
-        updated_at: order.updated_at,  
+        paymentStatus: order.payment_status,  
+        paymentMethod: order.payment_method,  
+        paymentNotes: order.payment_notes,  
+        paidAmount: order.paid_amount,  
+        createdAt: order.created_at,  
+        updatedAt: order.updated_at,  
         images: (images || []).map((img: any) => ({  
           id: img.id,  
+          orderId: id,  
           url: img.url,  
           description: img.description,  
           createdAt: img.created_at,  
         })),  
         comments: (comments || []).map((c: any) => ({  
           id: c.id,  
+          orderId: id,  
           userId: c.user_id,  
           userName: c.user_name,  
-          content: c.content,  
+          userAvatar: c.user_avatar,  
+          content: c.comment,  
+          type: c.type || 'technician',  
           createdAt: c.created_at,  
           updatedAt: c.updated_at,  
         })),  
         items: (items || []).map((item: any) => ({  
           id: item.id,  
+          orderId: id,  
           name: item.name,  
           quantity: item.quantity,  
           unitPrice: parseFloat(item.unit_price),  
-          total: parseFloat(item.total_price),  
+          total: parseFloat(item.total),  
           partNumber: item.part_number,  
           supplier: item.supplier,  
           status: item.status,  
+          createdAt: item.created_at,  
+          updatedAt: item.updated_at,  
         })),  
         repairProcesses: (repairProcesses || []).map((p: any) => ({  
           id: p.id,  
+          orderId: id,  
           name: p.name,  
           description: p.description,  
           startDate: p.start_date,  
@@ -141,6 +142,7 @@ export const orderService = {
           notes: p.notes,  
           images: (p.images || []).map((img: any) => ({  
             id: img.id,  
+            orderId: id,  
             url: img.url,  
             description: img.description,  
             createdAt: img.created_at,  
@@ -153,17 +155,95 @@ export const orderService = {
     }  
   },  
   
-  // Create a new order  
+  // Get orders by client ID  
+  getOrdersByClientId: async (clientId: string): Promise<Order[]> => {  
+    try {  
+      const { data, error } = await supabase  
+        .from('ordenes_trabajo')  
+        .select('*')  
+        .eq('client_id', clientId)  
+        .order('created_at', { ascending: false });  
+  
+      if (error) throw error;  
+  
+      return (data || []).map(order => ({  
+        ...order,  
+        clientId: order.client_id,  
+        vehicleId: order.vehicle_id,  
+        technicianId: order.technician_id,  
+        estimatedCompletionDate: order.estimated_completion_date,  
+        paymentStatus: order.payment_status,  
+        paymentMethod: order.payment_method,  
+        paymentNotes: order.payment_notes,  
+        paidAmount: order.paid_amount,  
+        createdAt: order.created_at,  
+        updatedAt: order.updated_at,  
+        images: [],  
+        comments: [],  
+        items: [],  
+        repairProcesses: [],  
+      }));  
+    } catch (error) {  
+      handleSupabaseError(error, 'fetch orders by client ID');  
+      return [];  
+    }  
+  },  
+  
+  // Get orders by vehicle ID  
+  getOrdersByVehicleId: async (vehicleId: string): Promise<Order[]> => {  
+    try {  
+      const { data, error } = await supabase  
+        .from('ordenes_trabajo')  
+        .select('*')  
+        .eq('vehicle_id', vehicleId)  
+        .order('created_at', { ascending: false });  
+  
+      if (error) throw error;  
+  
+      return (data || []).map(order => ({  
+        ...order,  
+        clientId: order.client_id,  
+        vehicleId: order.vehicle_id,  
+        technicianId: order.technician_id,  
+        estimatedCompletionDate: order.estimated_completion_date,  
+        paymentStatus: order.payment_status,  
+        paymentMethod: order.payment_method,  
+        paymentNotes: order.payment_notes,  
+        paidAmount: order.paid_amount,  
+        createdAt: order.created_at,  
+        updatedAt: order.updated_at,  
+        images: [],  
+        comments: [],  
+        items: [],  
+        repairProcesses: [],  
+      }));  
+    } catch (error) {  
+      handleSupabaseError(error, 'fetch orders by vehicle ID');  
+      return [];  
+    }  
+  },  
+  
+  // ✅ CORREGIDO: Crear orden con todos los campos necesarios  
   createOrder: async (orderData: CreateOrderData): Promise<Order> => {  
     try {  
-      const orderNumber = `ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;  
-        
-      // ✅ CORREGIDO: Usar solo campos que existen en CreateOrderData  
       const newOrder = {  
-        ...orderData,  
-        number: orderNumber,  
+        client_id: orderData.clientId,  
+        vehicle_id: orderData.vehicleId,  
+        technician_id: orderData.technicianId,  
+        description: orderData.description,  
+        diagnosis: orderData.diagnosis,  
+        status: orderData.status,  
         estimated_completion_date: orderData.estimatedCompletionDate,  
-        completion_date: orderData.completionDate,  
+        total: orderData.total,  
+        subtotal: orderData.subtotal,  
+        tax: orderData.tax,  
+        discount: orderData.discount,  
+        currency: orderData.currency,  
+        payment_status: orderData.paymentStatus,  
+        payment_method: orderData.paymentMethod,  
+        payment_notes: orderData.paymentNotes,  
+        paid_amount: orderData.paidAmount,  
+        notes: orderData.notes,  
         created_at: new Date().toISOString(),  
         updated_at: new Date().toISOString(),  
       };  
@@ -176,21 +256,46 @@ export const orderService = {
   
       if (error) throw error;  
   
-      return orderService.getOrderById(data.id) as Promise<Order>;  
+      return {  
+        ...data,  
+        clientId: data.client_id,  
+        vehicleId: data.vehicle_id,  
+        technicianId: data.technician_id,  
+        estimatedCompletionDate: data.estimated_completion_date,  
+        paymentStatus: data.payment_status,  
+        paymentMethod: data.payment_method,  
+        paymentNotes: data.payment_notes,  
+        paidAmount: data.paid_amount,  
+        createdAt: data.created_at,  
+        updatedAt: data.updated_at,  
+        images: [],  
+        comments: [],  
+        items: [],  
+        repairProcesses: [],  
+      };  
     } catch (error) {  
       handleSupabaseError(error, 'create order');  
       throw error;  
     }  
   },  
   
-  // Update an order  
-  updateOrder: async (id: string, updates: UpdateOrderData): Promise<Order | null> => {  
+   // ✅ CORREGIDO: Actualizar orden con todos los campos necesarios  
+   updateOrder: async (id: string, updates: UpdateOrderData): Promise<Order | null> => {  
     try {  
-      // ✅ CORREGIDO: Usar solo campos que existen en UpdateOrderData  
       const updateData = {  
-        ...updates,  
+        description: updates.description,  
+        diagnosis: updates.diagnosis,  
+        status: updates.status,  
         estimated_completion_date: updates.estimatedCompletionDate,  
-        completion_date: updates.completionDate,  
+        total: updates.total,  
+        subtotal: updates.subtotal,  
+        tax: updates.tax,  
+        discount: updates.discount,  
+        payment_status: updates.paymentStatus,  
+        payment_method: updates.paymentMethod,  
+        payment_notes: updates.paymentNotes,  
+        paid_amount: updates.paidAmount,  
+        notes: updates.notes,  
         updated_at: new Date().toISOString(),  
       };  
   
@@ -200,7 +305,6 @@ export const orderService = {
         .eq('id', id);  
   
       if (error) throw error;  
-  
       return orderService.getOrderById(id);  
     } catch (error) {  
       handleSupabaseError(error, `update order ${id}`);  
@@ -208,47 +312,50 @@ export const orderService = {
     }  
   },  
   
-  async updateOrderStatus(id: string, status: string): Promise<Order | null> {  
+  // Update order status  
+  updateOrderStatus: async (id: string, status: OrderStatus): Promise<Order | null> => {  
     try {  
-      const { data, error } = await supabase  
+      const { error } = await supabase  
         .from('ordenes_trabajo')  
-        .update({ status })  
-        .eq('id', id)  
+        .update({   
+          status,  
+          updated_at: new Date().toISOString()  
+        })  
+        .eq('id', id);  
   
-      if (error) throw error  
-  
-      return orderService.getOrderById(id)  
+      if (error) throw error;  
+      return orderService.getOrderById(id);  
     } catch (error) {  
       handleSupabaseError(error, `update order status ${id}`);  
       throw error;  
     }  
   },  
   
-  async deleteOrder(id: string): Promise<void> {  
+  // Delete order  
+  deleteOrder: async (id: string): Promise<void> => {  
     try {  
       const { error } = await supabase  
         .from('ordenes_trabajo')  
         .delete()  
-        .eq('id', id)  
+        .eq('id', id);  
   
-      if (error) throw error  
+      if (error) throw error;  
     } catch (error) {  
       handleSupabaseError(error, `delete order ${id}`);  
       throw error;  
     }  
   },  
   
-  // Add a comment to an order  
-  addOrderComment: async (  
-    orderId: string,  
-    comment: CreateOrderCommentData  
-  ): Promise<OrderComment> => {  
+  // ✅ CORREGIDO: Agregar comentario sin campo userAvatar en el tipo  
+  addOrderComment: async (orderId: string, comment: CreateOrderCommentData): Promise<OrderComment> => {  
     try {  
       const newComment = {  
         order_id: orderId,  
         user_id: comment.userId,  
         user_name: comment.userName,  
-        content: comment.content,  
+        user_avatar: comment.userAvatar,  
+        comment: comment.content,  
+        type: comment.type || 'technician',  
         created_at: new Date().toISOString(),  
         updated_at: new Date().toISOString(),  
       };  
@@ -266,10 +373,11 @@ export const orderService = {
         orderId: orderId,  
         userId: data.user_id,  
         userName: data.user_name,  
-        content: data.content,  
+        userAvatar: data.user_avatar,  
+        content: data.comment,  
+        type: data.type,  
         createdAt: data.created_at,  
         updatedAt: data.updated_at,  
-        type: 'technician' // Default type, can be made configurable  
       };  
     } catch (error) {  
       handleSupabaseError(error, `add comment to order ${orderId}`);  
@@ -277,147 +385,129 @@ export const orderService = {
     }  
   },  
   
-  async getOrdersByClientId(clientId: string): Promise<Order[]> {  
+  // Get order parts  
+  getOrderParts: async (orderId: string): Promise<OrderItem[]> => {  
     try {  
       const { data, error } = await supabase  
-        .from('ordenes_trabajo')  
-        .select('*')  
-        .eq('client_id', clientId)  
-        .order('fecha_creacion', { ascending: false })  
-  
-      if (error) {  
-        console.error('Error getting orders by client ID:', error)  
-        return []  
-      }  
-  
-      return (data || []).map(order => ({  
-        ...order,  
-        // Map database fields to our type  
-        clientId: order.client_id,  
-        vehicleId: order.vehicle_id,  
-        technicianId: order.technician_id,  
-        estimatedCompletionDate: order.estimated_completion_date,  
-        completionDate: order.completion_date,  
-        created_at: order.created_at,  
-        updated_at: order.updated_at,  
-        // Initialize empty arrays that will be populated by separate queries  
-        images: [],  
-        comments: [],  
-        items: [],  
-        repairProcesses: [],  
-      }))  
-    } catch (error) {  
-      console.error('Error in getOrdersByClientId:', error)  
-      return []  
-    }  
-  },  
-    
-  async initializeOrders(): Promise<void> {  
-    try {  
-      const orders = await orderService.getAllOrders();  
-    } catch (error) {  
-      console.error('Error initializing orders:', error);  
-      throw new Error('Failed to initialize orders. Please check your connection and try again.');  
-    }  
-  },  
-  
-  // Get parts for a specific order  
-  async getOrderParts(orderId: string): Promise<OrderItem[]> {  
-    try {  
-      const { data, error } = await supabase  
-        .from('order_parts')  
+        .from('order_items')  
         .select('*')  
         .eq('order_id', orderId);  
   
       if (error) throw error;  
-      return data || [];  
+      return (data || []).map(item => ({  
+        ...item,  
+        orderId: orderId,  
+        unitPrice: item.unit_price,  
+        partNumber: item.part_number,  
+        createdAt: item.created_at,  
+        updatedAt: item.updated_at,  
+      }));  
     } catch (error) {  
-      console.error(`Error fetching order parts for order ${orderId}:`, error);  
-      throw error;  
+      handleSupabaseError(error, `fetch order parts for order ${orderId}`);  
+      return [];  
     }  
   },  
   
-  // Add a part to an order  
-  async addPartToOrder(orderId: string, partData: CreateOrderItemData): Promise<OrderItem> {  
+  // Add part to order  
+  addPartToOrder: async (orderId: string, partData: CreateOrderItemData): Promise<OrderItem> => {  
     try {  
+      const newPart = {  
+        order_id: orderId,  
+        name: partData.name,  
+        quantity: partData.quantity,  
+        unit_price: partData.unitPrice,  
+        total: partData.total,  
+        part_number: partData.partNumber,  
+        supplier: partData.supplier,  
+        status: partData.status || 'pending',  
+        created_at: new Date().toISOString(),  
+        updated_at: new Date().toISOString(),  
+      };  
+  
       const { data, error } = await supabase  
-        .from('order_parts')  
-        .insert([{  
-          order_id: orderId,  
-          name: partData.name,  
-          quantity: partData.quantity,  
-          unit_price: partData.unitPrice,  
-          total: partData.total,  
-          part_number: partData.partNumber,  
-          supplier: partData.supplier,  
-          status: partData.status  
-        }])  
+        .from('order_items')  
+        .insert([newPart])  
         .select()  
         .single();  
   
       if (error) throw error;  
-      return data;  
+  
+      return {  
+        ...data,  
+        orderId: orderId,  
+        unitPrice: data.unit_price,  
+        partNumber: data.part_number,  
+        createdAt: data.created_at,  
+        updatedAt: data.updated_at,  
+      };  
     } catch (error) {  
-      console.error(`Error adding part to order ${orderId}:`, error);  
+      handleSupabaseError(error, `add part to order ${orderId}`);  
       throw error;  
     }  
   },  
   
-  // Update an order part  
-  async updateOrderPart(partId: string, updates: Partial<OrderItem>): Promise<OrderItem> {  
+  // ✅ CORREGIDO: Update order part sin campo status en Partial<OrderItem>  
+  updateOrderPart: async (partId: string, updates: Partial<CreateOrderItemData>): Promise<OrderItem> => {  
     try {  
-      const updateData: any = { ...updates };  
-        
-      // Map fields if necessary  
-      if ('unitPrice' in updates) updateData.unit_price = updates.unitPrice;  
-      if ('partNumber' in updates) updateData.part_number = updates.partNumber;  
+      const updateData: any = {  
+        name: updates.name,  
+        quantity: updates.quantity,  
+        unit_price: updates.unitPrice,  
+        total: updates.total,  
+        part_number: updates.partNumber,  
+        supplier: updates.supplier,  
+        status: updates.status,  
+        updated_at: new Date().toISOString(),  
+      };  
   
       const { data, error } = await supabase  
-        .from('order_parts')  
+        .from('order_items')  
         .update(updateData)  
         .eq('id', partId)  
         .select()  
         .single();  
   
       if (error) throw error;  
-      return data;  
+  
+      return {  
+        ...data,  
+        orderId: data.order_id,  
+        unitPrice: data.unit_price,  
+        partNumber: data.part_number,  
+        createdAt: data.created_at,  
+        updatedAt: data.updated_at,  
+      };  
     } catch (error) {  
-      console.error(`Error updating order part ${partId}:`, error);  
+      handleSupabaseError(error, `update order part ${partId}`);  
       throw error;  
     }  
   },  
   
-  // Remove a part from an order  
-  async removePartFromOrder(partId: string): Promise<void> {  
+  // Remove part from order  
+  removePartFromOrder: async (partId: string): Promise<void> => {  
     try {  
       const { error } = await supabase  
-        .from('order_parts')  
+        .from('order_items')  
         .delete()  
         .eq('id', partId);  
   
       if (error) throw error;  
     } catch (error) {  
-      console.error(`Error removing order part ${partId}:`, error);  
+      handleSupabaseError(error, `remove order part ${partId}`);  
       throw error;  
     }  
   },  
   
-  // Get orders by vehicle ID  
-  async getOrdersByVehicleId(vehicleId: string): Promise<Order[]> {  
+  // ✅ CORREGIDO: Método de inicialización simplificado  
+  initializeOrders: async (): Promise<void> => {  
     try {  
-      const { data, error } = await supabase  
-        .from('ordenes_trabajo')  
-        .select('*')  
-        .eq('vehicle_id', vehicleId)  
-        .order('created_at', { ascending: false });  
-  
-      if (error) throw error;  
-      return data || [];  
+      const orders = await orderService.getAllOrders();  
+      console.log(`Initialized ${orders.length} orders`);  
     } catch (error) {  
-      console.error(`Error fetching orders for vehicle ${vehicleId}:`, error);  
+      console.error('Error initializing orders:', error);  
       throw error;  
     }  
-  }  
+  },  
 };  
   
 export default orderService;

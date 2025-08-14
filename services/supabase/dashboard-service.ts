@@ -1,6 +1,8 @@
 import { orderService } from "../supabase/order-service"  
-// ✅ CORREGIDO: Importar tipos centralizados en lugar de servicios individuales  
-import { Client, Vehicle } from "../../types"  
+// ✅ CORREGIDO: Importar tipos centralizados  
+import { Order } from "../../types/order"  
+import { Client } from "../supabase/client-service"  
+import { Vehicle } from "../supabase/vehicle-service"  
 import { clientService } from "../supabase/client-service"  
 import { inventoryService } from "../supabase/inventory-service"  
 import { vehicleService } from "../supabase/vehicle-service"  
@@ -68,13 +70,11 @@ const dashboardService = {
   
         const clientOrders = orders.filter(order => order.clientId === userId)  
         const clientAppointments = appointments.filter(apt => apt.client_id === userId)  
-            
-        const pendingOrders = clientOrders.filter(order =>   
-          order.status !== "completed" && order.status !== "delivered"  
-        )  
-        const completedOrders = clientOrders.filter(order =>   
-          order.status === "completed" || order.status === "delivered"  
-        )  
+  
+        const pendingOrders = clientOrders.filter(order =>  
+          order.status !== "completed" && order.status !== "delivered")  
+        const completedOrders = clientOrders.filter(order =>  
+          order.status === "completed" || order.status === "delivered")  
   
         return {  
           totalOrders: clientOrders.length,  
@@ -93,17 +93,14 @@ const dashboardService = {
           CITAS_SERVICES.GET_ALL_CITAS_PROGRAMADAS_RECIENTES()  
         ])  
   
-        const pendingOrders = orders.filter(order =>   
-          order.status !== "completed" && order.status !== "delivered"  
-        )  
-        const completedOrders = orders.filter(order =>   
-          order.status === "completed" || order.status === "delivered"  
-        )  
-          
+        const pendingOrders = orders.filter(order =>  
+          order.status !== "completed" && order.status !== "delivered")  
+        const completedOrders = orders.filter(order =>  
+          order.status === "completed" || order.status === "delivered")  
+  
         // ✅ CORREGIDO: Usar cantidad en lugar de stock  
-        const lowStockItems = inventory.filter(item =>   
-          (item.cantidad || 0) <= (item.minStock || 5)  
-        )  
+        const lowStockItems = inventory.filter(item =>  
+          (item.cantidad || 0) <= (item.minStock || 5))  
   
         return {  
           totalOrders: orders.length,  
@@ -121,16 +118,12 @@ const dashboardService = {
     }  
   },  
   
-  async getRecentOrders(userId: string, userRole: string, limit: number = 5): Promise<any[]> {  
+  async getRecentOrders(userId: string, userRole: string, limit: number = 5): Promise<Order[]> {  
     try {  
       const orders = await orderService.getAllOrders()  
-          
       if (userRole === 'client') {  
-        return orders  
-          .filter(order => order.clientId === userId)  
-          .slice(0, limit)  
+        return orders.filter(order => order.clientId === userId).slice(0, limit)  
       }  
-          
       return orders.slice(0, limit)  
     } catch (error) {  
       console.error('Error getting recent orders:', error)  
@@ -154,18 +147,12 @@ const dashboardService = {
   async getInventoryStats(): Promise<InventoryStats> {  
     try {  
       const inventory = await inventoryService.getAllInventory()  
-          
-      const lowStockItems = inventory.filter(item =>   
-        (item.cantidad || 0) <= (item.minStock || 5)  
-      ).length  
-  
-      const outOfStockItems = inventory.filter(item =>   
-        (item.cantidad || 0) === 0  
-      ).length  
-  
-      const totalValue = inventory.reduce((sum, item) =>   
-        sum + ((item.cantidad || 0) * (item.precio_unitario || 0)), 0  
-      )  
+      const lowStockItems = inventory.filter(item =>  
+        (item.cantidad || 0) <= (item.minStock || 5)).length  
+      const outOfStockItems = inventory.filter(item =>  
+        (item.cantidad || 0) === 0).length  
+      const totalValue = inventory.reduce((sum, item) =>  
+        sum + ((item.cantidad || 0) * (item.precio_unitario || 0)), 0)  
   
       return {  
         totalItems: inventory.length,  
@@ -183,33 +170,29 @@ const dashboardService = {
   async getClientStats(): Promise<ClientStats> {  
     try {  
       const clients = await clientService.getAllClients()  
-        
       const now = new Date()  
       const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)  
       const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)  
-        
-      const newThisMonth = clients.filter(client =>   
-        new Date(client.created_at) >= thisMonth  
-      ).length  
-        
+  
+      const newThisMonth = clients.filter(client =>  
+        new Date(client.created_at) >= thisMonth).length  
+  
       const newLastMonth = clients.filter(client => {  
         const createdDate = new Date(client.created_at)  
         return createdDate >= lastMonth && createdDate < thisMonth  
       }).length  
   
-      const percentageChange = newLastMonth > 0   
-        ? ((newThisMonth - newLastMonth) / newLastMonth) * 100   
+      const percentageChange = newLastMonth > 0  
+        ? ((newThisMonth - newLastMonth) / newLastMonth) * 100  
         : 0  
   
       // Clientes activos (con órdenes en los últimos 3 meses)  
       const threeMonthsAgo = new Date()  
       threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)  
-        
       const orders = await orderService.getAllOrders()  
       const activeClientIds = new Set(  
-        orders  
-          .filter(order => new Date(order.created_at) >= threeMonthsAgo)  
-          .map(order => order.clientId)  
+        orders.filter(order => new Date(order.createdAt) >= threeMonthsAgo)  
+              .map(order => order.clientId)  
       )  
   
       return {  
@@ -227,27 +210,25 @@ const dashboardService = {
   async getRevenueStats(): Promise<RevenueStats> {  
     try {  
       const orders = await orderService.getAllOrders()  
-      const completedOrders = orders.filter(order =>   
-        order.status === "completed" || order.status === "delivered"  
-      )  
+      const completedOrders = orders.filter(order =>  
+        order.status === "completed" || order.status === "delivered")  
   
       const now = new Date()  
       const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)  
       const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)  
   
+      // ✅ CORREGIDO: Usar createdAt en lugar de created_at  
       const thisMonthRevenue = completedOrders  
-        .filter(order => new Date(order.created_at) >= thisMonth)  
+        .filter(order => new Date(order.createdAt) >= thisMonth)  
         .reduce((sum, order) => sum + (order.total || 0), 0)  
   
-      const lastMonthRevenue = completedOrders  
-        .filter(order => {  
-          const orderDate = new Date(order.created_at)  
-          return orderDate >= lastMonth && orderDate < thisMonth  
-        })  
-        .reduce((sum, order) => sum + (order.total || 0), 0)  
+      const lastMonthRevenue = completedOrders.filter(order => {  
+        const orderDate = new Date(order.createdAt)  
+        return orderDate >= lastMonth && orderDate < thisMonth  
+      }).reduce((sum, order) => sum + (order.total || 0), 0)  
   
-      const percentageChange = lastMonthRevenue > 0   
-        ? ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100   
+      const percentageChange = lastMonthRevenue > 0  
+        ? ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100  
         : 0  
   
       // Generar datos diarios para los últimos 30 días  
@@ -256,11 +237,9 @@ const dashboardService = {
         const date = new Date()  
         date.setDate(date.getDate() - i)  
         const dateStr = date.toISOString().split('T')[0]  
-          
         const dayRevenue = completedOrders  
-          .filter(order => order.created_at.startsWith(dateStr))  
+          .filter(order => order.createdAt.startsWith(dateStr))  
           .reduce((sum, order) => sum + (order.total || 0), 0)  
-          
         dailyRevenue.push({ date: dateStr, amount: dayRevenue })  
       }  
   
@@ -279,7 +258,6 @@ const dashboardService = {
   async getOrdersByStatus(): Promise<OrdersByStatus> {  
     try {  
       const orders = await orderService.getAllOrders()  
-        
       return {  
         pendiente: orders.filter(o => o.status === 'reception').length,  
         enProceso: orders.filter(o => o.status === 'in_progress').length,  
@@ -297,14 +275,13 @@ const dashboardService = {
   async getRecentActivity(userId: string, userRole: string, limit: number = 10): Promise<RecentActivity[]> {  
     try {  
       const activities: RecentActivity[] = []  
-  
       const [orders, clients] = await Promise.all([  
         orderService.getAllOrders(),  
         userRole !== 'client' ? clientService.getAllClients() : Promise.resolve([])  
       ])  
   
       // Agregar órdenes recientes  
-      const recentOrders = userRole === 'client'   
+      const recentOrders = userRole === 'client'  
         ? orders.filter(order => order.clientId === userId).slice(0, 5)  
         : orders.slice(0, 5)  
   
@@ -312,9 +289,11 @@ const dashboardService = {
         activities.push({  
           id: order.id,  
           type: 'order',  
-          title: `Orden #${order.orderNumber || order.id.slice(0, 8)}`,  
+          // ✅ CORREGIDO: Usar number en lugar de orderNumber  
+          title: `Orden #${order.number || order.id.slice(0, 8)}`,  
           description: order.description || 'Sin descripción',  
-          timestamp: order.created_at,  
+          // ✅ CORREGIDO: Usar createdAt en lugar de created_at  
+          timestamp: order.createdAt,  
           status: order.status  
         })  
       })  
@@ -337,7 +316,6 @@ const dashboardService = {
       return activities  
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())  
         .slice(0, limit)  
-  
     } catch (error) {  
       console.error('Error getting recent activity:', error)  
       throw error  
@@ -421,9 +399,7 @@ const dashboardService = {
   async getClientUpcomingAppointments(clientId: string, limit: number = 5): Promise<any[]> {  
     try {  
       const appointments = await CITAS_SERVICES.GET_ALL_CITAS_PROGRAMADAS_RECIENTES()  
-      return appointments  
-        .filter(appointment => appointment.client_id === clientId)  
-        .slice(0, limit)  
+      return appointments.filter(appointment => appointment.client_id === clientId).slice(0, limit)  
     } catch (error) {  
       console.error('Error getting client upcoming appointments:', error)  
       throw error  
@@ -434,16 +410,17 @@ const dashboardService = {
     try {  
       const vehicles = await vehicleService.getVehiclesByClientId(clientId)  
       const orders = await orderService.getAllOrders()  
-          
+        
       return vehicles.map(vehicle => {  
         const vehicleOrders = orders.filter(order => order.vehicleId === vehicle.id)  
         const lastOrder = vehicleOrders  
-          .sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())[0]  
+          .sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime())[0]  
             
         return {  
           ...vehicle,  
           totalOrders: vehicleOrders.length,  
-          lastServiceDate: lastOrder?.created_at || undefined,  
+          // ✅ CORREGIDO: Usar createdAt en lugar de created_at  
+          lastServiceDate: lastOrder?.createdAt || undefined,  
           pendingOrders: vehicleOrders.filter(order =>   
             order.status !== "completed" && order.status !== "delivered"  
           ).length  
@@ -462,7 +439,8 @@ const dashboardService = {
   
       if (startDate && endDate) {  
         filteredOrders = filteredOrders.filter(order => {  
-          const orderDate = new Date(order.created_at || '')  
+          // ✅ CORREGIDO: Usar createdAt en lugar de created_at  
+          const orderDate = new Date(order.createdAt || '')  
           return orderDate >= new Date(startDate) && orderDate <= new Date(endDate)  
         })  
       }  
@@ -471,7 +449,8 @@ const dashboardService = {
       const averageOrderValue = filteredOrders.length > 0 ? totalRevenue / filteredOrders.length : 0  
   
       const monthlyRevenue = filteredOrders.reduce((acc, order) => {  
-        const month = new Date(order.created_at || '').toISOString().slice(0, 7)  
+        // ✅ CORREGIDO: Usar createdAt en lugar de created_at  
+        const month = new Date(order.createdAt || '').toISOString().slice(0, 7)  
         acc[month] = (acc[month] || 0) + (order.total || 0)  
         return acc  
       }, {} as Record<string, number>)  

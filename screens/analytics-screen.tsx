@@ -5,76 +5,79 @@ import {
   View,  
   Text,  
   ScrollView,  
-  TouchableOpacity,  
   StyleSheet,  
   ActivityIndicator,  
-  Alert,  
+  RefreshControl,  
   Dimensions,  
-  Modal,  
+  TouchableOpacity,  
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
-import { LineChart, BarChart, PieChart } from "react-native-chart-kit"  
 import { useFocusEffect } from "@react-navigation/native"  
-import { useNavigation } from '@react-navigation/native'  
-import type { StackNavigationProp } from '@react-navigation/stack'  
+import { LineChart, BarChart, PieChart } from "react-native-chart-kit"  
 import { useAuth } from "../context/auth-context"  
+import dashboardService from "../services/supabase/dashboard-service"
 import { orderService } from "../services/supabase/order-service"  
 import { clientService } from "../services/supabase/client-service"  
+import { vehicleService } from "../services/supabase/vehicle-service"  
 import { inventoryService } from "../services/supabase/inventory-service"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service"  
-// ✅ CORREGIDO: Importar tipos centralizados  
 import { Order } from '../types/order'  
 import { Client } from '../types/entities'  
-import { InventoryItem } from '../types/inventory'  
+import { Vehicle } from '../types/entities'  
+  
+const { width: screenWidth } = Dimensions.get("window")  
   
 interface AnalyticsData {  
-  revenue: {  
-    total: number  
-    monthly: number[]  
-    growth: number  
+  revenueStats: {  
+    thisMonth: number  
+    lastMonth: number  
+    percentageChange: number  
+    dailyRevenue: Array<{ date: string; amount: number }>  
   }  
-  orders: {  
-    total: number  
-    completed: number  
-    pending: number  
-    cancelled: number  
-    averageValue: number  
+  clientStats: {  
+    totalClients: number  
+    newThisMonth: number  
+    activeClients: number  
+    percentageChange: number  
   }  
-  clients: {  
-    total: number  
-    active: number  
-    new: number  
-    retention: number  
+  orderStats: {  
+    totalOrders: number  
+    completedOrders: number  
+    pendingOrders: number  
+    averageOrderValue: number  
+    statusDistribution: Array<{ status: string; count: number; color: string }>  
   }  
-  inventory: {  
+  inventoryStats: {  
+    totalItems: number  
+    lowStockItems: number  
+    outOfStockItems: number  
     totalValue: number  
-    lowStock: number  
-    topSelling: Array<{ name: string; quantity: number }>  
   }  
-  performance: {  
-    averageCompletionTime: number  
-    customerSatisfaction: number  
-    efficiency: number  
+  vehicleStats: {  
+    totalVehicles: number  
+    activeVehicles: number  
+    vehiclesByBrand: Array<{ brand: string; count: number }>  
   }  
 }  
   
-export default function AnalyticsScreen() {  
+interface AnalyticsScreenProps {  
+  navigation: any  
+}  
+  
+export default function AnalyticsScreen({ navigation }: AnalyticsScreenProps) {  
   const { user } = useAuth()  
-  const navigation = useNavigation<StackNavigationProp<any>>()  
   const [loading, setLoading] = useState(true)  
+  const [refreshing, setRefreshing] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null)  
-  const [selectedPeriod, setSelectedPeriod] = useState<"week" | "month" | "quarter" | "year">("month")  
-  const [chartModalVisible, setChartModalVisible] = useState(false)  
-  const [selectedChart, setSelectedChart] = useState<string | null>(null)  
-  
-  const screenWidth = Dimensions.get("window").width - 32  
+  const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter'>('month')  
   
   const loadAnalyticsData = useCallback(async () => {  
     try {  
       setLoading(true)  
+      setRefreshing(true)  
       setError(null)  
   
       if (!user?.id) return  
@@ -88,32 +91,51 @@ export default function AnalyticsScreen() {
       }  
   
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
-        
-      // ✅ CORREGIDO: Usar 'role' en lugar de 'rol'  
       setUserRole(userPermissions?.role || 'client')  
   
-      // Solo staff puede ver analíticas  
+      // Solo permitir acceso a admin y técnicos  
       if (userPermissions?.role === 'client') {  
-        setError("No tienes permisos para ver las analíticas")  
+        setError("No tienes permisos para ver las analíticas del sistema")  
         return  
       }  
   
-      // Cargar datos desde Supabase  
-      const [orders, clients, inventory] = await Promise.all([  
+      // Cargar datos base  
+      const [orders, clients, vehicles, inventory] = await Promise.all([  
         orderService.getAllOrders(),  
         clientService.getAllClients(),  
+        vehicleService.getAllVehicles(),  
         inventoryService.getAllInventory()  
       ])  
   
-      // Procesar datos para analíticas  
-      const analytics = processAnalyticsData(orders, clients, inventory, selectedPeriod)  
-      setAnalyticsData(analytics)  
+      // Calcular estadísticas de ingresos  
+      const revenueStats = await calculateRevenueStats(orders)  
+        
+      // Calcular estadísticas de clientes  
+      const clientStats = calculateClientStats(clients, orders)  
+        
+      // Calcular estadísticas de órdenes  
+      const orderStats = calculateOrderStats(orders)  
+        
+      // Calcular estadísticas de inventario  
+      const inventoryStats = calculateInventoryStats(inventory)  
+        
+      // Calcular estadísticas de vehículos  
+      const vehicleStats = calculateVehicleStats(vehicles, orders)  
+  
+      setAnalyticsData({  
+        revenueStats,  
+        clientStats,  
+        orderStats,  
+        inventoryStats,  
+        vehicleStats  
+      })  
   
     } catch (error) {  
       console.error("Error loading analytics data:", error)  
       setError("No se pudieron cargar los datos de analíticas")  
     } finally {  
       setLoading(false)  
+      setRefreshing(false)  
     }  
   }, [user, selectedPeriod])  
   
@@ -123,180 +145,171 @@ export default function AnalyticsScreen() {
     }, [loadAnalyticsData])  
   )  
   
-  const processAnalyticsData = (orders: Order[], clients: Client[], inventory: InventoryItem[], period: string): AnalyticsData => {  
+  const calculateRevenueStats = async (orders: Order[]) => {  
     const now = new Date()  
-    const periodStart = getPeriodStart(now, period)  
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)  
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)  
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)  
   
-    // Filtrar órdenes por período  
-    const periodOrders = orders.filter(order => new Date(order.created_at) >= periodStart)  
-    const completedOrders = periodOrders.filter(order => order.status === "completed" || order.status === "delivered")  
+    const thisMonthOrders = orders.filter(order => {  
+      // ✅ CORREGIDO: Manejar undefined en constructor Date  
+      const orderDate = new Date(order.createdAt || '')  
+      return orderDate >= thisMonth && order.status === "completed"  
+    })  
   
-    // Calcular ingresos  
-    const totalRevenue = completedOrders.reduce((sum, order) => sum + (order.total || 0), 0)  
-    const monthlyRevenue = calculateMonthlyRevenue(orders)  
-    const previousPeriodRevenue = calculatePreviousPeriodRevenue(orders, period)  
-    const revenueGrowth = previousPeriodRevenue > 0 ? ((totalRevenue - previousPeriodRevenue) / previousPeriodRevenue) * 100 : 0  
+    const lastMonthOrders = orders.filter(order => {  
+      // ✅ CORREGIDO: Manejar undefined en constructor Date  
+      const orderDate = new Date(order.createdAt || '')  
+      return orderDate >= lastMonth && orderDate <= lastMonthEnd && order.status === "completed"  
+    })  
   
-    // Calcular métricas de órdenes  
-    const pendingOrders = periodOrders.filter(order =>  
-      !["completed", "delivered", "cancelled"].includes(order.status)  
-    ).length  
-    const cancelledOrders = periodOrders.filter(order => order.status === "cancelled").length  
-    const averageOrderValue = completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0  
+    const thisMonthRevenue = thisMonthOrders.reduce((sum, order) => sum + (order.total || 0), 0)  
+    const lastMonthRevenue = lastMonthOrders.reduce((sum, order) => sum + (order.total || 0), 0)  
+        
+    const percentageChange = lastMonthRevenue > 0   
+      ? ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100   
+      : 0  
   
-    // Calcular métricas de clientes  
-    const activeClients = getActiveClients(clients, orders, periodStart)  
-    const newClients = clients.filter(client => new Date(client.created_at) >= periodStart).length  
-    const clientRetention = calculateClientRetention(clients, orders)  
-  
-    // Calcular métricas de inventario  
-    const totalInventoryValue = inventory.reduce((sum, item) => sum + (item.cantidad * (item.precio_unitario || 0)), 0)  
-    const lowStockItems = inventory.filter(item => item.cantidad <= (item.minStock || 5)).length  
-    const topSellingItems = getTopSellingItems(orders, inventory)  
-  
-    // Calcular métricas de rendimiento  
-    const averageCompletionTime = calculateAverageCompletionTime(completedOrders)  
-    const customerSatisfaction = 4.2 // Placeholder - esto vendría de encuestas  
-    const efficiency = calculateEfficiency(orders, period)  
+    // Generar ingresos diarios de los últimos 7 días  
+    const dailyRevenue = []  
+    for (let i = 6; i >= 0; i--) {  
+      const date = new Date()  
+      date.setDate(date.getDate() - i)  
+      const dayOrders = orders.filter(order => {  
+        // ✅ CORREGIDO: Manejar undefined en constructor Date  
+        const orderDate = new Date(order.createdAt || '')  
+        return orderDate.toDateString() === date.toDateString() && order.status === "completed"  
+      })  
+      dailyRevenue.push({  
+        date: date.toISOString().split('T')[0],  
+        amount: dayOrders.reduce((sum, order) => sum + (order.total || 0), 0)  
+      })  
+    }  
   
     return {  
-      revenue: {  
-        total: totalRevenue,  
-        monthly: monthlyRevenue,  
-        growth: revenueGrowth  
-      },  
-      orders: {  
-        total: periodOrders.length,  
-        completed: completedOrders.length,  
-        pending: pendingOrders,  
-        cancelled: cancelledOrders,  
-        averageValue: averageOrderValue  
-      },  
-      clients: {  
-        total: clients.length,  
-        active: activeClients,  
-        new: newClients,  
-        retention: clientRetention  
-      },  
-      inventory: {  
-        totalValue: totalInventoryValue,  
-        lowStock: lowStockItems,  
-        topSelling: topSellingItems  
-      },  
-      performance: {  
-        averageCompletionTime,  
-        customerSatisfaction,  
-        efficiency  
-      }  
+      thisMonth: thisMonthRevenue,  
+      lastMonth: lastMonthRevenue,  
+      percentageChange,  
+      dailyRevenue  
     }  
   }  
   
-  const getPeriodStart = (now: Date, period: string): Date => {  
-    const start = new Date(now)  
-    switch (period) {  
-      case "week":  
-        start.setDate(now.getDate() - 7)  
-        break  
-      case "month":  
-        start.setMonth(now.getMonth() - 1)  
-        break  
-      case "quarter":  
-        start.setMonth(now.getMonth() - 3)  
-        break  
-      case "year":  
-        start.setFullYear(now.getFullYear() - 1)  
-        break  
-    }  
-    return start  
-  }  
-  
-  const calculateMonthlyRevenue = (orders: Order[]): number[] => {  
-    const months = Array(12).fill(0)  
-    const currentYear = new Date().getFullYear()  
-  
-    orders.forEach(order => {  
-      if (order.status === "completed" || order.status === "delivered") {  
-        const orderDate = new Date(order.created_at)  
-        if (orderDate.getFullYear() === currentYear) {  
-          months[orderDate.getMonth()] += order.total || 0  
-        }  
-      }  
-    })  
-  
-    return months  
-  }  
-  
-  const calculatePreviousPeriodRevenue = (orders: Order[], period: string): number => {  
+  const calculateClientStats = (clients: Client[], orders: Order[]) => {  
     const now = new Date()  
-    const periodStart = getPeriodStart(now, period)  
-    const previousPeriodStart = getPeriodStart(periodStart, period)  
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)  
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)  
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)  
   
-    return orders.filter(order => {  
-      const orderDate = new Date(order.created_at)  
-      return orderDate >= previousPeriodStart && orderDate < periodStart &&  
-        (order.status === "completed" || order.status === "delivered")  
-    }).reduce((sum, order) => sum + (order.total || 0), 0)  
+    const newThisMonth = clients.filter(client => {  
+      // ✅ CORREGIDO: Usar created_at en lugar de createdAt  
+      const clientDate = new Date(client.created_at)  
+      return clientDate >= thisMonth  
+    }).length  
+  
+    const newLastMonth = clients.filter(client => {  
+      // ✅ CORREGIDO: Usar created_at en lugar de createdAt  
+      const clientDate = new Date(client.created_at)  
+      return clientDate >= lastMonth && clientDate <= lastMonthEnd  
+    }).length  
+  
+    const activeClients = clients.filter(client => {  
+      return orders.some(order => order.clientId === client.id)  
+    }).length  
+  
+    const percentageChange = newLastMonth > 0   
+      ? ((newThisMonth - newLastMonth) / newLastMonth) * 100   
+      : 0  
+  
+    return {  
+      totalClients: clients.length,  
+      newThisMonth,  
+      activeClients,  
+      percentageChange  
+    }  
   }  
   
-  const getActiveClients = (clients: Client[], orders: Order[], periodStart: Date): number => {  
-    const activeClientIds = new Set(  
-      orders.filter(order => new Date(order.created_at) >= periodStart)  
-        .map(order => order.clientId)  
+  const calculateOrderStats = (orders: Order[]) => {  
+    const completedOrders = orders.filter(order =>   
+      order.status === "completed" || order.status === "delivered"  
     )  
-    return activeClientIds.size  
-  }  
-  
-  const calculateClientRetention = (clients: Client[], orders: Order[]): number => {  
-    const threeMonthsAgo = new Date()  
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)  
-  
-    const oldClients = clients.filter(client => new Date(client.created_at) < threeMonthsAgo)  
-    const activeOldClients = oldClients.filter(client =>  
-      orders.some(order =>  
-        order.clientId === client.id &&  
-        new Date(order.created_at) >= threeMonthsAgo  
-      )  
+    const pendingOrders = orders.filter(order =>   
+      order.status !== "completed" && order.status !== "delivered" && order.status !== "cancelled"  
     )  
   
-    return oldClients.length > 0 ? (activeOldClients.length / oldClients.length) * 100 : 0  
+    const totalRevenue = completedOrders.reduce((sum, order) => sum + (order.total || 0), 0)  
+    const averageOrderValue = completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0  
+  
+    // Distribución por estado  
+    const statusCounts = orders.reduce((acc, order) => {  
+      acc[order.status] = (acc[order.status] || 0) + 1  
+      return acc  
+    }, {} as Record<string, number>)  
+  
+    const statusColors = {  
+      'reception': '#ff9800',  
+      'diagnosis': '#2196f3',  
+      'waiting_parts': '#9c27b0',  
+      'in_progress': '#ff5722',  
+      'quality_check': '#607d8b',  
+      'completed': '#4caf50',  
+      'delivered': '#8bc34a',  
+      'cancelled': '#f44336'  
+    }  
+  
+    const statusDistribution = Object.entries(statusCounts).map(([status, count]) => ({  
+      status,  
+      count,  
+      color: statusColors[status as keyof typeof statusColors] || '#666'  
+    }))  
+  
+    return {  
+      totalOrders: orders.length,  
+      completedOrders: completedOrders.length,  
+      pendingOrders: pendingOrders.length,  
+      averageOrderValue,  
+      statusDistribution  
+    }  
   }  
   
-  const getTopSellingItems = (orders: Order[], inventory: InventoryItem[]) => {  
-    // Placeholder - esto requeriría datos de order_parts  
-    return inventory  
-      .sort((a, b) => (b.cantidad || 0) - (a.cantidad || 0))  
-      .slice(0, 5)  
-      .map(item => ({  
-        name: item.producto,  
-        quantity: item.cantidad || 0  
-      }))  
-  }  
-  
-  const calculateAverageCompletionTime = (completedOrders: Order[]): number => {  
-    if (completedOrders.length === 0) return 0  
-  
-    const totalDays = completedOrders.reduce((sum, order) => {  
-      const created = new Date(order.created_at)  
-      const completed = new Date(order.completionDate || order.updated_at)  
-      const days = Math.ceil((completed.getTime() - created.getTime()) / (1000 * 60 * 60 * 24))  
-      return sum + days  
+  const calculateInventoryStats = (inventory: any[]) => {  
+    const lowStockItems = inventory.filter(item => (item.cantidad || item.stock || 0) <= 5)  
+    const outOfStockItems = inventory.filter(item => (item.cantidad || item.stock || 0) === 0)  
+    const totalValue = inventory.reduce((sum, item) => {  
+      const stock = item.cantidad || item.stock || 0  
+      const price = item.precio_unitario || item.priceUSD || 0  
+      return sum + (stock * price)  
     }, 0)  
   
-    return totalDays / completedOrders.length  
+    return {  
+      totalItems: inventory.length,  
+      lowStockItems: lowStockItems.length,  
+      outOfStockItems: outOfStockItems.length,  
+      totalValue  
+    }  
   }  
   
-  const calculateEfficiency = (orders: Order[], period: string): number => {  
-    const periodStart = getPeriodStart(new Date(), period)  
-    const periodOrders = orders.filter(order => new Date(order.created_at) >= periodStart)  
-  
-    const completedOnTime = periodOrders.filter(order => {  
-      if (!order.estimatedCompletionDate) return true  
-      const estimated = new Date(order.estimatedCompletionDate)  
-      const actual = new Date(order.completionDate || order.updated_at)  
-      return actual <= estimated  
+  const calculateVehicleStats = (vehicles: Vehicle[], orders: Order[]) => {  
+    const activeVehicles = vehicles.filter(vehicle => {  
+      return orders.some(order => order.vehicleId === vehicle.id)  
     })  
   
-    return periodOrders.length > 0 ? (completedOnTime.length / periodOrders.length) * 100 : 0  
+    // Agrupar por marca  
+    const brandCounts = vehicles.reduce((acc, vehicle) => {  
+      const brand = vehicle.marca || 'Sin marca'  
+      acc[brand] = (acc[brand] || 0) + 1  
+      return acc  
+    }, {} as Record<string, number>)  
+  
+    const vehiclesByBrand = Object.entries(brandCounts)  
+      .map(([brand, count]) => ({ brand, count }))  
+      .sort((a, b) => b.count - a.count)  
+      .slice(0, 5) // Top 5 marcas  
+  
+    return {  
+      totalVehicles: vehicles.length,  
+      activeVehicles: activeVehicles.length,  
+      vehiclesByBrand  
+    }  
   }  
   
   const formatCurrency = (amount: number) => {  
@@ -309,108 +322,14 @@ export default function AnalyticsScreen() {
   }  
   
   const formatPercentage = (value: number) => {  
-    return `${value.toFixed(1)}%`  
+    const sign = value >= 0 ? '+' : ''  
+    return `${sign}${value.toFixed(1)}%`  
   }  
   
-  const chartConfig = {  
-    backgroundColor: "#ffffff",  
-    backgroundGradientFrom: "#ffffff",  
-    backgroundGradientTo: "#ffffff",  
-    decimalPlaces: 0,  
-    color: (opacity = 1) => `rgba(26, 115, 232, ${opacity})`,  
-    labelColor: (opacity = 1) => `rgba(51, 51, 51, ${opacity})`,  
-    style: {  
-      borderRadius: 16  
-    },  
-    propsForDots: {  
-      r: "6",  
-      strokeWidth: "2",  
-      stroke: "#1a73e8"  
-    }  
+  const onRefresh = () => {  
+    setRefreshing(true)  
+    loadAnalyticsData()  
   }  
-  
-  const renderMetricCard = (title: string, value: string, change?: number, icon: string, color: string) => (  
-    <View style={[styles.metricCard, { borderLeftColor: color }]}>  
-      <View style={styles.metricHeader}>  
-        <View style={[styles.metricIcon, { backgroundColor: `${color}20` }]}>  
-          <Feather name={icon as any} size={20} color={color} />  
-        </View>  
-        <Text style={styles.metricTitle}>{title}</Text>  
-      </View>  
-      <Text style={styles.metricValue}>{value}</Text>  
-      {change !== undefined && (  
-        <View style={styles.metricChange}>  
-          <Feather  
-            name={change >= 0 ? "trending-up" : "trending-down"}  
-            size={16}  
-            color={change >= 0 ? "#4caf50" : "#f44336"}  
-          />  
-          <Text style={[styles.metricChangeText, { color: change >= 0 ? "#4caf50" : "#f44336" }]}>  
-            {Math.abs(change).toFixed(1)}%  
-          </Text>  
-        </View>  
-      )}  
-    </View>  
-  )  
-  
-  const renderChartModal = () => (  
-    <Modal  
-      visible={chartModalVisible}  
-      animationType="slide"  
-      presentationStyle="pageSheet"  
-    >  
-      <View style={styles.modalContainer}>  
-        <View style={styles.modalHeader}>  
-          <Text style={styles.modalTitle}>Gráfico Detallado</Text>  
-          <TouchableOpacity  
-            onPress={() => setChartModalVisible(false)}  
-            style={styles.closeButton}  
-          >  
-            <Feather name="x" size={24} color="#666" />  
-          </TouchableOpacity>  
-        </View>  
-        <ScrollView style={styles.modalContent}>  
-          {selectedChart === "revenue" && analyticsData && (  
-            <View style={styles.chartContainer}>  
-              <Text style={styles.chartTitle}>Ingresos Mensuales</Text>  
-              <LineChart  
-                data={{  
-                  labels: ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"],  
-                  datasets: [{  
-                    data: analyticsData.revenue.monthly  
-                  }]  
-                }}  
-                width={screenWidth}  
-                height={220}  
-                chartConfig={chartConfig}  
-                bezier  
-                style={styles.chart}  
-              />  
-            </View>  
-          )}  
-          {selectedChart === "orders" && analyticsData && (  
-            <View style={styles.chartContainer}>  
-              <Text style={styles.chartTitle}>Distribución de Órdenes</Text>  
-              <PieChart  
-                data={[  
-                  { name: "Completadas", population: analyticsData.orders.completed, color: "#4caf50", legendFontColor: "#333", legendFontSize: 15 },  
-                  { name: "Pendientes", population: analyticsData.orders.pending, color: "#ff9800", legendFontColor: "#333", legendFontSize: 15 },  
-                  { name: "Canceladas", population: analyticsData.orders.cancelled, color: "#f44336", legendFontColor: "#333", legendFontSize: 15 }  
-                ]}  
-                width={screenWidth}  
-                height={220}  
-                chartConfig={chartConfig}  
-                accessor="population"  
-                backgroundColor="transparent"  
-                paddingLeft="15"  
-                absolute  
-              />  
-            </View>  
-          )}  
-        </ScrollView>  
-      </View>  
-    </Modal>  
-  )  
   
   if (loading) {  
     return (  
@@ -433,469 +352,376 @@ export default function AnalyticsScreen() {
     )  
   }  
   
-  if (!analyticsData) return null  
+  if (!analyticsData) {  
+    return (  
+      <View style={styles.errorContainer}>  
+        <Text style={styles.errorText}>No hay datos disponibles</Text>  
+      </View>  
+    )  
+  }  
+  
+  const chartConfig = {  
+    backgroundColor: "#ffffff",  
+    backgroundGradientFrom: "#ffffff",  
+    backgroundGradientTo: "#ffffff",  
+    decimalPlaces: 0,  
+    color: (opacity = 1) => `rgba(26, 115, 232, ${opacity})`,  
+    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,  
+    style: {  
+      borderRadius: 16  
+    },  
+    propsForDots: {  
+      r: "6",  
+      strokeWidth: "2",  
+      stroke: "#1a73e8"  
+    }  
+  }  
   
   return (  
-    <ScrollView style={styles.container}>  
+    <ScrollView  
+      style={styles.container}  
+      refreshControl={  
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />  
+      }  
+    >  
+      {/* Header */}  
       <View style={styles.header}>  
         <Text style={styles.headerTitle}>Analíticas del Taller</Text>  
         <View style={styles.periodSelector}>  
-          {["week", "month", "quarter", "year"].map((period) => (  
+          {(['week', 'month', 'quarter'] as const).map((period) => (  
             <TouchableOpacity  
-              key={period}  
-              style={[  
-                styles.periodButton,  
-                selectedPeriod === period && styles.periodButtonSelected  
-              ]}  
-              onPress={() => setSelectedPeriod(period as any)}  
-            >  
-              <Text style={[  
-                styles.periodButtonText,  
-                selectedPeriod === period && styles.periodButtonTextSelected  
-              ]}>  
-                {period === "week" ? "Semana" :  
-                 period === "month" ? "Mes" :  
-                 period === "quarter" ? "Trimestre" : "Año"}  
-              </Text>  
-            </TouchableOpacity>  
-          ))}  
-        </View>  
-      </View>  
-  
-      {/* Métricas principales */}  
-      <View style={styles.metricsContainer}>  
-        {renderMetricCard(  
-          "Ingresos Totales",  
-          formatCurrency(analyticsData.revenue.total),  
-          analyticsData.revenue.growth,  
-          "dollar-sign",  
-          "#4caf50"  
-        )}  
-        {renderMetricCard(  
-          "Órdenes Completadas",  
-          analyticsData.orders.completed.toString(),  
-          undefined,  
-          "check-circle",  
-          "#1a73e8"  
-        )}  
-        {renderMetricCard(  
-          "Clientes Activos",  
-          analyticsData.clients.active.toString(),  
-          undefined,  
-          "users",  
-          "#9c27b0"  
-        )}  
-        {renderMetricCard(  
-          "Eficiencia",  
-          formatPercentage(analyticsData.performance.efficiency),  
-          undefined,  
-          "trending-up",  
-          "#ff9800"  
-        )}  
-      </View>  
-  
-      {/* Gráfico de ingresos */}  
-      <View style={styles.chartSection}>  
-        <View style={styles.chartHeader}>  
-          <Text style={styles.chartSectionTitle}>Ingresos Mensuales</Text>  
-          <TouchableOpacity  
-            onPress={() => {  
-              setSelectedChart("revenue")  
-              setChartModalVisible(true)  
-            }}  
+            key={period}  
+            style={[  
+              styles.periodButton,  
+              selectedPeriod === period && styles.periodButtonActive  
+            ]}  
+            onPress={() => setSelectedPeriod(period)}  
           >  
-            <Feather name="maximize-2" size={20} color="#1a73e8" />  
+            <Text style={[  
+              styles.periodButtonText,  
+              selectedPeriod === period && styles.periodButtonTextActive  
+            ]}>  
+              {period === 'week' ? 'Semana' : period === 'month' ? 'Mes' : 'Trimestre'}  
+            </Text>  
           </TouchableOpacity>  
+        ))}  
+      </View>  
+    </View>  
+
+    {/* Estadísticas de Ingresos */}  
+    <View style={styles.section}>  
+      <Text style={styles.sectionTitle}>Ingresos</Text>  
+      <View style={styles.statsRow}>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Este Mes</Text>  
+          <Text style={styles.statValue}>{formatCurrency(analyticsData.revenueStats.thisMonth)}</Text>  
+          <Text style={[  
+            styles.statChange,  
+            { color: analyticsData.revenueStats.percentageChange >= 0 ? '#4caf50' : '#f44336' }  
+          ]}>  
+            {formatPercentage(analyticsData.revenueStats.percentageChange)}  
+          </Text>  
         </View>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Mes Anterior</Text>  
+          <Text style={styles.statValue}>{formatCurrency(analyticsData.revenueStats.lastMonth)}</Text>  
+        </View>  
+      </View>  
+
+      {/* Gráfico de Ingresos Diarios */}  
+      <View style={styles.chartContainer}>  
+        <Text style={styles.chartTitle}>Ingresos Últimos 7 Días</Text>  
         <LineChart  
           data={{  
-            labels: ["Ene", "Feb", "Mar", "Abr", "May", "Jun"],  
+            labels: analyticsData.revenueStats.dailyRevenue.map(item =>   
+              new Date(item.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })  
+            ),  
             datasets: [{  
-              data: analyticsData.revenue.monthly.slice(0, 6)  
+              data: analyticsData.revenueStats.dailyRevenue.map(item => item.amount)  
             }]  
           }}  
-          width={screenWidth}  
-          height={200}  
+          width={screenWidth - 32}  
+          height={220}  
           chartConfig={chartConfig}  
           bezier  
           style={styles.chart}  
         />  
       </View>  
-  
-      {/* Distribución de órdenes */}  
-      <View style={styles.chartSection}>  
-        <View style={styles.chartHeader}>  
-          <Text style={styles.chartSectionTitle}>Estado de Órdenes</Text>  
-          <TouchableOpacity  
-            onPress={() => {  
-              setSelectedChart("orders")  
-              setChartModalVisible(true)  
-            }}  
-          >  
-            <Feather name="maximize-2" size={20} color="#1a73e8" />  
-          </TouchableOpacity>  
+    </View>  
+
+    {/* Estadísticas de Clientes */}  
+    <View style={styles.section}>  
+      <Text style={styles.sectionTitle}>Clientes</Text>  
+      <View style={styles.statsRow}>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Total</Text>  
+          <Text style={styles.statValue}>{analyticsData.clientStats.totalClients}</Text>  
         </View>  
-        <View style={styles.orderStatsGrid}>  
-          <View style={styles.orderStatCard}>  
-            <Text style={styles.orderStatValue}>{analyticsData.orders.total}</Text>  
-            <Text style={styles.orderStatLabel}>Total</Text>  
-          </View>  
-          <View style={styles.orderStatCard}>  
-            <Text style={[styles.orderStatValue, { color: "#4caf50" }]}>  
-              {analyticsData.orders.completed}  
-            </Text>  
-            <Text style={styles.orderStatLabel}>Completadas</Text>  
-          </View>  
-          <View style={styles.orderStatCard}>  
-            <Text style={[styles.orderStatValue, { color: "#ff9800" }]}>  
-              {analyticsData.orders.pending}  
-            </Text>  
-            <Text style={styles.orderStatLabel}>Pendientes</Text>  
-          </View>  
-          <View style={styles.orderStatCard}>  
-            <Text style={[styles.orderStatValue, { color: "#f44336" }]}>  
-              {analyticsData.orders.cancelled}  
-            </Text>  
-            <Text style={styles.orderStatLabel}>Canceladas</Text>  
-          </View>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Nuevos Este Mes</Text>  
+          <Text style={styles.statValue}>{analyticsData.clientStats.newThisMonth}</Text>  
+          <Text style={[  
+            styles.statChange,  
+            { color: analyticsData.clientStats.percentageChange >= 0 ? '#4caf50' : '#f44336' }  
+          ]}>  
+            {formatPercentage(analyticsData.clientStats.percentageChange)}  
+          </Text>  
+        </View>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Activos</Text>  
+          <Text style={styles.statValue}>{analyticsData.clientStats.activeClients}</Text>  
         </View>  
       </View>  
-  
-      {/* Métricas de rendimiento */}  
-      <View style={styles.performanceSection}>  
-        <Text style={styles.sectionTitle}>Métricas de Rendimiento</Text>  
-        <View style={styles.performanceGrid}>  
-          <View style={styles.performanceCard}>  
-            <Feather name="clock" size={24} color="#1a73e8" />  
-            <Text style={styles.performanceValue}>  
-              {analyticsData.performance.averageCompletionTime.toFixed(1)} días  
-            </Text>  
-            <Text style={styles.performanceLabel}>Tiempo Promedio</Text>  
-          </View>  
-          <View style={styles.performanceCard}>  
-            <Feather name="star" size={24} color="#ff9800" />  
-            <Text style={styles.performanceValue}>  
-              {analyticsData.performance.customerSatisfaction.toFixed(1)}/5  
-            </Text>  
-            <Text style={styles.performanceLabel}>Satisfacción</Text>  
-          </View>  
-          <View style={styles.performanceCard}>  
-            <Feather name="percent" size={24} color="#4caf50" />  
-            <Text style={styles.performanceValue}>  
-              {formatPercentage(analyticsData.clients.retention)}  
-            </Text>  
-            <Text style={styles.performanceLabel}>Retención</Text>  
-          </View>  
+    </View>  
+
+    {/* Estadísticas de Órdenes */}  
+    <View style={styles.section}>  
+      <Text style={styles.sectionTitle}>Órdenes de Trabajo</Text>  
+      <View style={styles.statsRow}>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Total</Text>  
+          <Text style={styles.statValue}>{analyticsData.orderStats.totalOrders}</Text>  
+        </View>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Completadas</Text>  
+          <Text style={styles.statValue}>{analyticsData.orderStats.completedOrders}</Text>  
+        </View>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Pendientes</Text>  
+          <Text style={styles.statValue}>{analyticsData.orderStats.pendingOrders}</Text>  
+        </View>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Valor Promedio</Text>  
+          <Text style={styles.statValue}>{formatCurrency(analyticsData.orderStats.averageOrderValue)}</Text>  
         </View>  
       </View>  
-  
-      {/* Top productos */}  
-      <View style={styles.topProductsSection}>  
-        <Text style={styles.sectionTitle}>Productos Más Vendidos</Text>  
-        {analyticsData.inventory.topSelling.map((item, index) => (  
-          <View key={index} style={styles.topProductItem}>  
-            <View style={styles.topProductRank}>  
-              <Text style={styles.topProductRankText}>{index + 1}</Text>  
-            </View>  
-            <View style={styles.topProductInfo}>  
-              <Text style={styles.topProductName}>{item.name}</Text>  
-              <Text style={styles.topProductQuantity}>{item.quantity} unidades</Text>  
-            </View>  
-          </View>  
-        ))}  
+
+      {/* Gráfico de Distribución de Estados */}  
+      <View style={styles.chartContainer}>  
+        <Text style={styles.chartTitle}>Distribución por Estado</Text>  
+        <BarChart  
+  data={{  
+    labels: analyticsData.orderStats.statusDistribution.map(item =>   
+      item.status.substring(0, 8)  
+    ),  
+    datasets: [{  
+      data: analyticsData.orderStats.statusDistribution.map(item => item.count)  
+    }]  
+  }}  
+  width={screenWidth - 32}  
+  height={220}  
+  chartConfig={chartConfig}  
+  style={styles.chart}  
+  verticalLabelRotation={30}  
+  // ✅ AGREGAR estas propiedades requeridas  
+  yAxisLabel=""  
+  yAxisSuffix=""  
+/>
       </View>  
-  
-      {renderChartModal()}  
-    </ScrollView>  
-  )  
+    </View>  
+
+    {/* Estadísticas de Inventario */}  
+    <View style={styles.section}>  
+      <Text style={styles.sectionTitle}>Inventario</Text>  
+      <View style={styles.statsRow}>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Total Items</Text>  
+          <Text style={styles.statValue}>{analyticsData.inventoryStats.totalItems}</Text>  
+        </View>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Stock Bajo</Text>  
+          <Text style={[styles.statValue, { color: '#ff9800' }]}>  
+            {analyticsData.inventoryStats.lowStockItems}  
+          </Text>  
+        </View>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Sin Stock</Text>  
+          <Text style={[styles.statValue, { color: '#f44336' }]}>  
+            {analyticsData.inventoryStats.outOfStockItems}  
+          </Text>  
+        </View>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Valor Total</Text>  
+          <Text style={styles.statValue}>{formatCurrency(analyticsData.inventoryStats.totalValue)}</Text>  
+        </View>  
+      </View>  
+    </View>  
+
+    {/* Estadísticas de Vehículos */}  
+    <View style={styles.section}>  
+      <Text style={styles.sectionTitle}>Vehículos</Text>  
+      <View style={styles.statsRow}>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Total</Text>  
+          <Text style={styles.statValue}>{analyticsData.vehicleStats.totalVehicles}</Text>  
+        </View>  
+        <View style={styles.statCard}>  
+          <Text style={styles.statLabel}>Activos</Text>  
+          <Text style={styles.statValue}>{analyticsData.vehicleStats.activeVehicles}</Text>  
+        </View>  
+      </View>  
+
+      {/* Gráfico de Vehículos por Marca */}  
+      <View style={styles.chartContainer}>  
+        <Text style={styles.chartTitle}>Top 5 Marcas</Text>  
+        {analyticsData.vehicleStats.vehiclesByBrand.length > 0 && (  
+          <PieChart  
+            data={analyticsData.vehicleStats.vehiclesByBrand.map((item, index) => ({  
+              name: item.brand,  
+              population: item.count,  
+              color: `hsl(${index * 60}, 70%, 50%)`,  
+              legendFontColor: "#333",  
+              legendFontSize: 12  
+            }))}  
+            width={screenWidth - 32}  
+            height={220}  
+            chartConfig={chartConfig}  
+            accessor="population"  
+            backgroundColor="transparent"  
+            paddingLeft="15"  
+            style={styles.chart}  
+          />  
+        )}  
+      </View>  
+    </View>  
+  </ScrollView>  
+)  
 }  
-  
-// Los estilos permanecen igual que en el archivo original...  
+
 const styles = StyleSheet.create({  
-  container: {  
-    flex: 1,  
-    backgroundColor: "#f8f9fa",  
-  },  
-  loadingContainer: {  
-    flex: 1,  
-    justifyContent: "center",  
-    alignItems: "center",  
-    backgroundColor: "#f8f9fa",  
-  },  
-  loadingText: {  
-    marginTop: 10,  
-    fontSize: 16,  
-    color: "#666",  
-  },  
-  errorContainer: {  
-    flex: 1,  
-    justifyContent: "center",  
-    alignItems: "center",  
-    padding: 20,  
-  },  
-  errorText: {  
-    fontSize: 16,  
-    color: "#f44336",  
-    textAlign: "center",  
-    marginTop: 16,  
-    marginBottom: 20,  
-  },  
-  retryButton: {  
-    backgroundColor: "#1a73e8",  
-    paddingHorizontal: 20,  
-    paddingVertical: 10,  
-    borderRadius: 8,  
-  },  
-  retryButtonText: {  
-    color: "#fff",  
-    fontWeight: "bold",  
-  },  
-  header: {  
-    backgroundColor: "#fff",  
-    padding: 16,  
-    borderBottomWidth: 1,  
-    borderBottomColor: "#e1e4e8",  
-  },  
-  headerTitle: {  
-    fontSize: 24,  
-    fontWeight: "bold",  
-    color: "#333",  
-    marginBottom: 16,  
-  },  
-  periodSelector: {  
-    flexDirection: "row",  
-    backgroundColor: "#f5f5f5",  
-    borderRadius: 8,  
-    padding: 4,  
-  },  
-  periodButton: {  
-    flex: 1,  
-    paddingVertical: 8,  
-    paddingHorizontal: 12,  
-    borderRadius: 6,  
-    alignItems: "center",  
-  },  
-  periodButtonSelected: {  
-    backgroundColor: "#1a73e8",  
-  },  
-  periodButtonText: {  
-    fontSize: 14,  
-    color: "#666",  
-    fontWeight: "500",  
-  },  
-  periodButtonTextSelected: {  
-    color: "#fff",  
-    fontWeight: "600",  
-  },  
-  metricsContainer: {  
-    flexDirection: "row",  
-    flexWrap: "wrap",  
-    padding: 16,  
-    gap: 12,  
-  },  
-  metricCard: {  
-    backgroundColor: "#fff",  
-    borderRadius: 8,  
-    padding: 16,  
-    width: "48%",  
-    borderLeftWidth: 4,  
-    shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 1 },  
-    shadowOpacity: 0.1,  
-    shadowRadius: 2,  
-    elevation: 2,  
-  },  
-  metricHeader: {  
-    flexDirection: "row",  
-    alignItems: "center",  
-    marginBottom: 8,  
-  },  
-  metricIcon: {  
-    width: 32,  
-    height: 32,  
-    borderRadius: 16,  
-    justifyContent: "center",  
-    alignItems: "center",  
-    marginRight: 8,  
-  },  
-  metricTitle: {  
-    fontSize: 14,  
-    color: "#666",  
-    fontWeight: "500",  
-  },  
-  metricValue: {  
-    fontSize: 20,  
-    fontWeight: "bold",  
-    color: "#333",  
-    marginBottom: 4,  
-  },  
-  metricChange: {  
-    flexDirection: "row",  
-    alignItems: "center",  
-  },  
-  metricChangeText: {  
-    fontSize: 12,  
-    fontWeight: "600",  
-    marginLeft: 4,  
-  },  
-  chartSection: {  
-    backgroundColor: "#fff",  
-    margin: 16,  
-    borderRadius: 8,  
-    padding: 16,  
-    shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 1 },  
-    shadowOpacity: 0.1,  
-    shadowRadius: 2,  
-    elevation: 2,  
-  },  
-  chartHeader: {  
-    flexDirection: "row",  
-    justifyContent: "space-between",  
-    alignItems: "center",  
-    marginBottom: 16,  
-  },  
-  chartSectionTitle: {  
-    fontSize: 18,  
-    fontWeight: "bold",  
-    color: "#333",  
-  },  
-  chart: {  
-    borderRadius: 8,  
-  },  
-  orderStatsGrid: {  
-    flexDirection: "row",  
-    justifyContent: "space-between",  
-  },  
-  orderStatCard: {  
-    alignItems: "center",  
-    flex: 1,  
-  },  
-  orderStatValue: {  
-    fontSize: 24,  
-    fontWeight: "bold",  
-    color: "#333",  
-  },  
-  orderStatLabel: {  
-    fontSize: 12,  
-    color: "#666",  
-    marginTop: 4,  
-  },  
-  performanceSection: {  
-    backgroundColor: "#fff",  
-    margin: 16,  
-    borderRadius: 8,  
-    padding: 16,  
-    shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 1 },  
-    shadowOpacity: 0.1,  
-    shadowRadius: 2,  
-    elevation: 2,  
-  },  
-  sectionTitle: {  
-    fontSize: 18,  
-    fontWeight: "bold",  
-    color: "#333",  
-    marginBottom: 16,  
-  },  
-  performanceGrid: {  
-    flexDirection: "row",  
-    justifyContent: "space-between",  
-  },  
-  performanceCard: {  
-    alignItems: "center",  
-    flex: 1,  
-    padding: 12,  
-  },  
-  performanceValue: {  
-    fontSize: 18,  
-    fontWeight: "bold",  
-    color: "#333",  
-    marginTop: 8,  
-  },  
-  performanceLabel: {  
-    fontSize: 12,  
-    color: "#666",  
-    marginTop: 4,  
-    textAlign: "center",  
-  },  
-  topProductsSection: {  
-    backgroundColor: "#fff",  
-    margin: 16,  
-    borderRadius: 8,  
-    padding: 16,  
-    shadowColor: "#000",  
-    shadowOffset: { width: 0, height: 1 },  
-    shadowOpacity: 0.1,  
-    shadowRadius: 2,  
-    elevation: 2,  
-  },  
-  topProductItem: {  
-    flexDirection: "row",  
-    alignItems: "center",  
-    paddingVertical: 12,  
-    borderBottomWidth: 1,  
-    borderBottomColor: "#f0f0f0",  
-  },  
-  topProductRank: {  
-    width: 32,  
-    height: 32,  
-    borderRadius: 16,  
-    backgroundColor: "#1a73e8",  
-    justifyContent: "center",  
-    alignItems: "center",  
-    marginRight: 12,  
-  },  
-  topProductRankText: {  
-    fontSize: 14,  
-    fontWeight: "bold",  
-    color: "#fff",  
-  },  
-  topProductInfo: {  
-    flex: 1,  
-  },  
-  topProductName: {  
-    fontSize: 16,  
-    fontWeight: "600",  
-    color: "#333",  
-    marginBottom: 2,  
-  },  
-  topProductQuantity: {  
-    fontSize: 14,  
-    color: "#666",  
-  },  
-  modalContainer: {  
-    flex: 1,  
-    backgroundColor: "#fff",  
-  },  
-  modalHeader: {  
-    flexDirection: "row",  
-    justifyContent: "space-between",  
-    alignItems: "center",  
-    padding: 16,  
-    borderBottomWidth: 1,  
-    borderBottomColor: "#e1e4e8",  
-  },  
-  modalTitle: {  
-    fontSize: 20,  
-    fontWeight: "bold",  
-    color: "#333",  
-  },  
-  closeButton: {  
-    padding: 8,  
-  },  
-  modalContent: {  
-    flex: 1,  
-    padding: 16,  
-  },  
-  chartContainer: {  
-    alignItems: "center",  
-    marginBottom: 20,  
-  },  
-  chartTitle: {  
-    fontSize: 18,  
-    fontWeight: "bold",  
-    color: "#333",  
-    marginBottom: 16,  
-  },  
+container: {  
+  flex: 1,  
+  backgroundColor: "#f8f9fa",  
+},  
+loadingContainer: {  
+  flex: 1,  
+  justifyContent: "center",  
+  alignItems: "center",  
+  backgroundColor: "#f8f9fa",  
+},  
+loadingText: {  
+  marginTop: 10,  
+  fontSize: 16,  
+  color: "#666",  
+},  
+errorContainer: {  
+  flex: 1,  
+  justifyContent: "center",  
+  alignItems: "center",  
+  padding: 20,  
+},  
+errorText: {  
+  fontSize: 16,  
+  color: "#f44336",  
+  textAlign: "center",  
+  marginTop: 16,  
+  marginBottom: 20,  
+},  
+retryButton: {  
+  backgroundColor: "#1a73e8",  
+  paddingHorizontal: 20,  
+  paddingVertical: 10,  
+  borderRadius: 8,  
+},  
+retryButtonText: {  
+  color: "#fff",  
+  fontWeight: "bold",  
+},  
+header: {  
+  backgroundColor: "#fff",  
+  padding: 20,  
+  borderBottomWidth: 1,  
+  borderBottomColor: "#e1e4e8",  
+},  
+headerTitle: {  
+  fontSize: 24,  
+  fontWeight: "bold",  
+  color: "#333",  
+  marginBottom: 16,  
+},  
+periodSelector: {  
+  flexDirection: "row",  
+  backgroundColor: "#f5f5f5",  
+  borderRadius: 8,  
+  padding: 4,  
+},  
+periodButton: {  
+  flex: 1,  
+  paddingVertical: 8,  
+  paddingHorizontal: 12,  
+  borderRadius: 6,  
+  alignItems: "center",  
+},  
+periodButtonActive: {  
+  backgroundColor: "#1a73e8",  
+},  
+periodButtonText: {  
+  fontSize: 14,  
+  color: "#666",  
+  fontWeight: "500",  
+},  
+periodButtonTextActive: {  
+  color: "#fff",  
+  fontWeight: "600",  
+},  
+section: {  
+  backgroundColor: "#fff",  
+  margin: 16,  
+  borderRadius: 12,  
+  padding: 20,  
+  shadowColor: "#000",  
+  shadowOffset: { width: 0, height: 2 },  
+  shadowOpacity: 0.1,  
+  shadowRadius: 4,  
+  elevation: 3,  
+},  
+sectionTitle: {  
+  fontSize: 18,  
+  fontWeight: "bold",  
+  color: "#333",  
+  marginBottom: 16,  
+},  
+statsRow: {  
+  flexDirection: "row",  
+  flexWrap: "wrap",  
+  gap: 12,  
+},  
+statCard: {  
+  backgroundColor: "#f8f9fa",  
+  borderRadius: 8,  
+  padding: 16,  
+  flex: 1,  
+  minWidth: "45%",  
+  alignItems: "center",  
+},  
+statLabel: {  
+  fontSize: 12,  
+  color: "#666",  
+  marginBottom: 8,  
+  textAlign: "center",  
+},  
+statValue: {  
+  fontSize: 20,  
+  fontWeight: "bold",  
+  color: "#333",  
+  marginBottom: 4,  
+  textAlign: "center",  
+},  
+statChange: {  
+  fontSize: 12,  
+  fontWeight: "600",  
+},  
+chartContainer: {  
+  marginTop: 20,  
+},  
+chartTitle: {  
+  fontSize: 16,  
+  fontWeight: "600",  
+  color: "#333",  
+  marginBottom: 12,  
+  textAlign: "center",  
+},  
+chart: {  
+  borderRadius: 16,  
+},  
 })

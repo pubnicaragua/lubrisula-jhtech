@@ -1,6 +1,6 @@
 "use client"  
   
-import { useState, useCallback, useEffect } from "react"  
+import { useState, useCallback } from "react"  
 import {  
   StyleSheet,  
   View,  
@@ -9,7 +9,6 @@ import {
   ScrollView,  
   SafeAreaView,  
   Modal,  
-  TextInput,  
   Alert,  
   ActivityIndicator,  
   RefreshControl,  
@@ -17,13 +16,13 @@ import {
 import { Feather } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-// Importaciones corregidas para usar servicios de Supabase  
-import * as orderService from "../services/supabase/order-service"  
-import * as clientService from "../services/supabase/client-service"  
-import * as vehicleService from "../services/supabase/vehicle-service"  
-import * as accessService from "../services/supabase/access-service"  
-import * as userService from "../services/supabase/user-service"
-import { KanbanCardProps, KanbanColumnProps, KanbanOrderType, KanbanScreenProps, TechnicianType } from "../types/canvan"
+// ✅ CORREGIDO: Importaciones directas sin namespace anidado  
+import { orderService } from "../services/supabase/order-service"  
+import { clientService } from "../services/supabase/client-service"  
+import { vehicleService } from "../services/supabase/vehicle-service"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service"  
+import { KanbanCardProps, KanbanColumnProps, KanbanOrderType, KanbanScreenProps, TechnicianType } from "../types/canvan"  
   
 // Estados disponibles para las órdenes  
 const KANBAN_COLUMNS = [  
@@ -33,7 +32,7 @@ const KANBAN_COLUMNS = [
     color: "#1a73e8",  
     description: "Vehículos recién llegados pendientes de diagnóstico inicial",  
     allowedTransitions: ["diagnosis"],  
-    status: "Pendiente"  
+    status: "reception"  
   },  
   {  
     id: "diagnosis",  
@@ -41,7 +40,7 @@ const KANBAN_COLUMNS = [
     color: "#f5a623",  
     description: "Evaluación técnica del problema",  
     allowedTransitions: ["waiting_parts", "in_progress"],  
-    status: "En Diagnóstico"  
+    status: "diagnosis"  
   },  
   {  
     id: "waiting_parts",  
@@ -49,7 +48,7 @@ const KANBAN_COLUMNS = [
     color: "#9c27b0",  
     description: "Esperando llegada de repuestos necesarios",  
     allowedTransitions: ["in_progress"],  
-    status: "Esperando Repuestos"  
+    status: "waiting_parts"  
   },  
   {  
     id: "in_progress",  
@@ -57,7 +56,7 @@ const KANBAN_COLUMNS = [
     color: "#ff9800",  
     description: "Trabajo en progreso",  
     allowedTransitions: ["quality_check"],  
-    status: "En Proceso"  
+    status: "in_progress"  
   },  
   {  
     id: "quality_check",  
@@ -65,7 +64,7 @@ const KANBAN_COLUMNS = [
     color: "#607d8b",  
     description: "Revisión final antes de entrega",  
     allowedTransitions: ["completed"],  
-    status: "Control Calidad"  
+    status: "quality_check"  
   },  
   {  
     id: "completed",  
@@ -73,7 +72,7 @@ const KANBAN_COLUMNS = [
     color: "#4caf50",  
     description: "Trabajo terminado, listo para entrega",  
     allowedTransitions: [],  
-    status: "Completada"  
+    status: "completed"  
   }  
 ]  
   
@@ -102,13 +101,11 @@ const KanbanCard = ({ card, onPress, onLongPress }: KanbanCardProps) => {
           <Text style={styles.priorityText}>{card.prioridad}</Text>  
         </View>  
       </View>  
-        
       <Text style={styles.cardClient}>{card.client_info?.name}</Text>  
       <Text style={styles.cardPlate}>{card.vehiculo_info?.placa}</Text>  
       <Text style={styles.cardDescription} numberOfLines={2}>  
         {card.descripcion}  
       </Text>  
-        
       <View style={styles.cardFooter}>  
         <Text style={styles.cardTime}>  
           {new Date(card.fecha_creacion).toLocaleDateString("es-ES")}  
@@ -131,9 +128,7 @@ const KanbanColumn = ({ column, onCardPress, onCardLongPress, onDrop, isDropArea
           <Text style={styles.columnCount}>{column.cards?.length || 0}</Text>  
         </View>  
       </View>  
-  
       <Text style={styles.columnDescription}>{column.description}</Text>  
-  
       <ScrollView style={styles.columnScroll}>  
         {column.cards?.map((card) => (  
           <KanbanCard  
@@ -144,7 +139,6 @@ const KanbanColumn = ({ column, onCardPress, onCardLongPress, onDrop, isDropArea
           />  
         ))}  
       </ScrollView>  
-  
       <TouchableOpacity style={styles.addCardButton} onPress={() => onAddCard(column)}>  
         <Feather name="plus" size={16} color="#1a73e8" />  
         <Text style={styles.addCardText}>Agregar Orden</Text>  
@@ -177,54 +171,67 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await userService.userService.GET_TALLER_ID(user.id)
-      if (!userTallerId) {
+      // ✅ CORREGIDO: Usar USER_SERVICE directamente  
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {  
         setError("No se pudo cargar la información del cliente")  
-        return
-      }    
-      const userPermissions = await accessService.accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+        return  
+      }  
   
-      if (userPermissions?.rol === 'client') {  
+      // ✅ CORREGIDO: Usar ACCESOS_SERVICES directamente  
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      // ✅ CORREGIDO: Usar 'role' en lugar de 'rol'  
+      setUserRole(userPermissions?.role || 'client')  
+  
+      if (userPermissions?.role === 'client') {  
         setError("No tienes permisos para ver el tablero Kanban")  
         return  
       }  
   
       // Cargar todas las órdenes  
-      const allOrders = await orderService.orderService.getAllOrders()  
-        
-      // Enriquecer órdenes con información adicional  
-      const enrichedOrders = await Promise.all(  
-        allOrders.map(async (order: any) => {  
-          const [clientInfo, vehicleInfo, technicianInfo] = await Promise.all([  
-            order.client_id ? clientService.clientService.getClientById(order.client_id) : null,  
-            order.vehiculo_id ? vehicleService.vehicleService.getVehicleById(order.vehiculo_id) : null,  
-            order.tecnico_id ? userService.userService.GetUserById(order.tecnico_id) : null  
-          ])  
+      // ✅ CORREGIDO: Usar orderService directamente  
+      const allOrders = await orderService.getAllOrders()  
   
-          return {  
-            ...order,  
-            client_info: clientInfo,  
-            vehiculo_info: vehicleInfo,  
-            tecnico_info: technicianInfo  
-          }  
-        })  
-      )  
+      // Enriquecer órdenes con información adicional  
+      const enrichedOrders = await Promise.all(allOrders.map(async (order: any) => {  
+        const [clientInfo, vehicleInfo, technicianInfo] = await Promise.all([  
+          order.clientId ? clientService.getClientById(order.clientId) : null,  
+          order.vehicleId ? vehicleService.getVehicleById(order.vehicleId) : null,  
+          order.technicianId ? USER_SERVICE.GetUserById(order.technicianId) : null  
+        ])  
+  
+        return {  
+          ...order,  
+          client_info: clientInfo,  
+          vehiculo_info: vehicleInfo,  
+          tecnico_info: technicianInfo,  
+          // Mapear campos para compatibilidad con KanbanOrderType  
+          id: order.id,  
+          numero_orden: order.id.slice(0, 8),  
+          descripcion: order.description,  
+          estado: order.status,  
+          prioridad: order.priority || 'normal',  
+          fecha_creacion: order.createdAt,  
+          tecnico_id: order.technicianId,  
+          costo: order.total,  
+          observacion: order.notes  
+        }  
+      }))  
   
       setOrders(enrichedOrders)  
-        
+  
       // Organizar órdenes por columnas  
       const updatedColumns = KANBAN_COLUMNS.map(column => ({  
         ...column,  
         cards: enrichedOrders.filter((order: KanbanOrderType) => {  
           // Mapear estados de órdenes a columnas del Kanban  
           const statusMapping: Record<string, string> = {  
-            "Pendiente": "reception",  
-            "En Diagnóstico": "diagnosis",   
-            "Esperando Repuestos": "waiting_parts",  
-            "En Proceso": "in_progress",  
-            "Control Calidad": "quality_check",  
-            "Completada": "completed"  
+            "reception": "reception",  
+            "diagnosis": "diagnosis",  
+            "waiting_parts": "waiting_parts",  
+            "in_progress": "in_progress",  
+            "quality_check": "quality_check",  
+            "completed": "completed"  
           }  
           return statusMapping[order.estado] === column.id  
         })  
@@ -268,12 +275,12 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
       if (!targetColumn) return  
   
       // Actualizar estado en Supabase  
-      await orderService.orderService.updateOrderStatus(cardId, targetColumn.status)  
-        
+      await orderService.updateOrder(cardId, { status: targetColumn.status as any })  
+  
       // Recargar datos  
       loadKanbanData()  
       setShowMoveModal(false)  
-        
+  
       Alert.alert("Éxito", "Orden movida correctamente")  
     } catch (error) {  
       console.error("Error moving card:", error)  
@@ -283,7 +290,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
   
   // Función para agregar una nueva orden  
   const handleAddCard = (column: any) => {  
-    navigation.navigate("NewOrder", {   
+    navigation.navigate("NewOrder", {  
       initialStatus: column.status,  
       returnTo: "Kanban"  
     })  
@@ -303,7 +310,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
           style: "destructive",  
           onPress: async () => {  
             try {  
-              await orderService.orderService.deleteOrder(selectedCard.id)  
+              await orderService.deleteOrder(selectedCard.id)  
               setShowCardModal(false)  
               loadKanbanData()  
               Alert.alert("Éxito", "Orden eliminada correctamente")  
@@ -336,7 +343,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
       if (order.tecnico_info) {  
         technicians.add({  
           id: order.tecnico_id,  
-          name: order.tecnico_info.nombre  
+          nombre: order.tecnico_info.nombre  
         })  
       }  
     })  
@@ -363,8 +370,8 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
         </TouchableOpacity>  
         <Text style={styles.headerTitle}>Tablero Kanban</Text>  
         <TouchableOpacity style={styles.filterButton} onPress={() => setShowFilter(!showFilter)}>  
-          <Feather name="filter" size={20} color="#1a73e8" /> 
-          </TouchableOpacity>  
+          <Feather name="filter" size={20} color="#1a73e8" />  
+        </TouchableOpacity>  
       </View>  
   
       {showFilter && (  
@@ -442,9 +449,9 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
         </View>  
       )}  
   
-      <ScrollView   
-        horizontal   
-        showsHorizontalScrollIndicator={false}   
+      <ScrollView  
+        horizontal  
+        showsHorizontalScrollIndicator={false}  
         contentContainerStyle={styles.kanbanContainer}  
         refreshControl={  
           <RefreshControl refreshing={refreshing} onRefresh={loadKanbanData} colors={["#1a73e8"]} />  
@@ -522,9 +529,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
   
                 <View style={styles.cardDetailSection}>  
                   <Text style={styles.cardDetailLabel}>Costo</Text>  
-                  <Text style={styles.cardDetailValue}>  
-                    ${selectedCard.costo?.toFixed(2) || "0.00"}  
-                  </Text>  
+                  <Text style={styles.cardDetailValue}>${selectedCard.costo?.toFixed(2) || "0.00"}</Text>  
                 </View>  
   
                 <View style={styles.cardDetailSection}>  
@@ -545,7 +550,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
           </ScrollView>  
   
           <View style={styles.modalFooter}>  
-            <TouchableOpacity   
+            <TouchableOpacity  
               style={styles.modalActionButton}  
               onPress={() => {  
                 setShowCardModal(false)  
@@ -555,8 +560,8 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
               <Feather name="eye" size={20} color="#1a73e8" />  
               <Text style={styles.modalActionButtonText}>Ver Detalle</Text>  
             </TouchableOpacity>  
-              
-            <TouchableOpacity   
+  
+            <TouchableOpacity  
               style={styles.modalActionButton}  
               onPress={() => {  
                 setShowCardModal(false)  
@@ -579,9 +584,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
         <View style={styles.moveModalOverlay}>  
           <View style={styles.moveModalContainer}>  
             <Text style={styles.moveModalTitle}>Mover Orden</Text>  
-            <Text style={styles.moveModalSubtitle}>  
-              Selecciona la nueva columna para la orden  
-            </Text>  
+            <Text style={styles.moveModalSubtitle}>Selecciona la nueva columna para la orden</Text>  
   
             <ScrollView style={styles.moveModalContent}>  
               {KANBAN_COLUMNS.map((column) => (  
@@ -619,6 +622,7 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
   )  
 }  
   
+// ✅ CORREGIDO: Estilos completos del Kanban Screen  
 const styles = StyleSheet.create({  
   container: {  
     flex: 1,  

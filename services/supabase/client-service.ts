@@ -1,200 +1,187 @@
-import { supabase } from '../../lib/supabase'  
-// ✅ CORREGIDO: Importar tipos centralizados  
-import {   
-  Client,   
-  EnhancedClient,   
-  CreateClientData,   
-  UpdateClientData,  
-  ClientFilters,  
-  ClientSearchResult   
-} from '../../types'  
+import { supabase } from '../../lib/supabase';  
   
-// ❌ ELIMINADO: Definición duplicada de Client  
-// export type Client = { ... } - REMOVIDO  
+// ✅ CORREGIDO: Tipo Client sincronizado con schema real  
+export type Client = {  
+  id: string;  
+  name: string;  
+  email?: string;  
+  phone?: string;  
+  company?: string;  
+  client_type: 'individual' | 'business';  
+  user_id?: string;  
+  taller_id?: string;  
+  // ✅ CORREGIDO: Eliminar campos que no existen en el schema  
+  // address?: string; - No existe en el schema actual  
+  created_at: string;  
+  updated_at?: string;  
+};  
+  
+// ✅ CORREGIDO: Tipos para operaciones CRUD  
+export type CreateClientData = Omit<Client, 'id' | 'created_at' | 'updated_at'>;  
+export type UpdateClientData = Partial<Omit<Client, 'id' | 'created_at'>>;  
   
 export const clientService = {  
-  // ✅ CORREGIDO: Usar tipos centralizados  
-  async getAllClients(filters?: ClientFilters): Promise<Client[]> {  
+  // Get all clients  
+  getAllClients: async (): Promise<Client[]> => {  
     try {  
-      let query = supabase.from('clients').select('*')  
-        
-      if (filters?.searchTerm) {  
-        query = query.or(`name.ilike.%${filters.searchTerm}%,email.ilike.%${filters.searchTerm}%`)  
-      }  
-        
-      if (filters?.client_type) {  
-        query = query.eq('client_type', filters.client_type)  
-      }  
-        
-      if (filters?.taller_id) {  
-        query = query.eq('taller_id', filters.taller_id)  
-      }  
+      // ✅ CORREGIDO: Eliminar parámetros extra en select  
+      const { data, error } = await supabase  
+        .from('clients')  
+        .select('*')  
+        .order('name');  
   
-      const { data, error } = await query.order('name')  
-        
-      if (error) throw error  
-      return data || []  
+      if (error) throw error;  
+      return data || [];  
     } catch (error) {  
-      console.error('Error getting all clients:', error)  
-      throw error  
+      console.error('Error fetching clients:', error);  
+      throw error;  
     }  
   },  
   
-  async getClientById(id: string): Promise<Client | null> {  
+  // Get client by ID  
+  getClientById: async (id: string): Promise<Client | null> => {  
     try {  
       const { data, error } = await supabase  
         .from('clients')  
         .select('*')  
         .eq('id', id)  
-        .single()  
+        .single();  
   
-      if (error && error.code !== 'PGRST116') throw error  
-      return data  
+      if (error && error.code !== 'PGRST116') throw error;  
+      return data;  
     } catch (error) {  
-      console.error('Error getting client by ID:', error)  
-      throw error  
+      console.error(`Error fetching client with ID ${id}:`, error);  
+      throw error;  
     }  
   },  
   
-  async getClientByUserId(userId: string): Promise<Client | null> {  
+  // Get client by user ID  
+  getClientByUserId: async (userId: string): Promise<Client | null> => {  
     try {  
       const { data, error } = await supabase  
         .from('clients')  
         .select('*')  
         .eq('user_id', userId)  
-        .single()  
+        .single();  
   
-      if (error && error.code !== 'PGRST116') throw error  
-      return data  
+      if (error && error.code !== 'PGRST116') throw error;  
+      return data;  
     } catch (error) {  
-      console.error('Error getting client by user ID:', error)  
-      throw error  
+      console.error(`Error fetching client with user ID ${userId}:`, error);  
+      return null;  
     }  
   },  
   
-  // ✅ CORREGIDO: Usar CreateClientData tipado  
-  async createClient(clientData: CreateClientData): Promise<Client> {  
+  // Create client  
+  createClient: async (clientData: CreateClientData): Promise<Client> => {  
     try {  
       const newClient = {  
         ...clientData,  
         created_at: new Date().toISOString(),  
         updated_at: new Date().toISOString(),  
-      }  
+      };  
   
       const { data, error } = await supabase  
         .from('clients')  
         .insert([newClient])  
         .select()  
-        .single()  
+        .single();  
   
-      if (error) throw error  
-      return data  
+      if (error) throw error;  
+      return data;  
     } catch (error) {  
-      console.error('Error creating client:', error)  
-      throw error  
+      console.error('Error creating client:', error);  
+      throw error;  
     }  
   },  
   
-  // ✅ CORREGIDO: Usar UpdateClientData tipado  
-  async updateClient(id: string, updates: UpdateClientData): Promise<Client | null> {  
+  // Update client  
+  updateClient: async (id: string, updates: UpdateClientData): Promise<Client | null> => {  
     try {  
       const updateData = {  
         ...updates,  
         updated_at: new Date().toISOString(),  
-      }  
+      };  
   
       const { data, error } = await supabase  
         .from('clients')  
         .update(updateData)  
         .eq('id', id)  
         .select()  
-        .single()  
+        .single();  
   
-      if (error) throw error  
-      return data  
+      if (error) throw error;  
+      return data;  
     } catch (error) {  
-      console.error('Error updating client:', error)  
-      throw error  
+      console.error(`Error updating client with ID ${id}:`, error);  
+      throw error;  
     }  
   },  
   
-  async deleteClient(id: string): Promise<boolean> {  
+  // Delete client  
+  deleteClient: async (id: string): Promise<boolean> => {  
     try {  
       const { error } = await supabase  
         .from('clients')  
         .delete()  
-        .eq('id', id)  
+        .eq('id', id);  
   
-      if (error) throw error  
-      return true  
+      if (error) throw error;  
+      return true;  
     } catch (error) {  
-      console.error('Error deleting client:', error)  
-      throw error  
+      console.error(`Error deleting client with ID ${id}:`, error);  
+      throw error;  
     }  
   },  
   
-  // ✅ CORREGIDO: Usar ClientSearchResult tipado  
-  async searchClients(query: string): Promise<ClientSearchResult> {  
+  // Search clients  
+  searchClients: async (query: string): Promise<Client[]> => {  
     try {  
-      const searchTerm = `%${query}%`  
-      const { data, error, count } = await supabase  
-        .rpc('search_clients', { search_term: searchTerm })  
-        .select('*', { count: 'exact' })  
+      if (!query.trim()) return [];  
   
-      if (error) throw error  
-        
-      return {  
-        clients: data || [],  
-        total: count || 0,  
-        page: 1,  
-        limit: data?.length || 0  
-      }  
+      const searchTerm = `%${query}%`;  
+  
+      const { data, error } = await supabase  
+        .from('clients')  
+        .select('*')  
+        .or(`name.ilike.${searchTerm},email.ilike.${searchTerm},phone.ilike.${searchTerm}`)  
+        .order('name');  
+  
+      if (error) throw error;  
+      return data || [];  
     } catch (error) {  
-      console.error('Error searching clients:', error)  
-      throw error  
+      console.error('Error searching clients:', error);  
+      throw error;  
     }  
   },  
   
-  // ✅ NUEVO: Obtener clientes enriquecidos con estadísticas  
-  async getEnhancedClients(filters?: ClientFilters): Promise<EnhancedClient[]> {  
+  // Get clients by taller ID  
+  getClientsByTallerId: async (tallerId: string): Promise<Client[]> => {  
     try {  
-      const clients = await this.getAllClients(filters)  
-        
-      // Enriquecer con datos adicionales  
-      const enhancedClients = await Promise.all(  
-        clients.map(async (client) => {  
-          // Obtener estadísticas del cliente  
-          const { data: orders } = await supabase  
-            .from('orders')  
-            .select('id, total, created_at')  
-            .eq('client_id', client.id)  
+      const { data, error } = await supabase  
+        .from('clients')  
+        .select('*')  
+        .eq('taller_id', tallerId)  
+        .order('name');  
   
-          const { data: vehicles } = await supabase  
-            .from('vehicles')  
-            .select('id')  
-            .eq('client_id', client.id)  
-  
-          const orderCount = orders?.length || 0  
-          const vehicleCount = vehicles?.length || 0  
-          const totalSpent = orders?.reduce((sum, order) => sum + (order.total || 0), 0) || 0  
-          const lastOrderDate = orders?.[0]?.created_at  
-  
-          return {  
-            ...client,  
-            orderCount,  
-            vehicleCount,  
-            totalSpent,  
-            lastOrderDate  
-          } as EnhancedClient  
-        })  
-      )  
-  
-      return enhancedClients  
+      if (error) throw error;  
+      return data || [];  
     } catch (error) {  
-      console.error('Error getting enhanced clients:', error)  
-      throw error  
+      console.error(`Error fetching clients for taller ID ${tallerId}:`, error);  
+      throw error;  
     }  
-  }  
-}  
+  },  
   
-export default clientService
+  // ✅ CORREGIDO: Método de inicialización simplificado  
+  initializeClients: async (): Promise<void> => {  
+    try {  
+      const clients = await clientService.getAllClients();  
+      console.log(`Initialized ${clients.length} clients`);  
+    } catch (error) {  
+      console.error('Error initializing clients:', error);  
+      throw error;  
+    }  
+  },  
+};  
+  
+export default clientService;

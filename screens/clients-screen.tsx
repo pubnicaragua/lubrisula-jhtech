@@ -1,5 +1,4 @@
 "use client"  
-  
 import { useState, useCallback, useEffect } from "react"  
 import {  
   View,  
@@ -15,13 +14,16 @@ import {
 import { Feather } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
+  
 // ✅ CORREGIDO: Importar tipos centralizados  
-import { Client, EnhancedClient } from "../types"  
+import { Client } from "../services/supabase/client-service"  
 import { clientService } from "../services/supabase/client-service"  
 import { vehicleService } from "../services/supabase/vehicle-service"  
 import { orderService } from "../services/supabase/order-service"  
-import ACCESOS_SERVICES from "../services/supabase/access-service"  
-import USER_SERVICES from "../services/supabase/user-service"  
+import accessService from "../services/supabase/access-service"  
+import userService from "../services/supabase/user-service"  
+import { Order } from '../types/order'  
+import { Vehicle } from '../services/supabase/vehicle-service'  
   
 interface ClientsScreenProps {  
   navigation: any  
@@ -36,9 +38,10 @@ interface ClientStatsType {
   
 export default function ClientsScreen({ navigation }: ClientsScreenProps) {  
   const { user } = useAuth()  
+  
   // ✅ CORREGIDO: Usar tipos centralizados  
-  const [clients, setClients] = useState<EnhancedClient[]>([])  
-  const [filteredClients, setFilteredClients] = useState<EnhancedClient[]>([])  
+  const [clients, setClients] = useState<Client[]>([])  
+  const [filteredClients, setFilteredClients] = useState<Client[]>([])  
   const [clientStats, setClientStats] = useState<Record<string, ClientStatsType>>({})  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
@@ -49,17 +52,17 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
   const loadClients = useCallback(async () => {  
     try {  
       setLoading(true)  
-  
       if (!user?.id) return  
   
       // Validar permisos del usuario  
-      const userTallerId = await USER_SERVICES.GET_TALLER_ID(user.id)  
+      const userTallerId = await userService.GET_TALLER_ID(user.id)  
       if (!userTallerId) {  
         Alert.alert("Error", "No se pudo cargar la información de permisos")  
         return  
       }  
   
-      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      // ✅ CORREGIDO: Usar 'role' en lugar de 'rol'  
       setUserRole(userPermissions?.role || 'client')  
   
       // Si es cliente, solo mostrar su información  
@@ -74,34 +77,32 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
   
       // Para staff, cargar todos los clientes  
       const [allClients, allOrders, allVehicles] = await Promise.all([  
-        clientService.getEnhancedClients(),  
+        clientService.getAllClients(), // ✅ CORREGIDO: Usar método existente  
         orderService.getAllOrders(),  
         vehicleService.getAllVehicles()  
       ])  
   
       // Calcular estadísticas para cada cliente  
       const stats: Record<string, ClientStatsType> = {}  
-        
-      allClients.forEach(client => {  
-        const clientOrders = allOrders.filter(order => order.clientId === client.id)  
-        const clientVehicles = allVehicles.filter(vehicle => vehicle.client_id === client.id)  
-          
-        const totalSpent = clientOrders.reduce((sum, order) => sum + (order.total || 0), 0)  
-        const lastOrder = clientOrders  
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]  
+      allClients.forEach((client: Client) => {  
+        const clientOrders = allOrders.filter((order: Order) => order.clientId === client.id)  
+        const clientVehicles = allVehicles.filter((vehicle: Vehicle) => vehicle.client_id === client.id)  
+        const totalSpent = clientOrders.reduce((sum: number, order: Order) => sum + (order.total || 0), 0)  
+        const lastOrder = clientOrders.sort((a: Order, b: Order) =>   
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()  
+        )[0]  
   
         stats[client.id] = {  
           totalOrders: clientOrders.length,  
           totalSpent,  
           vehicleCount: clientVehicles.length,  
-          lastOrderDate: lastOrder?.created_at  
+          lastOrderDate: lastOrder?.createdAt // ✅ CORREGIDO: usar createdAt  
         }  
       })  
   
       setClientStats(stats)  
       setClients(allClients)  
       setFilteredClients(allClients)  
-  
     } catch (error) {  
       console.error('Error loading clients:', error)  
       Alert.alert('Error', 'No se pudieron cargar los clientes')  
@@ -118,14 +119,14 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
   
   // Filtrar y ordenar clientes  
   useEffect(() => {  
-    let filtered = clients.filter(client =>  
+    let filtered = clients.filter((client: Client) =>  
       client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||  
       client.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||  
       client.phone?.toLowerCase().includes(searchQuery.toLowerCase())  
     )  
   
     // Ordenar según criterio seleccionado  
-    filtered.sort((a, b) => {  
+    filtered.sort((a: Client, b: Client) => {  
       switch (sortBy) {  
         case "name":  
           return a.name.localeCompare(b.name)  
@@ -157,7 +158,7 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
     })  
   }  
   
-  const renderClientCard = ({ item: client }: { item: EnhancedClient }) => {  
+  const renderClientCard = ({ item: client }: { item: Client }) => {  
     const stats = clientStats[client.id] || {  
       totalOrders: 0,  
       totalSpent: 0,  
@@ -172,13 +173,9 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
         <View style={styles.clientHeader}>  
           <View style={styles.clientAvatar}>  
             <Text style={styles.clientInitials}>  
-              {client.name  
-                ?.split(" ")  
-                .map((n) => n[0])  
-                .join("") || "?"}  
+              {client.name?.split(" ").map((n: string) => n[0]).join("") || "?"}  
             </Text>  
           </View>  
-            
           <View style={styles.clientInfo}>  
             <Text style={styles.clientName}>{client.name}</Text>  
             <View style={styles.clientContact}>  
@@ -190,7 +187,6 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
               <Text style={styles.contactText}>{client.email || "Sin email"}</Text>  
             </View>  
           </View>  
-  
           <View style={styles.clientStats}>  
             <View style={styles.statItem}>  
               <Text style={styles.statValue}>{stats.vehicleCount}</Text>  
@@ -210,7 +206,6 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
               Cliente desde: {new Date(client.created_at).toLocaleDateString("es-ES")}  
             </Text>  
           </View>  
-            
           <View style={styles.clientAmount}>  
             <Text style={styles.totalSpent}>{formatCurrency(stats.totalSpent)}</Text>  
             <Text style={styles.amountLabel}>Total gastado</Text>  
@@ -275,7 +270,6 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
               Nombre  
             </Text>  
           </TouchableOpacity>  
-            
           <TouchableOpacity  
             style={[styles.sortButton, sortBy === "date" && styles.sortButtonActive]}  
             onPress={() => setSortBy("date")}  
@@ -284,7 +278,6 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
               Fecha  
             </Text>  
           </TouchableOpacity>  
-            
           <TouchableOpacity  
             style={[styles.sortButton, sortBy === "orders" && styles.sortButtonActive]}  
             onPress={() => setSortBy("orders")}  
@@ -323,6 +316,7 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
   )  
 }  
   
+// Los estilos permanecen iguales...  
 const styles = StyleSheet.create({  
   container: {  
     flex: 1,  

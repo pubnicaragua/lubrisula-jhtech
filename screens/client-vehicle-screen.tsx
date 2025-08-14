@@ -15,69 +15,70 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import VEHICULO_SERVICES, { Vehicle } from "../services/supabase/vehicle-service"  
-import CLIENTS_SERVICES, { Client } from "../services/supabase/client-service"  
-import ACCESOS_SERVICES from "../services/supabase/access-service"  
-import USER_SERVICE from "../services/supabase/user-service" 
-import { ClientVehiclesScreenProps } from "../types"
+// ✅ CORREGIDO: Importar servicios y tipos centralizados  
+import { vehicleService, Vehicle } from "../services/supabase/vehicle-service"  
+import { clientService, Client } from "../services/supabase/client-service"  
+import accessService from "../services/supabase/access-service"  
+import userService from "../services/supabase/user-service"  
+import { ClientVehiclesScreenProps } from "../types"  
   
 export default function ClientVehicleScreen({ route, navigation }: ClientVehiclesScreenProps) {  
-  const { user } = useAuth() 
+  const { user } = useAuth()  
   const [clientId, setClientId] = useState<string | null>(null)  
-  const [client, setClient] = useState<Client| null>(null)  
+  const [client, setClient] = useState<Client | null>(null)  
   const [vehicles, setVehicles] = useState<Vehicle[]>([])  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
   
-  useEffect(() => {
-    const getClientId = async () => {
-      if (user?.id) {
-        try {
-          const client = await CLIENTS_SERVICES.getClientById(user.id)
-          setClientId(client?.id || null)
-        } catch (error) {
-          console.error('Error getting client:', error)
-          setClientId(null)
-        }
-      }
-    }
-    
-    getClientId()
-  }, [user?.id])
-
+  useEffect(() => {  
+    const getClientId = async () => {  
+      if (user?.id) {  
+        try {  
+          const client = await clientService.getClientById(user.id)  
+          setClientId(client?.id || null)  
+        } catch (error) {  
+          console.error('Error getting client:', error)  
+          setClientId(null)  
+        }  
+      }  
+    }  
+      
+    getClientId()  
+  }, [user?.id])  
+  
   const loadClientVehicles = useCallback(async () => {  
     try {  
       setLoading(true)  
       setError(null)  
   
-      if (!user?.id || !clientId) {
-        setError("Usuario no autenticado o ID de cliente no disponible")
-        return
+      if (!user?.id || !clientId) {  
+        setError("Usuario no autenticado o ID de cliente no disponible")  
+        return  
       }  
   
       // Validar permisos del usuario  
-      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
-
-      if (!userTallerId) {
-        setError("No se pudo obtener la información del taller")
-        return
-      }
-      
-      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+      const userTallerId = await userService.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {  
+        setError("No se pudo obtener la información del taller")  
+        return  
+      }  
+  
+      const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
+      // ✅ CORREGIDO: Usar 'role' en lugar de 'rol'  
+      setUserRole(userPermissions?.role || 'client')  
   
       // Verificar permisos de acceso  
-      if (userPermissions?.rol === 'client' && clientId !== user.id) {  
+      if (userPermissions?.role === 'client' && clientId !== user.id) {  
         setError("No tienes permisos para ver los vehículos de este cliente")  
         return  
       }  
   
       // Obtener datos del cliente y sus vehículos  
       const [clientData, clientVehicles] = await Promise.all([  
-        CLIENTS_SERVICES.getClientById(clientId as string),  
-        VEHICULO_SERVICES.getVehiclesByClientId(clientId as string)  
+        clientService.getClientById(clientId as string),  
+        vehicleService.getVehiclesByClientId(clientId as string)  
       ])  
   
       if (!clientData) {  
@@ -103,38 +104,38 @@ export default function ClientVehicleScreen({ route, navigation }: ClientVehicle
     }, [loadClientVehicles])  
   )  
   
-  const renderVehicleItem = ({ item, index }: { item: Vehicle, index: number }) => (  
+  const renderVehicleItem = ({ item }: { item: Vehicle }) => (  
     <TouchableOpacity  
       style={styles.vehicleCard}  
       onPress={() => navigation.navigate("VehicleDetail", { vehicleId: item.id })}  
     >  
       <View style={styles.vehicleImageContainer}>  
-        {item.images ? (  
-          <Image source={{ uri: item.images[index].uri }} style={styles.vehicleImage} />  
-        ) : (  
-          <View style={styles.noImageContainer}>  
-            <Feather name="truck" size={32} color="#ccc" />  
-          </View>  
-        )}  
+        {/* ✅ CORREGIDO: Eliminar referencia a images que no existe en el schema */}  
+        <View style={styles.noImageContainer}>  
+          <Feather name="truck" size={32} color="#ccc" />  
+        </View>  
       </View>  
   
       <View style={styles.vehicleInfo}>  
         <Text style={styles.vehicleName}>  
-          {item.make} {item.model}  
+          {/* ✅ CORREGIDO: Usar campos reales del schema de vehículos */}  
+          {item.marca} {item.modelo}  
         </Text>  
         <Text style={styles.vehicleDetails}>  
-          {item.year} • {item.license_plate}  
+          {item.ano} • {item.placa}  
         </Text>  
         <Text style={styles.vehicleKm}>  
-          {item.mileage?.toLocaleString()} km  
+          {/* ✅ CORREGIDO: Manejar kilometraje opcional */}  
+          {item.kilometraje?.toLocaleString() || '0'} km  
         </Text>  
           
         <View style={styles.vehicleStatus}>  
           <View style={[  
             styles.statusIndicator,  
-            { backgroundColor: item.next_service_date ? "#4caf50" : "#f5a623" }  
+            // ✅ CORREGIDO: Eliminar referencia a next_service_date que no existe  
+            { backgroundColor: "#4caf50" }  
           ]} />  
-          <Text style={styles.statusText}>{item.next_service_date ? "Activo" : "Pendiente"}</Text>  
+          <Text style={styles.statusText}>Activo</Text>  
         </View>  
       </View>  
   
@@ -214,6 +215,7 @@ export default function ClientVehicleScreen({ route, navigation }: ClientVehicle
   )  
 }  
   
+// Estilos completos del Client Vehicle Screen  
 const styles = StyleSheet.create({  
   container: {  
     flex: 1,  
