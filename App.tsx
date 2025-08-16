@@ -7,7 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context"
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native"  
 import AppNavigator from "./navigation/app-navigator"  
 import { AuthProvider } from "./context/auth-context"  
-// ✅ CORREGIDO: Importaciones actualizadas para usar servicios de Supabase  
+// Importaciones actualizadas para usar servicios de Supabase  
 import { clientService } from "./services/supabase/client-service"  
 import { vehicleService } from "./services/supabase/vehicle-service"  
 import { orderService } from "./services/supabase/order-service"  
@@ -17,7 +17,6 @@ import * as companyService from "./services/supabase/company-service"
 import * as imageService from "./services/supabase/image-service"  
 import * as notificationService from "./services/supabase/notification-service"  
 import * as storageService from "./services/supabase/storage-service"  
-// ✅ CORREGIDO: Import correcto de userService  
 import userService from "./services/supabase/user-service"  
   
 export default function App() {  
@@ -30,18 +29,18 @@ export default function App() {
       try {  
         setIsLoading(true)  
   
-        // ✅ CORREGIDO: Inicializar servicios con método correcto  
+        // Inicializar todos los servicios de Supabase  
         await Promise.all([  
           userService.initializeUsers(),  
-          clientService.initializeClients(),  
-          vehicleService.initializeVehicles(),  
-          orderService.initializeOrders(),  
-          // inventoryService.initializeInventory(),  
-          // currencyService.initializeCurrencies(),  
-          // companyService.initializeCompanySettings(),  
-          // imageService.initializeImages(),  
-          // notificationService.initializeNotifications(),  
-          // storageService.initializeStorage(),  
+          //clientService.initializeClients(),  
+          //vehicleService.initializeVehicles(),  
+          //orderService.initializeOrders(),  
+          //inventoryService.initializeInventory(),  
+          //currencyService.initializeCurrencies(),  
+          //companyService.initializeCompanySettings(),  
+          //imageService.initializeImages(),  
+          //notificationService.initializeNotifications(),  
+          //storageService.initializeStorage(),  
         ])  
   
         console.log("Datos inicializados correctamente con Supabase")  
@@ -80,6 +79,7 @@ export default function App() {
   return (  
     <SafeAreaProvider>  
       <AuthProvider>  
+        {/* ✅ ÚNICO NavigationContainer en toda la app */}  
         <NavigationContainer>  
           <StatusBar style="dark" />  
           <AppNavigator />  
@@ -97,15 +97,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f9fa",  
   },  
   loadingText: {  
-    marginTop: 16,  
-    fontSize: 18,  
-    fontWeight: "600",  
-    color: "#333",  
+    marginTop: 10,  
+    fontSize: 16,  
+    color: "#666",  
   },  
   loadingSubtext: {  
-    marginTop: 8,  
+    marginTop: 5,  
     fontSize: 14,  
-    color: "#666",  
+    color: "#999",  
   },  
   errorContainer: {  
     flex: 1,  
@@ -118,13 +117,11 @@ const styles = StyleSheet.create({
     fontSize: 16,  
     color: "#f44336",  
     textAlign: "center",  
-    marginBottom: 16,  
-    fontWeight: "600",  
+    marginBottom: 10,  
   },  
   errorSubtext: {  
     fontSize: 14,  
     color: "#666",  
     textAlign: "center",  
-    lineHeight: 20,  
   },  
 })

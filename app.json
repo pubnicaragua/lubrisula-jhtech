@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "lubrisula2",
+    "name": "AutoflowX",
     "slug": "snack-7a54c39a-0051-4c7a-a3f7-28773d542a39",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -19,10 +19,16 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.lubrisula.autoflowx"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "154540eb-45d1-4981-85cd-afe1c59737cc"
+      }
     }
   }
 }

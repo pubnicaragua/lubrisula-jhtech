@@ -7,11 +7,9 @@ export type Client = {
   email?: string;  
   phone?: string;  
   company?: string;  
-  client_type: 'individual' | 'business';  
+  client_type: 'Individual' | 'Empresa';  
   user_id?: string;  
   taller_id?: string;  
-  // ✅ CORREGIDO: Eliminar campos que no existen en el schema  
-  // address?: string; - No existe en el schema actual  
   created_at: string;  
   updated_at?: string;  
 };  
@@ -24,7 +22,6 @@ export const clientService = {
   // Get all clients  
   getAllClients: async (): Promise<Client[]> => {  
     try {  
-      // ✅ CORREGIDO: Eliminar parámetros extra en select  
       const { data, error } = await supabase  
         .from('clients')  
         .select('*')  
@@ -172,7 +169,7 @@ export const clientService = {
     }  
   },  
   
-  // ✅ CORREGIDO: Método de inicialización simplificado  
+  // Initialize clients  
   initializeClients: async (): Promise<void> => {  
     try {  
       const clients = await clientService.getAllClients();  

@@ -1,5 +1,4 @@
 "use client"  
-  
 import { useState, useCallback } from "react"  
 import {  
   View,  
@@ -20,6 +19,7 @@ import { useAuth } from "../context/auth-context"
 import { orderService } from "../services/supabase/order-service"  
 import { clientService } from "../services/supabase/client-service"  
 import { inventoryService } from "../services/supabase/inventory-service"  
+import { reportsService } from "../services/supabase/reports-service"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service"  
 import { RootStackParamList } from '../types/navigation'  
@@ -76,88 +76,42 @@ export default function ReportsScreen({ navigation, route }: Props) {
       // Validar permisos del usuario  
       const userId = user.id as string  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(userId)  
-        
       if (!userTallerId) {  
         setError("No se pudo obtener la información del taller")  
         return  
       }  
-        
+  
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
       setUserRole(userPermissions?.rol || 'client')  
   
       // Solo staff puede ver reportes  
       if (userPermissions?.rol === 'client') {  
+        console.log("❌ ReportsScreen - Cliente sin permisos para reportes")  
         setError("No tienes permisos para ver los reportes")  
         return  
-      }  
+      }
   
-      // Cargar datos para reportes  
+      // Usar el servicio de reportes para obtener estadísticas  
+      const dashboardStats = await reportsService.getDashboardStats()  
+      const monthlyData = await reportsService.getMonthlyData(selectedPeriod)  
+  
+      // Cargar datos adicionales para reportes detallados  
       const [orders, clients, inventory] = await Promise.all([  
         orderService.getAllOrders(),  
         clientService.getAllClients(),  
         inventoryService.getAllInventory()  
       ])  
   
-      // ✅ CORREGIDO: Usar campos reales en lugar de campos inexistentes  
-      // Calcular estadísticas  
-      const completedOrders = orders.filter(order =>   
-        order.status === 'completed' || order.status === 'delivered'  
-      )  
-        
-      const pendingOrders = orders.filter(order =>   
-        order.status !== 'completed' &&   
-        order.status !== 'delivered' &&   
-        order.status !== 'cancelled'  
-      )  
-  
-      // ✅ CORREGIDO: Usar order.total en lugar de order.totalAmount  
-      const totalRevenue = completedOrders.reduce((sum, order) =>   
-        sum + (order.total || 0), 0  
-      )  
-  
-      const averageOrderValue = completedOrders.length > 0   
-        ? totalRevenue / completedOrders.length   
-        : 0  
-  
-      // Clientes activos (con órdenes en los últimos 6 meses)  
-      const sixMonthsAgo = new Date()  
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)  
-        
-      const activeClientIds = new Set(  
-        orders  
-          .filter(order => new Date(order.created_at) >= sixMonthsAgo)  
-          .map(order => order.clientId)  
-      )  
-  
-       // ✅ CORREGIDO: Usar item.cantidad en lugar de item.stock  
-       const lowStockItems = inventory.filter(  
-        item => (item.cantidad || 0) <= 5 // Usar cantidad del schema real  
-      )  
-  
-      const totalInventoryValue = inventory.reduce((sum, item) =>   
-        sum + ((item.precio_unitario || 0) * (item.cantidad || 0)), 0  
-      )  
-  
-      // Datos mensuales para gráficos  
-      const monthlyData = generateMonthlyData(orders, selectedPeriod)  
-  
-      const stats = {  
-        totalOrders: orders.length,  
-        completedOrders: completedOrders.length,  
-        pendingOrders: pendingOrders.length,  
-        totalRevenue,  
-        averageOrderValue,  
-        totalClients: clients.length,  
-        activeClients: activeClientIds.size,  
-        lowStockItems: lowStockItems.length,  
-        totalInventoryValue,  
+      if (!dashboardStats) {  
+        setError("No se pudieron cargar las estadísticas")  
+        return  
       }  
   
       setReportData({  
         orders,  
         clients,  
         inventory,  
-        stats,  
+        stats: dashboardStats,  
         monthlyData,  
       })  
   
@@ -169,31 +123,6 @@ export default function ReportsScreen({ navigation, route }: Props) {
       setRefreshing(false)  
     }  
   }, [user, selectedPeriod])  
-  
-  const generateMonthlyData = (orders: Order[], period: string) => {  
-    const now = new Date()  
-    const months = []  
-    const monthCount = period === 'year' ? 12 : period === 'quarter' ? 3 : 1  
-  
-    for (let i = monthCount - 1; i >= 0; i--) {  
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)  
-      const monthName = date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })  
-        
-      const monthOrders = orders.filter(order => {  
-        const orderDate = new Date(order.created_at)  
-        return orderDate.getMonth() === date.getMonth() &&   
-               orderDate.getFullYear() === date.getFullYear()  
-      })  
-  
-      months.push({  
-        month: monthName,  
-        orders: monthOrders.length,  
-        revenue: monthOrders.reduce((sum, order) => sum + (order.total || 0), 0)  
-      })  
-    }  
-  
-    return months  
-  }  
   
   useFocusEffect(  
     useCallback(() => {  
@@ -259,11 +188,9 @@ export default function ReportsScreen({ navigation, route }: Props) {
   const { stats, monthlyData } = reportData  
   
   return (  
-    <ScrollView   
+    <ScrollView  
       style={styles.container}  
-      refreshControl={  
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />  
-      }  
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}  
     >  
       {/* Header con filtros de período */}  
       <View style={styles.header}>  
@@ -303,7 +230,6 @@ export default function ReportsScreen({ navigation, route }: Props) {
           "#1a73e8",  
           `${stats.completedOrders} completadas`  
         )}  
-          
         {renderStatCard(  
           "Ingresos Totales",  
           formatCurrency(stats.totalRevenue),  
@@ -311,7 +237,6 @@ export default function ReportsScreen({ navigation, route }: Props) {
           "#4caf50",  
           `Promedio: ${formatCurrency(stats.averageOrderValue)}`  
         )}  
-          
         {renderStatCard(  
           "Clientes",  
           stats.totalClients,  
@@ -319,7 +244,6 @@ export default function ReportsScreen({ navigation, route }: Props) {
           "#ff9800",  
           `${stats.activeClients} activos`  
         )}  
-          
         {renderStatCard(  
           "Stock Bajo",  
           stats.lowStockItems,  
@@ -336,15 +260,14 @@ export default function ReportsScreen({ navigation, route }: Props) {
           {monthlyData.map((data, index) => {  
             const maxOrders = Math.max(...monthlyData.map(d => d.orders))  
             const height = maxOrders > 0 ? (data.orders / maxOrders) * 100 : 0  
-              
             return (  
               <View key={index} style={styles.chartBar}>  
                 <View style={styles.chartBarContainer}>  
-                  <View   
+                  <View  
                     style={[  
-                      styles.chartBarFill,   
+                      styles.chartBarFill,  
                       { height: `${height}%`, backgroundColor: '#1a73e8' }  
-                    ]}   
+                    ]}  
                   />  
                 </View>  
                 <Text style={styles.chartBarValue}>{data.orders}</Text>  
@@ -360,14 +283,13 @@ export default function ReportsScreen({ navigation, route }: Props) {
         <Text style={styles.sectionTitle}>Estado de las Órdenes</Text>  
         <View style={styles.statusDistribution}>  
           {[  
-            { status: 'completed', label: 'Completadas', color: '#4caf50' },  
-            { status: 'in_progress', label: 'En Proceso', color: '#ff9800' },  
-            { status: 'waiting_parts', label: 'Esperando Repuestos', color: '#9c27b0' },  
-            { status: 'reception', label: 'En Recepción', color: '#2196f3' },  
+            { status: 'completada', label: 'Completadas', color: '#4caf50' },  
+            { status: 'en_proceso', label: 'En Proceso', color: '#ff9800' },  
+            { status: 'esperando_repuestos', label: 'Esperando Repuestos', color: '#9c27b0' },  
+            { status: 'recepcion', label: 'En Recepción', color: '#2196f3' },  
           ].map((item) => {  
-            const count = reportData.orders.filter(order => order.status === item.status).length  
+            const count = reportData.orders.filter(order => order.estado === item.status).length  
             const percentage = formatPercentage(count, stats.totalOrders)  
-              
             return (  
               <View key={item.status} style={styles.statusItem}>  
                 <View style={styles.statusItemHeader}>  
@@ -390,10 +312,10 @@ export default function ReportsScreen({ navigation, route }: Props) {
         {reportData.clients  
           .map(client => ({  
             ...client,  
-            orderCount: reportData.orders.filter(order => order.clientId === client.id).length,  
+            orderCount: reportData.orders.filter(order => order.client_id === client.id).length,  
             totalSpent: reportData.orders  
-              .filter(order => order.clientId === client.id)  
-              .reduce((sum, order) => sum + (order.total || 0), 0)  
+              .filter(order => order.client_id === client.id)  
+              .reduce((sum, order) => sum + (order.costo || 0), 0)  
           }))  
           .sort((a, b) => b.totalSpent - a.totalSpent)  
           .slice(0, 5)  
@@ -426,9 +348,7 @@ export default function ReportsScreen({ navigation, route }: Props) {
           </View>  
           <View style={styles.inventoryItem}>  
             <Text style={styles.inventoryLabel}>Stock Bajo:</Text>  
-            <Text style={[styles.inventoryValue, { color: '#f44336' }]}>  
-              {stats.lowStockItems} artículos  
-            </Text>  
+            <Text style={[styles.inventoryValue, { color: '#f44336' }]}>{stats.lowStockItems} artículos</Text>  
           </View>  
         </View>  
       </View>  

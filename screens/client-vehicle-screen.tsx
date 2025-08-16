@@ -10,83 +10,48 @@ import {
   ActivityIndicator,  
   RefreshControl,  
   Alert,  
-  Image,  
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-// ✅ CORREGIDO: Importar servicios y tipos centralizados  
-import { vehicleService, Vehicle } from "../services/supabase/vehicle-service"  
-import { clientService, Client } from "../services/supabase/client-service"  
-import accessService from "../services/supabase/access-service"  
-import userService from "../services/supabase/user-service"  
-import { ClientVehiclesScreenProps } from "../types"  
+import { vehicleService } from "../services/supabase/vehicle-service"  
+import { clientService } from "../services/supabase/client-service"  
   
-export default function ClientVehicleScreen({ route, navigation }: ClientVehiclesScreenProps) {  
+interface ClientVehicleScreenProps {  
+  route: any  
+  navigation: any  
+}  
+  
+export default function ClientVehicleScreen({ route, navigation }: ClientVehicleScreenProps) {  
   const { user } = useAuth()  
-  const [clientId, setClientId] = useState<string | null>(null)  
-  const [client, setClient] = useState<Client | null>(null)  
-  const [vehicles, setVehicles] = useState<Vehicle[]>([])  
+  const [client, setClient] = useState<any>(null)  
+  const [vehicles, setVehicles] = useState<any[]>([])  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
-  const [userRole, setUserRole] = useState<string | null>(null)  
   
-  useEffect(() => {  
-    const getClientId = async () => {  
-      if (user?.id) {  
-        try {  
-          const client = await clientService.getClientById(user.id)  
-          setClientId(client?.id || null)  
-        } catch (error) {  
-          console.error('Error getting client:', error)  
-          setClientId(null)  
-        }  
-      }  
-    }  
-      
-    getClientId()  
-  }, [user?.id])  
-  
+  // ✅ CORREGIDO: Usar getClientByUserId para buscar por user_id  
   const loadClientVehicles = useCallback(async () => {  
     try {  
       setLoading(true)  
       setError(null)  
   
-      if (!user?.id || !clientId) {  
-        setError("Usuario no autenticado o ID de cliente no disponible")  
+      if (!user?.id) {  
+        setError("Usuario no autenticado")  
         return  
       }  
   
-      // Validar permisos del usuario  
-      const userTallerId = await userService.GET_TALLER_ID(user.id)  
-      if (!userTallerId) {  
-        setError("No se pudo obtener la información del taller")  
-        return  
-      }  
-  
-      const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
-      // ✅ CORREGIDO: Usar 'role' en lugar de 'rol'  
-      setUserRole(userPermissions?.role || 'client')  
-  
-      // Verificar permisos de acceso  
-      if (userPermissions?.role === 'client' && clientId !== user.id) {  
-        setError("No tienes permisos para ver los vehículos de este cliente")  
-        return  
-      }  
-  
-      // Obtener datos del cliente y sus vehículos  
-      const [clientData, clientVehicles] = await Promise.all([  
-        clientService.getClientById(clientId as string),  
-        vehicleService.getVehiclesByClientId(clientId as string)  
-      ])  
-  
+      // ✅ CORREGIDO: Usar getClientByUserId en lugar de getClientById  
+      const clientData = await clientService.getClientByUserId(user.id)  
       if (!clientData) {  
         setError("Cliente no encontrado")  
         return  
       }  
   
       setClient(clientData)  
+  
+      // Obtener vehículos del cliente  
+      const clientVehicles = await vehicleService.getVehiclesByClientId(clientData.id)  
       setVehicles(clientVehicles)  
   
     } catch (error) {  
@@ -96,7 +61,7 @@ export default function ClientVehicleScreen({ route, navigation }: ClientVehicle
       setLoading(false)  
       setRefreshing(false)  
     }  
-  }, [clientId, user])  
+  }, [user])  
   
   useFocusEffect(  
     useCallback(() => {  
@@ -104,41 +69,31 @@ export default function ClientVehicleScreen({ route, navigation }: ClientVehicle
     }, [loadClientVehicles])  
   )  
   
-  const renderVehicleItem = ({ item }: { item: Vehicle }) => (  
+  const renderVehicleItem = ({ item }: { item: any }) => (  
     <TouchableOpacity  
       style={styles.vehicleCard}  
       onPress={() => navigation.navigate("VehicleDetail", { vehicleId: item.id })}  
     >  
       <View style={styles.vehicleImageContainer}>  
-        {/* ✅ CORREGIDO: Eliminar referencia a images que no existe en el schema */}  
         <View style={styles.noImageContainer}>  
           <Feather name="truck" size={32} color="#ccc" />  
         </View>  
       </View>  
-  
       <View style={styles.vehicleInfo}>  
         <Text style={styles.vehicleName}>  
-          {/* ✅ CORREGIDO: Usar campos reales del schema de vehículos */}  
           {item.marca} {item.modelo}  
         </Text>  
         <Text style={styles.vehicleDetails}>  
           {item.ano} • {item.placa}  
         </Text>  
         <Text style={styles.vehicleKm}>  
-          {/* ✅ CORREGIDO: Manejar kilometraje opcional */}  
           {item.kilometraje?.toLocaleString() || '0'} km  
         </Text>  
-          
         <View style={styles.vehicleStatus}>  
-          <View style={[  
-            styles.statusIndicator,  
-            // ✅ CORREGIDO: Eliminar referencia a next_service_date que no existe  
-            { backgroundColor: "#4caf50" }  
-          ]} />  
+          <View style={[styles.statusIndicator, { backgroundColor: "#4caf50" }]} />  
           <Text style={styles.statusText}>Activo</Text>  
         </View>  
       </View>  
-  
       <View style={styles.vehicleActions}>  
         <Feather name="chevron-right" size={20} color="#ccc" />  
       </View>  
@@ -161,14 +116,6 @@ export default function ClientVehicleScreen({ route, navigation }: ClientVehicle
           <Feather name="arrow-left" size={24} color="#333" />  
         </TouchableOpacity>  
         <Text style={styles.headerTitle}>Vehículos de {client?.name}</Text>  
-        {userRole !== 'client' && (  
-          <TouchableOpacity   
-            style={styles.addButton}  
-            onPress={() => navigation.navigate("NewVehicle", { clientId: clientId || "" })}  
-          >  
-            <Feather name="plus" size={24} color="#1a73e8" />  
-          </TouchableOpacity>  
-        )}  
       </View>  
   
       {error ? (  
@@ -185,17 +132,7 @@ export default function ClientVehicleScreen({ route, navigation }: ClientVehicle
             <View style={styles.emptyContainer}>  
               <Feather name="truck" size={64} color="#ccc" />  
               <Text style={styles.emptyText}>No hay vehículos registrados</Text>  
-              <Text style={styles.emptySubtext}>  
-                Este cliente no tiene vehículos asociados  
-              </Text>  
-              {userRole !== 'client' && (  
-                <TouchableOpacity   
-                  style={styles.emptyActionButton}  
-                  onPress={() => navigation.navigate("NewVehicle", { clientId: clientId || "" })}  
-                >  
-                  <Text style={styles.emptyActionButtonText}>Agregar Vehículo</Text>  
-                </TouchableOpacity>  
-              )}  
+              <Text style={styles.emptySubtext}>Este cliente no tiene vehículos asociados</Text>  
             </View>  
           ) : (  
             <FlatList  
@@ -215,7 +152,6 @@ export default function ClientVehicleScreen({ route, navigation }: ClientVehicle
   )  
 }  
   
-// Estilos completos del Client Vehicle Screen  
 const styles = StyleSheet.create({  
   container: {  
     flex: 1,  
@@ -250,9 +186,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",  
     color: "#333",  
     flex: 1,  
-  },  
-  addButton: {  
-    padding: 8,  
   },  
   errorContainer: {  
     flex: 1,  
@@ -296,17 +229,6 @@ const styles = StyleSheet.create({
     textAlign: "center",  
     marginBottom: 20,  
   },  
-  emptyActionButton: {  
-    backgroundColor: "#1a73e8",  
-    paddingHorizontal: 20,  
-    paddingVertical: 12,  
-    borderRadius: 8,  
-  },  
-  emptyActionButtonText: {  
-    color: "#fff",  
-    fontWeight: "bold",  
-    fontSize: 16,  
-  },  
   listContainer: {  
     padding: 16,  
   },  
@@ -329,10 +251,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,  
     marginRight: 16,  
     overflow: "hidden",  
-  },  
-  vehicleImage: {  
-    width: "100%",  
-    height: "100%",  
   },  
   noImageContainer: {  
     width: "100%",  

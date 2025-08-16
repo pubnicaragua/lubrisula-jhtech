@@ -1,5 +1,4 @@
 "use client"  
-  
 import { useState, useCallback } from "react"  
 import {  
   View,  
@@ -29,6 +28,8 @@ interface Props {
 }  
   
 export default function InventoryScreen({ navigation }: Props) {  
+  console.log("📦 InventoryScreen - Iniciando componente")  
+    
   const { user } = useAuth()  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
@@ -42,103 +43,162 @@ export default function InventoryScreen({ navigation }: Props) {
   const [selectedCategory, setSelectedCategory] = useState<string>("all")  
   const [showLowStock, setShowLowStock] = useState(false)  
   
+  console.log("📦 InventoryScreen - Usuario actual:", user?.id, "Rol:", user?.role)  
+  
   const loadInventoryData = useCallback(async () => {  
     try {  
+      console.log("📦 InventoryScreen - Iniciando carga de datos del inventario")  
       setLoading(true)  
       setError(null)  
   
-      if (!user?.id) return  
+      if (!user?.id) {  
+        console.error("❌ InventoryScreen - Usuario no autenticado")  
+        return  
+      }  
   
       // Validar permisos del usuario  
+      console.log("🔐 InventoryScreen - Validando permisos para usuario:", user.id)  
       const userId = user.id as string  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(userId)  
+      console.log("🏢 InventoryScreen - Taller ID obtenido:", userTallerId)  
         
       if (!userTallerId) {  
+        console.error("❌ InventoryScreen - No se pudo obtener el taller ID")  
         setError("No se pudo obtener la información del taller")  
         return  
       }  
-        
+  
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
+      console.log("🔐 InventoryScreen - Permisos obtenidos:", userPermissions)  
       setUserRole(userPermissions?.rol || 'client')  
   
-      // Solo staff puede ver inventario  
+      // ✅ CORREGIDO: Solo clientes son bloqueados del inventario  
       if (userPermissions?.rol === 'client') {  
+        console.error("❌ InventoryScreen - Cliente sin permisos para ver inventario")  
         setError("No tienes permisos para ver el inventario")  
         return  
       }  
   
+      console.log("✅ InventoryScreen - Usuario autorizado, cargando datos del inventario")  
+  
       // Cargar datos del inventario  
+      console.log("📦 InventoryScreen - Iniciando carga paralela de datos")  
       const [inventoryData, categoriesData, suppliersData] = await Promise.all([  
         inventoryService.getAllInventory(),  
         inventoryService.getInventoryCategories(),  
         inventoryService.getSuppliers()  
       ])  
   
+      console.log("📦 InventoryScreen - Datos cargados:", {  
+        inventoryItems: inventoryData.length,  
+        categories: categoriesData.length,  
+        suppliers: suppliersData.length  
+      })  
+  
       // Mapear campos legacy para compatibilidad  
       const mappedInventory = inventoryData.map(mapLegacyFields)  
-        
+      console.log("🔄 InventoryScreen - Inventario mapeado:", mappedInventory.length, "items")  
+  
       setInventoryItems(mappedInventory)  
       setFilteredItems(mappedInventory)  
       setCategories(categoriesData)  
       setSuppliers(suppliersData)  
   
+      console.log("✅ InventoryScreen - Datos del inventario cargados exitosamente")  
+  
     } catch (error) {  
-      console.error("Error loading inventory data:", error)  
+      console.error("❌ InventoryScreen - Error cargando datos del inventario:", error)  
       setError("No se pudo cargar el inventario")  
     } finally {  
       setLoading(false)  
       setRefreshing(false)  
+      console.log("📦 InventoryScreen - Finalizando carga de datos")  
     }  
   }, [user])  
   
   useFocusEffect(  
     useCallback(() => {  
+      console.log("🎯 InventoryScreen - Pantalla enfocada, cargando datos")  
       loadInventoryData()  
     }, [loadInventoryData])  
   )  
   
   const filterItems = useCallback(() => {  
+    console.log("🔍 InventoryScreen - Aplicando filtros:", {  
+      searchTerm,  
+      selectedCategory,  
+      showLowStock,  
+      totalItems: inventoryItems.length  
+    })  
+  
     let filtered = inventoryItems  
   
     // Filtrar por término de búsqueda  
     if (searchTerm) {  
+      console.log("🔍 InventoryScreen - Filtrando por término de búsqueda:", searchTerm)  
       filtered = filtered.filter(item =>  
         (item.producto || item.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||  
         (item.id || item.sku || '').toLowerCase().includes(searchTerm.toLowerCase())  
       )  
+      console.log("🔍 InventoryScreen - Items después de filtro de búsqueda:", filtered.length)  
     }  
   
     // Filtrar por categoría  
     if (selectedCategory !== "all") {  
+      console.log("🔍 InventoryScreen - Filtrando por categoría:", selectedCategory)  
       filtered = filtered.filter(item => item.categoria_id === selectedCategory)  
+      console.log("🔍 InventoryScreen - Items después de filtro de categoría:", filtered.length)  
     }  
   
     // Filtrar por stock bajo  
     if (showLowStock) {  
+      console.log("🔍 InventoryScreen - Filtrando por stock bajo")  
       filtered = filtered.filter(item => (item.cantidad || item.stock || 0) <= (item.minStock || 5))  
+      console.log("🔍 InventoryScreen - Items después de filtro de stock bajo:", filtered.length)  
     }  
   
     setFilteredItems(filtered)  
+    console.log("✅ InventoryScreen - Filtros aplicados, items finales:", filtered.length)  
   }, [inventoryItems, searchTerm, selectedCategory, showLowStock])  
   
   // Aplicar filtros cuando cambien las dependencias  
   useFocusEffect(  
     useCallback(() => {  
+      console.log("🔄 InventoryScreen - Reaplicando filtros por cambio de dependencias")  
       filterItems()  
     }, [filterItems])  
   )  
   
   const handleItemPress = (item: InventoryItem) => {  
+    console.log("👆 InventoryScreen - Item seleccionado:", item.id, item.producto || item.name)  
     navigation.navigate("InventoryItemDetail", { itemId: item.id })  
   }  
   
   const handleAddItem = () => {  
+    console.log("➕ InventoryScreen - Navegando a agregar nuevo item")  
     navigation.navigate("NewInventoryItem")  
   }  
   
   const onRefresh = () => {  
+    console.log("🔄 InventoryScreen - Iniciando refresh manual")  
     setRefreshing(true)  
     loadInventoryData()  
+  }  
+  
+  const handleSearchChange = (text: string) => {  
+    console.log("🔍 InventoryScreen - Término de búsqueda cambiado:", text)  
+    setSearchTerm(text)  
+  }  
+  
+  const handleCategoryChange = (categoryId: string) => {  
+    console.log("📂 InventoryScreen - Categoría seleccionada:", categoryId)  
+    setSelectedCategory(categoryId)  
+  }  
+  
+  const handleLowStockToggle = () => {  
+    const newValue = !showLowStock  
+    console.log("⚠️ InventoryScreen - Toggle stock bajo:", newValue)  
+    setShowLowStock(newValue)  
   }  
   
   const formatCurrency = (amount: number) => {  
@@ -177,9 +237,7 @@ export default function InventoryScreen({ navigation }: Props) {
           </View>  
         </View>  
   
-        <Text style={styles.itemCode}>  
-          Código: {item.id || item.sku || 'N/A'}  
-        </Text>  
+        <Text style={styles.itemCode}>Código: {item.id || item.sku || 'N/A'}</Text>  
   
         {(item.proceso || item.description) && (  
           <Text style={styles.itemDescription} numberOfLines={2}>  
@@ -197,17 +255,13 @@ export default function InventoryScreen({ navigation }: Props) {
   
           <View style={styles.itemDetailRow}>  
             <Feather name="dollar-sign" size={16} color="#666" />  
-            <Text style={styles.itemDetailText}>  
-              {formatCurrency(price)}  
-            </Text>  
+            <Text style={styles.itemDetailText}>{formatCurrency(price)}</Text>  
           </View>  
   
           {item.categoria_nombre && (  
             <View style={styles.itemDetailRow}>  
               <Feather name="tag" size={16} color="#666" />  
-              <Text style={styles.itemDetailText}>  
-                {item.categoria_nombre}  
-              </Text>  
+              <Text style={styles.itemDetailText}>{item.categoria_nombre}</Text>  
             </View>  
           )}  
         </View>  
@@ -216,6 +270,7 @@ export default function InventoryScreen({ navigation }: Props) {
   }  
   
   if (loading) {  
+    console.log("⏳ InventoryScreen - Mostrando pantalla de carga")  
     return (  
       <View style={styles.loadingContainer}>  
         <ActivityIndicator size="large" color="#1a73e8" />  
@@ -225,6 +280,7 @@ export default function InventoryScreen({ navigation }: Props) {
   }  
   
   if (error) {  
+    console.log("❌ InventoryScreen - Mostrando pantalla de error:", error)  
     return (  
       <View style={styles.errorContainer}>  
         <MaterialIcons name="error" size={64} color="#f44336" />  
@@ -236,6 +292,8 @@ export default function InventoryScreen({ navigation }: Props) {
     )  
   }  
   
+  console.log("✅ InventoryScreen - Renderizando pantalla principal con", filteredItems.length, "items")  
+  
   return (  
     <View style={styles.container}>  
       {/* Header con búsqueda */}  
@@ -246,10 +304,9 @@ export default function InventoryScreen({ navigation }: Props) {
             style={styles.searchInput}  
             placeholder="Buscar productos..."  
             value={searchTerm}  
-            onChangeText={setSearchTerm}  
+            onChangeText={handleSearchChange}  
           />  
         </View>  
-          
         {userRole !== 'client' && (  
           <TouchableOpacity style={styles.addButton} onPress={handleAddItem}>  
             <Feather name="plus" size={24} color="#fff" />  
@@ -267,7 +324,7 @@ export default function InventoryScreen({ navigation }: Props) {
                 styles.categoryButton,  
                 selectedCategory === "all" && styles.categoryButtonSelected  
               ]}  
-              onPress={() => setSelectedCategory("all")}  
+              onPress={() => handleCategoryChange("all")}  
             >  
               <Text style={[  
                 styles.categoryButtonText,  
@@ -276,7 +333,6 @@ export default function InventoryScreen({ navigation }: Props) {
                 Todas  
               </Text>  
             </TouchableOpacity>  
-              
             {categories.map((category) => (  
               <TouchableOpacity  
                 key={category.id}  
@@ -284,7 +340,7 @@ export default function InventoryScreen({ navigation }: Props) {
                   styles.categoryButton,  
                   selectedCategory === category.id && styles.categoryButtonSelected  
                 ]}  
-                onPress={() => setSelectedCategory(category.id)}  
+                onPress={() => handleCategoryChange(category.id)}  
               >  
                 <Text style={[  
                   styles.categoryButtonText,  
@@ -299,12 +355,11 @@ export default function InventoryScreen({ navigation }: Props) {
   
         <TouchableOpacity  
           style={[styles.filterToggle, showLowStock && styles.filterToggleActive]}  
-          onPress={() => setShowLowStock(!showLowStock)}  
+          onPress={handleLowStockToggle}  
         >  
-          <Feather   
-            name="alert-triangle"   
-            size={16}   
-            color={showLowStock ? "#fff" : "#ff9800"}   
+          <Feather  name="alert-triangle"  
+            size={16}  
+            color={showLowStock ? "#fff" : "#ff9800"}  
           />  
           <Text style={[  
             styles.filterToggleText,  
@@ -321,9 +376,7 @@ export default function InventoryScreen({ navigation }: Props) {
         renderItem={renderInventoryItem}  
         keyExtractor={(item) => item.id}  
         contentContainerStyle={styles.listContainer}  
-        refreshControl={  
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />  
-        }  
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}  
         ListEmptyComponent={  
           <View style={styles.emptyContainer}>  
             <Feather name="package" size={64} color="#ccc" />  

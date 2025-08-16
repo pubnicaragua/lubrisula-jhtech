@@ -21,8 +21,9 @@ import { clientService } from "../services/supabase/client-service"
 import { vehicleService } from "../services/supabase/vehicle-service"  
 import { RootStackParamList, NewOrderParams } from '../types/navigation'  
 import { Order, OrderStatus, CreateOrderData } from '../types/order'  
-import { Client } from '../types/client'  
-import { Vehicle } from '../types/vehicle'  
+// ✅ CORREGIDO: Importar tipos desde servicios de Supabase  
+import { Client } from '../services/supabase/client-service'  
+import { Vehicle } from '../services/supabase/vehicle-service'  
   
 type NewOrderScreenNavigationProp = StackNavigationProp<RootStackParamList, 'NewOrder'>  
 type NewOrderScreenRouteProp = RouteProp<RootStackParamList, 'NewOrder'>  
@@ -34,45 +35,40 @@ interface Props {
   
 export default function NewOrderScreen({ navigation, route }: Props) {  
   const { user } = useAuth()  
-    
   // Obtener parámetros de navegación de forma tipada  
   const params = route.params as NewOrderParams | undefined  
-    
   const [loading, setLoading] = useState(false)  
   const [clients, setClients] = useState<Client[]>([])  
   const [vehicles, setVehicles] = useState<Vehicle[]>([])  
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)  
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)  
-    
+  
   // Estados del formulario  
   const [description, setDescription] = useState("")  
   const [diagnosis, setDiagnosis] = useState("")  
-  const [priority, setPriority] = useState<"low" | "normal" | "high" | "urgent">("normal")  
-  const [estimatedCompletionDate, setEstimatedCompletionDate] = useState<string | null>(null)  
+  const [estimatedCompletionDate, setEstimatedCompletionDate] = useState<string | undefined>(undefined)  
   const [notes, setNotes] = useState("")  
   
   const loadInitialData = useCallback(async () => {  
     try {  
       setLoading(true)  
-        
       // Cargar clientes y vehículos  
       const [clientsData, vehiclesData] = await Promise.all([  
         clientService.getAllClients(),  
         vehicleService.getAllVehicles()  
       ])  
-        
+  
       setClients(clientsData)  
+      // ✅ CORREGIDO: Usar directamente sin mapeo ya que los tipos están sincronizados  
       setVehicles(vehiclesData)  
-        
+  
       // Si viene con parámetros, preseleccionar cliente y/o vehículo  
       if (params?.clientId) {  
         const client = clientsData.find(c => c.id === params.clientId)  
         if (client) {  
           setSelectedClient(client)  
-            
           // Filtrar vehículos del cliente seleccionado  
           const clientVehicles = vehiclesData.filter(v => v.client_id === params.clientId)  
-            
           // Si también viene vehicleId, preseleccionarlo  
           if (params.vehicleId) {  
             const vehicle = clientVehicles.find(v => v.id === params.vehicleId)  
@@ -82,7 +78,6 @@ export default function NewOrderScreen({ navigation, route }: Props) {
           }  
         }  
       }  
-        
     } catch (error) {  
       console.error("Error loading initial data:", error)  
       Alert.alert("Error", "No se pudieron cargar los datos iniciales")  
@@ -91,18 +86,14 @@ export default function NewOrderScreen({ navigation, route }: Props) {
     }  
   }, [params])  
   
-  useFocusEffect(  
-    useCallback(() => {  
-      loadInitialData()  
-    }, [loadInitialData])  
-  )  
+  useFocusEffect(useCallback(() => {  
+    loadInitialData()  
+  }, [loadInitialData]))  
   
   const handleClientSelect = (client: Client) => {  
     setSelectedClient(client)  
-      
     // Filtrar vehículos del cliente seleccionado  
     const clientVehicles = vehicles.filter(v => v.client_id === client.id)  
-      
     // Si el vehículo seleccionado no pertenece al nuevo cliente, limpiarlo  
     if (selectedVehicle && selectedVehicle.client_id !== client.id) {  
       setSelectedVehicle(null)  
@@ -111,7 +102,6 @@ export default function NewOrderScreen({ navigation, route }: Props) {
   
   const handleVehicleSelect = (vehicle: Vehicle) => {  
     setSelectedVehicle(vehicle)  
-      
     // Si no hay cliente seleccionado, seleccionar el dueño del vehículo  
     if (!selectedClient) {  
       const client = clients.find(c => c.id === vehicle.client_id)  
@@ -128,12 +118,10 @@ export default function NewOrderScreen({ navigation, route }: Props) {
         Alert.alert("Error", "Debe seleccionar un cliente")  
         return  
       }  
-        
       if (!selectedVehicle) {  
         Alert.alert("Error", "Debe seleccionar un vehículo")  
         return  
       }  
-        
       if (!description.trim()) {  
         Alert.alert("Error", "Debe ingresar una descripción del trabajo")  
         return  
@@ -141,15 +129,14 @@ export default function NewOrderScreen({ navigation, route }: Props) {
   
       setLoading(true)  
   
-      // Crear datos de la orden con todos los campos requeridos  
+      // ✅ CORREGIDO: Crear datos de la orden sin campo priority  
       const orderData: CreateOrderData = {  
         clientId: selectedClient.id,  
         vehicleId: selectedVehicle.id,  
         description: description.trim(),  
         diagnosis: diagnosis.trim(),  
-        priority,  
         status: "reception" as OrderStatus,  
-        estimatedCompletionDate,  
+        estimatedCompletionDate: estimatedCompletionDate || undefined,  
         notes: notes.trim(),  
         technicianId: user?.id || "", // Asignar al usuario actual como técnico  
         subtotal: 0, // Inicializar en 0  
@@ -160,9 +147,8 @@ export default function NewOrderScreen({ navigation, route }: Props) {
       }  
   
       const newOrder = await orderService.createOrder(orderData)  
-        
       Alert.alert(  
-        "Éxito",   
+        "Éxito",  
         "Orden creada correctamente",  
         [  
           {  
@@ -173,7 +159,6 @@ export default function NewOrderScreen({ navigation, route }: Props) {
           }  
         ]  
       )  
-        
     } catch (error) {  
       console.error("Error creating order:", error)  
       Alert.alert("Error", "No se pudo crear la orden")  
@@ -196,8 +181,8 @@ export default function NewOrderScreen({ navigation, route }: Props) {
       {/* Selección de Cliente */}  
       <View style={styles.section}>  
         <Text style={styles.sectionTitle}>Cliente</Text>  
-        <TouchableOpacity   
-          style={styles.selector}  
+        <TouchableOpacity  
+          style={styles.          selector}  
           onPress={() => {  
             // Aquí iría la navegación a selector de cliente  
             Alert.alert("Info", "Selector de cliente pendiente de implementar")  
@@ -213,7 +198,7 @@ export default function NewOrderScreen({ navigation, route }: Props) {
       {/* Selección de Vehículo */}  
       <View style={styles.section}>  
         <Text style={styles.sectionTitle}>Vehículo</Text>  
-        <TouchableOpacity   
+        <TouchableOpacity  
           style={styles.selector}  
           onPress={() => {  
             if (!selectedClient) {  
@@ -225,7 +210,11 @@ export default function NewOrderScreen({ navigation, route }: Props) {
           }}  
         >  
           <Text style={styles.selectorText}>  
-            {selectedVehicle ? `${selectedVehicle.make} ${selectedVehicle.model} (${selectedVehicle.license_plate})` : "Seleccionar vehículo"}  
+            {/* ✅ CORREGIDO: Usar campos reales del schema */}  
+            {selectedVehicle   
+              ? `${selectedVehicle.marca} ${selectedVehicle.modelo} (${selectedVehicle.placa})`   
+              : "Seleccionar vehículo"  
+            }  
           </Text>  
           <Feather name="chevron-down" size={20} color="#666" />  
         </TouchableOpacity>  
@@ -259,35 +248,6 @@ export default function NewOrderScreen({ navigation, route }: Props) {
         />  
       </View>  
   
-      {/* Prioridad */}  
-      <View style={styles.section}>  
-        <Text style={styles.sectionTitle}>Prioridad</Text>  
-        <View style={styles.priorityContainer}>  
-          {[  
-            { key: "low", label: "Baja", color: "#4caf50" },  
-            { key: "normal", label: "Normal", color: "#2196f3" },  
-            { key: "high", label: "Alta", color: "#ff9800" },  
-            { key: "urgent", label: "Urgente", color: "#f44336" },  
-          ].map((item) => (  
-            <TouchableOpacity  
-              key={item.key}  
-              style={[  
-                styles.priorityButton,  
-                priority === item.key && { backgroundColor: item.color }  
-              ]}  
-              onPress={() => setPriority(item.key as any)}  
-            >  
-              <Text style={[  
-                styles.priorityButtonText,  
-                priority === item.key && { color: "#fff" }  
-              ]}>  
-                {item.label}  
-              </Text>  
-            </TouchableOpacity>  
-          ))}  
-        </View>  
-      </View>  
-  
       {/* Notas Adicionales */}  
       <View style={styles.section}>  
         <Text style={styles.sectionTitle}>Notas Adicionales</Text>  
@@ -302,8 +262,8 @@ export default function NewOrderScreen({ navigation, route }: Props) {
         />  
       </View>  
   
-           {/* Botón de Crear Orden */}  
-           <View style={styles.buttonContainer}>  
+      {/* Botón de Crear Orden */}  
+      <View style={styles.buttonContainer}>  
         <TouchableOpacity  
           style={[styles.createButton, loading && styles.createButtonDisabled]}  
           onPress={handleCreateOrder}  
@@ -321,26 +281,31 @@ export default function NewOrderScreen({ navigation, route }: Props) {
       {selectedClient && (  
         <View style={styles.section}>  
           <Text style={styles.sectionTitle}>Vehículos del Cliente</Text>  
-          {vehicles.filter(v => v.client_id === selectedClient?.id).map((vehicle) => (  
-            <TouchableOpacity  
-              key={vehicle.id}  
-              style={[  
-                styles.vehicleItem,  
-                selectedVehicle?.id === vehicle.id && styles.vehicleItemSelected  
-              ]}  
-              onPress={() => handleVehicleSelect(vehicle)}  
-            >  
-              <View style={styles.vehicleInfo}>  
-                <Text style={styles.vehicleName}>  
-                  {vehicle.make} {vehicle.model}  
-                </Text>  
-                <Text style={styles.vehicleDetails}>{vehicle.year} • {vehicle.license_plate}</Text>  
-              </View>  
-              {selectedVehicle?.id === vehicle.id && (  
-                <Feather name="check-circle" size={20} color="#4caf50" />  
-              )}  
-            </TouchableOpacity>  
-          ))}  
+          {vehicles  
+            .filter(v => v.client_id === selectedClient?.id)  
+            .map((vehicle) => (  
+              <TouchableOpacity  
+                key={vehicle.id}  
+                style={[  
+                  styles.vehicleItem,  
+                  selectedVehicle?.id === vehicle.id && styles.vehicleItemSelected  
+                ]}  
+                onPress={() => handleVehicleSelect(vehicle)}  
+              >  
+                <View style={styles.vehicleInfo}>  
+                  {/* ✅ CORREGIDO: Usar campos reales del schema */}  
+                  <Text style={styles.vehicleName}>  
+                    {vehicle.marca} {vehicle.modelo}  
+                  </Text>  
+                  <Text style={styles.vehicleDetails}>  
+                    {vehicle.ano} • {vehicle.placa}  
+                  </Text>  
+                </View>  
+                {selectedVehicle?.id === vehicle.id && (  
+                  <Feather name="check-circle" size={20} color="#4caf50" />  
+                )}  
+              </TouchableOpacity>  
+            ))}  
         </View>  
       )}  
     </ScrollView>  
@@ -405,24 +370,6 @@ const styles = StyleSheet.create({
     color: "#333",  
     backgroundColor: "#fff",  
     minHeight: 100,  
-  },  
-  priorityContainer: {  
-    flexDirection: "row",  
-    flexWrap: "wrap",  
-    gap: 8,  
-  },  
-  priorityButton: {  
-    paddingHorizontal: 16,  
-    paddingVertical: 8,  
-    borderRadius: 20,  
-    backgroundColor: "#f5f5f5",  
-    borderWidth: 1,  
-    borderColor: "#e1e4e8",  
-  },  
-  priorityButtonText: {  
-    fontSize: 14,  
-    color: "#666",  
-    fontWeight: "500",  
   },  
   buttonContainer: {  
     padding: 16,  

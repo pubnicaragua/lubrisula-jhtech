@@ -16,15 +16,9 @@ export type Vehicle = {
   fuel_type?: 'gasoline' | 'diesel' | 'electric' | 'hybrid' | 'other';  
   transmission?: 'manual' | 'automatic' | 'cvt' | 'other';  
   engine_size?: string;  
-  // ✅ CORREGIDO: Eliminar campos que no existen en el schema  
-  // images: AppImage[]; - No existe en el schema actual  
   notes?: string;  
   created_at: string;  
   updated_at?: string;  
-  // ✅ CORREGIDO: Eliminar campos inexistentes  
-  // last_service_date?: string; - No existe  
-  // next_service_date?: string; - No existe  
-  // service_history?: {...}[]; - No existe  
 };  
   
 // ✅ CORREGIDO: Tipo para crear vehículo sin campos inexistentes  
@@ -46,7 +40,6 @@ export const vehicleService = {
         
       // ✅ CORREGIDO: Usar campos reales para ordenamiento  
       const { data, error } = await query.order('marca').order('modelo');  
-        
       if (error) throw error;  
       return data || [];  
     } catch (error) {  
@@ -54,7 +47,7 @@ export const vehicleService = {
       throw error;  
     }  
   },  
-    
+  
   // Get vehicle by ID  
   getVehicleById: async (id: string): Promise<Vehicle | null> => {  
     try {  
@@ -63,7 +56,7 @@ export const vehicleService = {
         .select('*')  
         .eq('id', id)  
         .single();  
-          
+        
       if (error && error.code !== 'PGRST116') throw error;  
       return data;  
     } catch (error) {  
@@ -71,7 +64,7 @@ export const vehicleService = {
       throw error;  
     }  
   },  
-    
+  
   // Get vehicles by client ID  
   getVehiclesByClientId: async (clientId: string): Promise<Vehicle[]> => {  
     try {  
@@ -81,7 +74,7 @@ export const vehicleService = {
         .eq('client_id', clientId)  
         .order('marca')  
         .order('modelo');  
-          
+        
       if (error) throw error;  
       return data || [];  
     } catch (error) {  
@@ -89,7 +82,7 @@ export const vehicleService = {
       throw error;  
     }  
   },  
-    
+  
   // ✅ CORREGIDO: Crear vehículo sin campos inexistentes  
   createVehicle: async (vehicleData: CreateVehicleData): Promise<Vehicle> => {  
     try {  
@@ -98,13 +91,13 @@ export const vehicleService = {
         created_at: new Date().toISOString(),  
         updated_at: new Date().toISOString(),  
       };  
-        
+  
       const { data, error } = await supabase  
         .from('vehicles')  
         .insert([newVehicle])  
         .select()  
         .single();  
-          
+        
       if (error) throw error;  
       return data;  
     } catch (error) {  
@@ -112,7 +105,7 @@ export const vehicleService = {
       throw error;  
     }  
   },  
-    
+  
   // ✅ CORREGIDO: Actualizar vehículo con tipo correcto  
   updateVehicle: async (id: string, updates: UpdateVehicleData): Promise<Vehicle | null> => {  
     try {  
@@ -120,14 +113,14 @@ export const vehicleService = {
         ...updates,  
         updated_at: new Date().toISOString(),  
       };  
-        
+  
       const { data, error } = await supabase  
         .from('vehicles')  
         .update(updateData)  
         .eq('id', id)  
         .select()  
         .single();  
-          
+        
       if (error) throw error;  
       return data;  
     } catch (error) {  
@@ -135,14 +128,7 @@ export const vehicleService = {
       throw error;  
     }  
   },  
-    
-  // ✅ CORREGIDO: Eliminar métodos de imágenes hasta implementar  
-  // addVehicleImage - Comentado hasta implementar sistema de imágenes  
-  // removeVehicleImage - Comentado hasta implementar sistema de imágenes  
-    
-  // ✅ CORREGIDO: Eliminar método de historial de servicio hasta implementar  
-  // addServiceRecord - Comentado hasta implementar sistema de historial  
-    
+  
   // Delete a vehicle  
   deleteVehicle: async (id: string): Promise<boolean> => {  
     try {  
@@ -150,7 +136,7 @@ export const vehicleService = {
         .from('vehicles')  
         .delete()  
         .eq('id', id);  
-          
+        
       if (error) throw error;  
       return true;  
     } catch (error) {  
@@ -158,17 +144,17 @@ export const vehicleService = {
       throw error;  
     }  
   },  
-    
+  
   // Search vehicles by marca, modelo, placa, or VIN  
   searchVehicles: async (query: string): Promise<Vehicle[]> => {  
     try {  
       if (!query.trim()) return [];  
         
       const searchTerm = `%${query}%`;  
+      const { data, error } = await supabase.rpc('search_vehicles', {   
+        search_term: searchTerm   
+      });  
         
-      const { data, error } = await supabase  
-        .rpc('search_vehicles', { search_term: searchTerm });  
-          
       if (error) throw error;  
       return data || [];  
     } catch (error) {  
@@ -176,7 +162,7 @@ export const vehicleService = {
       throw error;  
     }  
   },  
-    
+  
   // Initialize with mock data (for development/testing)  
   initializeWithMockData: async (mockVehicles: Vehicle[]): Promise<void> => {  
     try {  
@@ -184,10 +170,7 @@ export const vehicleService = {
       await supabase.from('vehicles').delete().neq('id', '0');  
         
       // Insert mock data  
-      const { error } = await supabase  
-        .from('vehicles')  
-        .insert(mockVehicles);  
-          
+      const { error } = await supabase.from('vehicles').insert(mockVehicles);  
       if (error) throw error;  
     } catch (error) {  
       console.error('Error initializing mock vehicle data:', error);  

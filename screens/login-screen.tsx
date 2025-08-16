@@ -78,10 +78,6 @@ export default function LoginScreen() {
     }
   }
 
-  // Mostrar credenciales de demostración  
-  const showDemoCredentials = async () => {
-    Alert.alert("Credenciales de demostración", "Correo: demo@demo.com\nContraseña: 123456")
-  }
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -127,9 +123,6 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.demoButton} onPress={showDemoCredentials}>
-            <Text style={styles.demoButtonText}>Ver credenciales de demostración</Text>
-          </TouchableOpacity>
         </View>
 
         <View style={styles.footer}>

@@ -24,8 +24,9 @@ import ACCESOS_SERVICES from "../services/supabase/access-service"
 import USER_SERVICE from "../services/supabase/user-service"  
 import { RootStackParamList } from '../types/navigation'  
 import { Order, OrderStatus } from '../types/order'  
-import { Client } from '../types/client'  
-import { Vehicle } from '../types/vehicle'  
+// ✅ CORREGIDO: Importar tipos desde servicios de Supabase  
+import { Client } from '../services/supabase/client-service'  
+import { Vehicle } from '../services/supabase/vehicle-service'  
   
 type UpdateOrderNavigationProp = StackNavigationProp<RootStackParamList, 'UpdateOrder'>  
 type UpdateOrderRouteProp = RouteProp<RootStackParamList, 'UpdateOrder'>  
@@ -50,7 +51,6 @@ interface OrderFormData {
 export default function UpdateOrderScreen({ navigation, route }: Props) {  
   const { orderId } = route.params  
   const { user } = useAuth()  
-    
   const [loading, setLoading] = useState(true)  
   const [saving, setSaving] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
@@ -58,7 +58,6 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
   const [order, setOrder] = useState<Order | null>(null)  
   const [client, setClient] = useState<Client | null>(null)  
   const [vehicle, setVehicle] = useState<Vehicle | null>(null)  
-    
   const [formData, setFormData] = useState<OrderFormData>({  
     description: '',  
     diagnosis: '',  
@@ -70,7 +69,6 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
     discount: 0,  
     total: 0,  
   })  
-  
   const [showStatusModal, setShowStatusModal] = useState(false)  
   
   const ORDER_STATUSES = [  
@@ -91,20 +89,19 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
   
       if (!user?.id) return  
   
-      // ✅ CORREGIDO: Usar user.id en lugar de user.userId  
       const userId = user.id as string  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(userId)  
-        
       if (!userTallerId) {  
         setError("No se pudo obtener la información del taller")  
         return  
       }  
-        
+  
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+      // ✅ CORREGIDO: Usar 'role' en lugar de 'rol'  
+      setUserRole(userPermissions?.role || 'client')  
   
       // Solo staff puede editar órdenes  
-      if (userPermissions?.rol === 'client') {  
+      if (userPermissions?.role === 'client') {  
         setError("No tienes permisos para editar órdenes")  
         return  
       }  
@@ -122,11 +119,12 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
         clientService.getClientById(orderData.clientId),  
         vehicleService.getVehicleById(orderData.vehicleId)  
       ])  
-        
+  
       setClient(clientData)  
+      // ✅ CORREGIDO: Usar directamente sin mapeo ya que los tipos están sincronizados  
       setVehicle(vehicleData)  
   
-      // ✅ CORREGIDO: Usar campos reales del schema en lugar de campos inexistentes  
+      // Usar campos reales del schema  
       setFormData({  
         description: orderData.description || '',  
         diagnosis: orderData.diagnosis || '',  
@@ -138,7 +136,6 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
         discount: orderData.discount || 0,  
         total: orderData.total || 0,  
       })  
-  
     } catch (error) {  
       console.error("Error loading order data:", error)  
       setError("No se pudieron cargar los datos de la orden")  
@@ -147,25 +144,20 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
     }  
   }, [orderId, user])  
   
-  useFocusEffect(  
-    useCallback(() => {  
-      loadOrderData()  
-    }, [loadOrderData])  
-  )  
+  useFocusEffect(useCallback(() => {  
+    loadOrderData()  
+  }, [loadOrderData]))  
   
   const handleFormChange = (field: keyof OrderFormData, value: string | number) => {  
     setFormData(prev => {  
       const updated = { ...prev, [field]: value }  
-        
       // Recalcular total automáticamente  
       if (field === 'subtotal' || field === 'tax' || field === 'discount') {  
         const subtotal = field === 'subtotal' ? Number(value) : updated.subtotal  
         const tax = field === 'tax' ? Number(value) : updated.tax  
         const discount = field === 'discount' ? Number(value) : updated.discount  
-          
         updated.total = subtotal + tax - discount  
       }  
-        
       return updated  
     })  
   }  
@@ -175,22 +167,18 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
       Alert.alert("Error", "La descripción es requerida")  
       return false  
     }  
-  
     if (formData.subtotal < 0) {  
       Alert.alert("Error", "El subtotal no puede ser negativo")  
       return false  
     }  
-  
     if (formData.tax < 0) {  
       Alert.alert("Error", "Los impuestos no pueden ser negativos")  
       return false  
     }  
-  
     if (formData.discount < 0) {  
       Alert.alert("Error", "El descuento no puede ser negativo")  
       return false  
     }  
-  
     return true  
   }  
   
@@ -199,7 +187,6 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
   
     try {  
       setSaving(true)  
-  
       const updateData = {  
         description: formData.description,  
         diagnosis: formData.diagnosis,  
@@ -210,17 +197,13 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
         tax: formData.tax,  
         discount: formData.discount,  
         total: formData.total,  
-        // ✅ CORREGIDO: Usar user.id en lugar de user.userId  
-        updated_by: user?.id,  
-        updated_at: new Date().toISOString(),  
+        updatedAt: new Date().toISOString(),  
       }  
   
       await orderService.updateOrder(orderId, updateData)  
-        
       Alert.alert("Éxito", "Orden actualizada correctamente", [  
         { text: "OK", onPress: () => navigation.goBack() }  
       ])  
-  
     } catch (error) {  
       console.error("Error updating order:", error)  
       Alert.alert("Error", "No se pudo actualizar la orden")  
@@ -274,8 +257,8 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
           <Feather name="arrow-left" size={24} color="#333" />  
         </TouchableOpacity>  
         <Text style={styles.headerTitle}>Editar Orden</Text>  
-        <TouchableOpacity   
-          style={styles.saveButton}   
+        <TouchableOpacity  
+          style={styles.saveButton}  
           onPress={handleSaveOrder}  
           disabled={saving}  
         >  
@@ -290,17 +273,18 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
       {/* Información de la orden */}  
       <View style={styles.section}>  
         <Text style={styles.sectionTitle}>Información de la Orden</Text>  
-        <Text style={styles.orderNumber}>#{order.orderNumber || order.id.slice(0, 8)}</Text>  
+        {/* ✅ CORREGIDO: Usar id.slice en lugar de orderNumber */}  
+        <Text style={styles.orderNumber}>#{order.id.slice(0, 8)}</Text>  
         <Text style={styles.orderClient}>Cliente: {client?.name || 'No especificado'}</Text>  
+        {/* ✅ CORREGIDO: Usar campos reales del schema */}  
         <Text style={styles.orderVehicle}>  
-          Vehículo: {vehicle ? `${vehicle.make} ${vehicle.model}` : 'No especificado'}  
+          Vehículo: {vehicle ? `${vehicle.marca} ${vehicle.modelo}` : 'No especificado'}  
         </Text>  
       </View>  
   
       {/* Estado de la orden */}  
       <View style={styles.section}>  
-        <Text style={styles.sectionTitle}>Estado de la Orden</Text>        
-        
+        <Text style={styles.sectionTitle}>Estado de la Orden</Text>  
         <TouchableOpacity  
           style={styles.statusSelector}  
           onPress={() => setShowStatusModal(true)}  
@@ -382,7 +366,6 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
               keyboardType="numeric"  
             />  
           </View>  
-            
           <View style={styles.formGroupHalf}>  
             <Text style={styles.formLabel}>Impuestos</Text>  
             <TextInput  
@@ -396,8 +379,7 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
         </View>  
   
         <View style={styles.formRow}>  
-          <View style={styles.formGroupHalf}>  
-            <Text style={styles.formLabel}>Descuento</Text>  
+          <View style={styles.formGroupHalf}>              <Text style={styles.formLabel}>Descuento</Text>  
             <TextInput  
               style={styles.formInput}  
               value={formData.discount.toString()}  
@@ -406,7 +388,6 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
               keyboardType="numeric"  
             />  
           </View>  
-            
           <View style={styles.formGroupHalf}>  
             <Text style={styles.formLabel}>Total</Text>  
             <Text style={styles.totalDisplay}>{formatCurrency(formData.total)}</Text>  
@@ -423,7 +404,6 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
         <View style={styles.modalOverlay}>  
           <View style={styles.statusModal}>  
             <Text style={styles.modalTitle}>Seleccionar Estado</Text>  
-              
             {ORDER_STATUSES.map((status) => (  
               <TouchableOpacity  
                 key={status.id}  
@@ -445,7 +425,6 @@ export default function UpdateOrderScreen({ navigation, route }: Props) {
                 )}  
               </TouchableOpacity>  
             ))}  
-  
             <TouchableOpacity  
               style={styles.closeStatusModal}  
               onPress={() => setShowStatusModal(false)}  

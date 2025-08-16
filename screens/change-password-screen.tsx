@@ -1,258 +1,370 @@
 "use client"  
   
-import { useState } from "react"  
+import { useState, useCallback, useEffect } from "react"  
 import {  
   View,  
   Text,  
-  ScrollView,  
+  FlatList,  
   TouchableOpacity,  
   StyleSheet,  
   ActivityIndicator,  
+  RefreshControl,  
   Alert,  
-  TextInput,  
+  Modal,  
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
-import { useNavigation } from '@react-navigation/native'  
-import type { StackNavigationProp } from '@react-navigation/stack'  
+import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import { userService } from "../services/supabase/user-service"  
+import { CITAS_SERVICES } from "../services/supabase/citas-services"  
+import ACCESOS_SERVICES from "../services/supabase/access-service"  
+import USER_SERVICE from "../services/supabase/user-service"  
   
-export default function ChangePasswordScreen() {  
+interface AppointmentsScreenProps {  
+  navigation: any  
+}  
+  
+interface AppointmentType {  
+  id: string  
+  client_id: string  
+  vehiculo_id: string  
+  fecha: string  
+  hora: string  
+  tipo_servicio: string  
+  descripcion?: string  
+  estado: string  
+  created_at: string  
+  clients?: { name: string }  
+  vehicles?: { marca: string; modelo: string; placa: string }  
+}  
+  
+export default function AppointmentsScreen({ navigation }: AppointmentsScreenProps) {  
   const { user } = useAuth()  
-  const navigation = useNavigation<StackNavigationProp<any>>()  
-  const [updating, setUpdating] = useState(false)  
+    
+  const [appointments, setAppointments] = useState<AppointmentType[]>([])  
+  const [loading, setLoading] = useState(true)  
+  const [refreshing, setRefreshing] = useState(false)  
+  const [error, setError] = useState<string | null>(null)  
+  const [userRole, setUserRole] = useState<string | null>(null)  
+  const [filterStatus, setFilterStatus] = useState<string>("all")  
+    
+  const [selectedAppointment, setSelectedAppointment] = useState<AppointmentType | null>(null)  
+  const [detailModalVisible, setDetailModalVisible] = useState(false)  
   
-  const [formData, setFormData] = useState({  
-    currentPassword: "",  
-    newPassword: "",  
-    confirmPassword: "",  
-  })  
-  
-  const [errors, setErrors] = useState<Record<string, string>>({})  
-  const [showPasswords, setShowPasswords] = useState({  
-    current: false,  
-    new: false,  
-    confirm: false,  
-  })  
-  
-  const validateForm = () => {  
-    const newErrors: Record<string, string> = {}  
-  
-    if (!formData.currentPassword) {  
-      newErrors.currentPassword = "La contraseña actual es requerida"  
-    }  
-  
-    if (!formData.newPassword) {  
-      newErrors.newPassword = "La nueva contraseña es requerida"  
-    } else if (formData.newPassword.length < 6) {  
-      newErrors.newPassword = "La contraseña debe tener al menos 6 caracteres"  
-    }  
-  
-    if (!formData.confirmPassword) {  
-      newErrors.confirmPassword = "Confirma la nueva contraseña"  
-    } else if (formData.newPassword !== formData.confirmPassword) {  
-      newErrors.confirmPassword = "Las contraseñas no coinciden"  
-    }  
-  
-    if (formData.currentPassword === formData.newPassword) {  
-      newErrors.newPassword = "La nueva contraseña debe ser diferente a la actual"  
-    }  
-  
-    setErrors(newErrors)  
-    return Object.keys(newErrors).length === 0  
-  }  
-  
-  const handleChangePassword = async () => {  
-    if (!validateForm()) return  
-  
+  const loadAppointments = useCallback(async () => {  
     try {  
-      setUpdating(true)  
+      setLoading(true)  
+      setRefreshing(true)  
+      setError(null)  
   
-      const { error } = await userService.updatePassword(  
-        formData.currentPassword,  
-        formData.newPassword  
-      )  
-  
-      if (error) {  
-        Alert.alert("Error", error.message)  
+      if (!user?.id) {  
+        setError("Usuario no autenticado")  
         return  
       }  
   
-      Alert.alert(  
-        "Éxito",  
-        "Contraseña cambiada correctamente",  
-        [  
-          {  
-            text: "OK",  
-            onPress: () => {  
-              setFormData({  
-                currentPassword: "",  
-                newPassword: "",  
-                confirmPassword: "",  
-              })  
-              navigation.goBack()  
-            }  
-          }  
-        ]  
-      )  
+      // Obtener permisos del usuario  
+      const userId = user.id  
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(userId)  
+        
+      if (!userTallerId) {  
+        setError("No se pudo obtener la información del taller")  
+        return  
+      }  
+  
+      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
+      setUserRole(userPermissions?.role || 'client')  
+  
+      // Cargar citas según el rol  
+      let appointmentsData: AppointmentType[] = []  
+        
+      if (userPermissions?.role === 'client') {  
+        // Cliente: solo sus citas  
+        appointmentsData = await CITAS_SERVICES.GET_CITAS_BY_CLIENT_ID(userId)  
+      } else {  
+        // Staff: todas las citas  
+        appointmentsData = await CITAS_SERVICES.GET_ALL_CITAS()  
+      }  
+  
+      setAppointments(appointmentsData)  
   
     } catch (error) {  
-      console.error("Error changing password:", error)  
-      Alert.alert("Error", "No se pudo cambiar la contraseña")  
+      console.error("Error loading appointments:", error)  
+      setError("No se pudieron cargar las citas")  
     } finally {  
-      setUpdating(false)  
+      setLoading(false)  
+      setRefreshing(false)  
+    }  
+  }, [user])  
+  
+  useFocusEffect(  
+    useCallback(() => {  
+      loadAppointments()  
+    }, [loadAppointments])  
+  )  
+  
+  const getStatusColor = (status: string) => {  
+    switch (status) {  
+      case "programada": return "#1a73e8"  
+      case "confirmada": return "#4caf50"  
+      case "en_proceso": return "#ff9800"  
+      case "completada": return "#607d8b"  
+      case "cancelada": return "#e53935"  
+      default: return "#666"  
     }  
   }  
   
-  const togglePasswordVisibility = (field: 'current' | 'new' | 'confirm') => {  
-    setShowPasswords(prev => ({  
-      ...prev,  
-      [field]: !prev[field]  
-    }))  
+  const getStatusText = (status: string) => {  
+    switch (status) {  
+      case "programada": return "Programada"  
+      case "confirmada": return "Confirmada"  
+      case "en_proceso": return "En Proceso"  
+      case "completada": return "Completada"  
+      case "cancelada": return "Cancelada"  
+      default: return "Desconocido"  
+    }  
+  }  
+  
+  const handleStatusUpdate = async (appointmentId: string, newStatus: string) => {  
+    try {  
+      await CITAS_SERVICES.UPDATE_CITA_STATUS(appointmentId, newStatus)  
+      loadAppointments()  
+      setDetailModalVisible(false)  
+      Alert.alert("Éxito", "Estado de la cita actualizado correctamente")  
+    } catch (error) {  
+      console.error("Error updating appointment status:", error)  
+      Alert.alert("Error", "No se pudo actualizar el estado de la cita")  
+    }  
+  }  
+  
+  const filteredAppointments = appointments.filter(appointment => {  
+    if (filterStatus === "all") return true  
+    return appointment.estado === filterStatus  
+  })  
+  
+  const renderAppointmentItem = ({ item }: { item: AppointmentType }) => (  
+    <TouchableOpacity  
+      style={styles.appointmentCard}  
+      onPress={() => {  
+        setSelectedAppointment(item)  
+        setDetailModalVisible(true)  
+      }}  
+    >  
+      <View style={styles.appointmentHeader}>  
+        <View style={styles.appointmentInfo}>  
+          <Text style={styles.appointmentTitle}>  
+            {item.tipo_servicio || "Servicio"}  
+          </Text>  
+          <Text style={styles.appointmentClient}>  
+            {item.clients?.name || "Cliente"}  
+          </Text>  
+          <Text style={styles.appointmentVehicle}>  
+            {item.vehicles?.marca} {item.vehicles?.modelo} - {item.vehicles?.placa}  
+          </Text>  
+        </View>  
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.estado) }]}>  
+          <Text style={styles.statusText}>{getStatusText(item.estado)}</Text>  
+        </View>  
+      </View>  
+  
+      <View style={styles.appointmentDetails}>  
+        <View style={styles.appointmentDetail}>  
+          <Feather name="calendar" size={16} color="#666" />  
+          <Text style={styles.appointmentDetailText}>  
+            {new Date(item.fecha || '').toLocaleDateString("es-ES")}  
+          </Text>  
+        </View>  
+        <View style={styles.appointmentDetail}>  
+          <Feather name="clock" size={16} color="#666" />  
+          <Text style={styles.appointmentDetailText}>  
+            {item.hora}  
+          </Text>  
+        </View>  
+      </View>  
+  
+      {item.descripcion && (  
+        <Text style={styles.appointmentDescription} numberOfLines={2}>  
+          {item.descripcion}  
+        </Text>  
+      )}  
+    </TouchableOpacity>  
+  )  
+  
+  const renderDetailModal = () => (  
+    <Modal  
+      visible={detailModalVisible}  
+      animationType="slide"  
+      presentationStyle="pageSheet"  
+    >  
+      <View style={styles.modalContainer}>  
+        <View style={styles.modalHeader}>  
+          <Text style={styles.modalTitle}>Detalle de Cita</Text>  
+          <TouchableOpacity onPress={() => setDetailModalVisible(false)}>  
+            <Feather name="x" size={24} color="#666" />  
+          </TouchableOpacity>  
+        </View>  
+  
+        {selectedAppointment && (  
+          <View style={styles.modalContent}>  
+            <View style={styles.detailSection}>  
+              <Text style={styles.detailLabel}>Tipo de Servicio</Text>  
+              <Text style={styles.detailValue}>{selectedAppointment.tipo_servicio}</Text>  
+            </View>  
+  
+            <View style={styles.detailSection}>  
+              <Text style={styles.detailLabel}>Cliente</Text>  
+              <Text style={styles.detailValue}>{selectedAppointment.clients?.name}</Text>  
+            </View>  
+  
+            <View style={styles.detailSection}>  
+              <Text style={styles.detailLabel}>Vehículo</Text>  
+              <Text style={styles.detailValue}>  
+                {selectedAppointment.vehicles?.marca} {selectedAppointment.vehicles?.modelo} - {selectedAppointment.vehicles?.placa}  
+              </Text>  
+            </View>  
+  
+            <View style={styles.detailRow}>  
+              <View style={styles.detailSection}>  
+                <Text style={styles.detailLabel}>Fecha</Text>  
+                <Text style={styles.detailValue}>  
+                  {new Date(selectedAppointment.fecha).toLocaleDateString("es-ES")}  
+                </Text>  
+              </View>  
+              <View style={styles.detailSection}>  
+                <Text style={styles.detailLabel}>Hora</Text>  
+                <Text style={styles.detailValue}>{selectedAppointment.hora}</Text>  
+              </View>  
+            </View>  
+  
+            <View style={styles.detailSection}>  
+              <Text style={styles.detailLabel}>Estado</Text>  
+              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedAppointment.estado) }]}>  
+                <Text style={styles.statusText}>{getStatusText(selectedAppointment.estado)}</Text>  
+              </View>  
+            </View>  
+  
+            {selectedAppointment.descripcion && (  
+              <View style={styles.detailSection}>  
+                <Text style={styles.detailLabel}>Descripción</Text>  
+                <Text style={styles.detailValue}>{selectedAppointment.descripcion}</Text>  
+              </View>  
+            )}  
+  
+            {userRole !== 'client' && (  
+              <View style={styles.actionButtons}>  
+                <TouchableOpacity  
+                  style={[styles.actionButton, { backgroundColor: "#4caf50" }]}  
+                  onPress={() => handleStatusUpdate(selectedAppointment.id, "confirmada")}  
+                >  
+                  <Text style={styles.actionButtonText}>Confirmar</Text>  
+                </TouchableOpacity>  
+                <TouchableOpacity  
+                  style={[styles.actionButton, { backgroundColor: "#ff9800" }]}  
+                  onPress={() => handleStatusUpdate(selectedAppointment.id, "en_proceso")}  
+                >  
+                  <Text style={styles.actionButtonText}>En Proceso</Text>  
+                </TouchableOpacity>  
+                <TouchableOpacity  
+                  style={[styles.actionButton, { backgroundColor: "#607d8b" }]}  
+                  onPress={() => handleStatusUpdate(selectedAppointment.id, "completada")}  
+                >  
+                  <Text style={styles.actionButtonText}>Completar</Text>  
+                </TouchableOpacity>  
+              </View>  
+            )}  
+          </View>  
+        )}  
+      </View>  
+    </Modal>  
+  )  
+  
+  if (loading) {  
+    return (  
+      <View style={styles.loadingContainer}>  
+        <ActivityIndicator size="large" color="#1a73e8" />  
+        <Text style={styles.loadingText}>Cargando citas...</Text>  
+      </View>  
+    )  
   }  
   
   return (  
     <View style={styles.container}>  
       <View style={styles.header}>  
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
-          <Feather name="arrow-left" size={24} color="#333" />  
-        </TouchableOpacity>  
-        <Text style={styles.headerTitle}>Cambiar Contraseña</Text>  
-        <View style={styles.placeholder} />  
+        <Text style={styles.title}>Citas Programadas</Text>  
+        <View style={styles.filterContainer}>  
+          <TouchableOpacity  
+            style={[styles.filterButton, filterStatus === "all" && styles.filterButtonActive]}  
+            onPress={() => setFilterStatus("all")}  
+          >  
+            <Text style={[styles.filterButtonText, filterStatus === "all" && styles.filterButtonTextActive]}>  
+              Todas  
+            </Text>  
+          </TouchableOpacity>  
+          <TouchableOpacity  
+            style={[styles.filterButton, filterStatus === "programada" && styles.filterButtonActive]}  
+            onPress={() => setFilterStatus("programada")}  
+          >  
+            <Text style={[styles.filterButtonText, filterStatus === "programada" && styles.filterButtonTextActive]}>  
+              Programadas  
+            </Text>  
+          </TouchableOpacity>  
+          <TouchableOpacity  
+            style={[styles.filterButton, filterStatus === "confirmada" && styles.filterButtonActive]}  
+            onPress={() => setFilterStatus("confirmada")}  
+          >  
+            <Text style={[styles.filterButtonText, filterStatus === "confirmada" && styles.filterButtonTextActive]}>  
+              Confirmadas  
+            </Text>  
+          </TouchableOpacity>  
+        </View>  
       </View>  
   
-      <ScrollView style={styles.content}>  
-        <View style={styles.infoSection}>  
-          <MaterialIcons name="security" size={48} color="#1a73e8" />  
-          <Text style={styles.infoTitle}>Seguridad de tu cuenta</Text>  
-          <Text style={styles.infoDescription}>  
-            Asegúrate de usar una contraseña segura que contenga al menos 6 caracteres.  
-          </Text>  
+      {error ? (  
+        <View style={styles.errorContainer}>  
+          <MaterialIcons name="error" size={64} color="#f44336" />  
+          <Text style={styles.errorText}>{error}</Text>  
+          <TouchableOpacity style={styles.retryButton} onPress={loadAppointments}>  
+            <Text style={styles.retryButtonText}>Reintentar</Text>  
+          </TouchableOpacity>  
         </View>  
-  
-        <View style={styles.formSection}>  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.inputLabel}>Contraseña Actual *</Text>  
-            <View style={styles.passwordInputContainer}>  
-              <TextInput  
-                style={[styles.passwordInput, errors.currentPassword && styles.inputError]}  
-                value={formData.currentPassword}  
-                onChangeText={(value) => {  
-                  setFormData(prev => ({ ...prev, currentPassword: value }))  
-                  if (errors.currentPassword) {  
-                    setErrors(prev => ({ ...prev, currentPassword: "" }))  
-                  }  
-                }}  
-                placeholder="Ingresa tu contraseña actual"  
-                secureTextEntry={!showPasswords.current}  
-                autoCapitalize="none"  
-              />  
-              <TouchableOpacity  
-                style={styles.eyeButton}  
-                onPress={() => togglePasswordVisibility('current')}  
-              >  
-                <Feather  
-                  name={showPasswords.current ? "eye-off" : "eye"}  
-                  size={20}  
-                  color="#666"  
-                />  
-              </TouchableOpacity>  
+      ) : (  
+        <>  
+          {filteredAppointments.length === 0 ? (  
+            <View style={styles.emptyContainer}>  
+              <Feather name="calendar" size={64} color="#ccc" />  
+              <Text style={styles.emptyText}>No hay citas programadas</Text>  
+              {userRole !== 'client' && (  
+                <TouchableOpacity   
+                  style={styles.addButton}  
+                  onPress={() => navigation.navigate("NewAppointment")}  
+                >  
+                  <Text style={styles.addButtonText}>Programar Nueva Cita</Text>  
+                </TouchableOpacity>  
+              )}  
             </View>  
-            {errors.currentPassword && (  
-              <Text style={styles.errorText}>{errors.currentPassword}</Text>  
-            )}  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.inputLabel}>Nueva Contraseña *</Text>  
-            <View style={styles.passwordInputContainer}>  
-              <TextInput  
-                style={[styles.passwordInput, errors.newPassword && styles.inputError]}  
-                value={formData.newPassword}  
-                onChangeText={(value) => {  
-                  setFormData(prev => ({ ...prev, newPassword: value }))  
-                  if (errors.newPassword) {  
-                    setErrors(prev => ({ ...prev, newPassword: "" }))  
-                  }  
-                }}  
-                placeholder="Mínimo 6 caracteres"  
-                secureTextEntry={!showPasswords.new}  
-                autoCapitalize="none"  
-              />  
-              <TouchableOpacity  
-                style={styles.eyeButton}  
-                onPress={() => togglePasswordVisibility('new')}  
-              >  
-                <Feather  
-                  name={showPasswords.new ? "eye-off" : "eye"}  
-                  size={20}  
-                  color="#666"  
-                />  
-              </TouchableOpacity>  
-            </View>  
-            {errors.newPassword && (  
-              <Text style={styles.errorText}>{errors.newPassword}</Text>  
-            )}  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.inputLabel}>Confirmar Nueva Contraseña *</Text>  
-            <View style={styles.passwordInputContainer}>  
-              <TextInput  
-                style={[styles.passwordInput, errors.confirmPassword && styles.inputError]}  
-                value={formData.confirmPassword}  
-                onChangeText={(value) => {  
-                  setFormData(prev => ({ ...prev, confirmPassword: value }))  
-                  if (errors.confirmPassword) {  
-                    setErrors(prev => ({ ...prev, confirmPassword: "" }))  
-                  }  
-                }}  
-                placeholder="Repite la nueva contraseña"  
-                secureTextEntry={!showPasswords.confirm}  
-                autoCapitalize="none"  
-              />  
-              <TouchableOpacity  
-                style={styles.eyeButton}  
-                onPress={() => togglePasswordVisibility('confirm')}  
-              >  
-                <Feather  
-                  name={showPasswords.confirm ? "eye-off" : "eye"}  
-                  size={20}  
-                  color="#666"  
-                />  
-              </TouchableOpacity>  
-            </View>  
-            {errors.confirmPassword && (  
-              <Text style={styles.errorText}>{errors.confirmPassword}</Text>  
-            )}  
-          </View>  
-  
-          <View style={styles.securityTips}>  
-            <Text style={styles.tipsTitle}>Consejos de seguridad:</Text>  
-            <Text style={styles.tipItem}>• Usa al menos 6 caracteres</Text>  
-            <Text style={styles.tipItem}>• Combina letras, números y símbolos</Text>  
-            <Text style={styles.tipItem}>• No uses información personal</Text>  
-            <Text style={styles.tipItem}>• No reutilices contraseñas de otras cuentas</Text>  
-          </View>  
-        </View>  
-      </ScrollView>  
-  
-      <View style={styles.footer}>  
-        <TouchableOpacity  
-          style={[styles.changeButton, updating && styles.changeButtonDisabled]}  
-          onPress={handleChangePassword}  
-          disabled={updating}  
-        >  
-          {updating ? (  
-            <ActivityIndicator size="small" color="#fff" />  
           ) : (  
-            <>  
-              <Feather name="lock" size={20} color="#fff" />  
-              <Text style={styles.changeButtonText}>Cambiar Contraseña</Text>  
-            </>  
+            <FlatList  
+              data={filteredAppointments}  
+              keyExtractor={(item) => item.id}  
+              renderItem={renderAppointmentItem}  
+              refreshControl={  
+                <RefreshControl refreshing={refreshing} onRefresh={loadAppointments} colors={["#1a73e8"]} />  
+              }  
+              contentContainerStyle={styles.listContainer}  
+              showsVerticalScrollIndicator={false}  
+            />  
           )}  
-        </TouchableOpacity>  
-      </View>  
+  
+          {userRole !== 'client' && (  
+            <TouchableOpacity   
+              style={styles.fab}  
+              onPress={() => navigation.navigate("NewAppointment")}  
+            >  
+              <Feather name="plus" size={24} color="#fff" />  
+            </TouchableOpacity>  
+          )}  
+        </>  
+      )}  
+  
+      {renderDetailModal()}  
     </View>  
   )  
 }  
@@ -262,129 +374,233 @@ const styles = StyleSheet.create({
     flex: 1,  
     backgroundColor: "#f8f9fa",  
   },  
-  header: {  
-    flexDirection: "row",  
+  loadingContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
     alignItems: "center",  
-    justifyContent: "space-between",  
-    paddingHorizontal: 16,  
-    paddingVertical: 12,  
+    backgroundColor: "#f8f9fa",  
+  },  
+  loadingText: {  
+    marginTop: 10,  
+    fontSize: 16,  
+    color: "#666",  
+  },  
+  header: {  
     backgroundColor: "#fff",  
+    padding: 16,  
     borderBottomWidth: 1,  
     borderBottomColor: "#e1e4e8",  
   },  
-  backButton: {  
-    padding: 8,  
-  },  
-  headerTitle: {  
-    fontSize: 18,  
+  title: {  
+    fontSize: 24,  
     fontWeight: "bold",  
     color: "#333",  
-  },  
-  placeholder: {  
-    width: 40,  
-  },  
-  content: {  
-    flex: 1,  
-    padding: 16,  
-  },  
-  infoSection: {  
-    alignItems: "center",  
-    backgroundColor: "#fff",  
-    borderRadius: 8,  
-    padding: 24,  
     marginBottom: 16,  
   },  
-  infoTitle: {  
+  filterContainer: {  
+    flexDirection: "row",  
+    gap: 8,  
+  },  
+  filterButton: {  
+    paddingHorizontal: 16,  
+    paddingVertical: 8,  
+    borderRadius: 20,  
+    backgroundColor: "#f5f5f5",  
+  },  
+  filterButtonActive: {  
+    backgroundColor: "#1a73e8",  
+  },  
+  filterButtonText: {  
+    fontSize: 14,  
+    color: "#666",  
+  },  
+  filterButtonTextActive: {  
+    color: "#fff",  
+    fontWeight: "bold",  
+  },  
+  errorContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    padding: 20,  
+  },  
+  errorText: {  
+    fontSize: 16,  
+    color: "#f44336",  
+    textAlign: "center",  
+    marginTop: 16,  
+    marginBottom: 20,  
+  },  
+  retryButton: {  
+    backgroundColor: "#1a73e8",  
+    paddingHorizontal: 20,  
+    paddingVertical: 10,  
+    borderRadius: 8,  
+  },  
+  retryButtonText: {  
+    color: "#fff",  
+    fontWeight: "bold",  
+  },  
+  emptyContainer: {  
+    flex: 1,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    padding: 40,  
+  },  
+  emptyText: {  
+    fontSize: 18,  
+    color: "#999",  
+    marginTop: 16,  
+    marginBottom: 20,  
+    textAlign: "center",  
+  },  
+  addButton: {  
+    backgroundColor: "#1a73e8",  
+    paddingHorizontal: 20,  
+    paddingVertical: 12,  
+    borderRadius: 8,  
+  },  
+  addButtonText: {  
+    color: "#fff",  
+    fontWeight: "bold",  
+  },  
+  listContainer: {  
+    padding: 16,  
+  },  
+  appointmentCard: {  
+    backgroundColor: "#fff",  
+    borderRadius: 12,  
+    padding: 16,  
+    marginBottom: 12,  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 2 },  
+    shadowOpacity: 0.1,  
+    shadowRadius: 4,  
+    elevation: 3,  
+  },  
+  appointmentHeader: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "flex-start",  
+    marginBottom: 12,  
+  },  
+  appointmentInfo: {  
+    flex: 1,  
+  },  
+  appointmentTitle: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 4,  
+  },  
+  appointmentClient: {  
+    fontSize: 14,  
+    color: "#666",  
+    marginBottom: 2,  
+  },  
+  appointmentVehicle: {  
+    fontSize: 14,  
+    color: "#999",  
+  },  
+  statusBadge: {  
+    paddingHorizontal: 8,  
+    paddingVertical: 4,  
+    borderRadius: 12,  
+  },  
+  statusText: {  
+    color: "#fff",  
+    fontSize: 12,  
+    fontWeight: "bold",  
+  },  
+  appointmentDetails: {  
+    flexDirection: "row",  
+    gap: 16,  
+    marginBottom: 8,  
+  },  
+  appointmentDetail: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+    gap: 8,  
+  },  
+  appointmentDetailText: {  
+    fontSize: 14,  
+    color: "#666",  
+  },  
+  appointmentDescription: {  
+    fontSize: 14,  
+    color: "#666",  
+    fontStyle: "italic",  
+    marginTop: 8,  
+  },  
+  fab: {  
+    position: "absolute",  
+    bottom: 20,  
+    right: 20,  
+    width: 56,  
+    height: 56,  
+    borderRadius: 28,  
+    backgroundColor: "#1a73e8",  
+    justifyContent: "center",  
+    alignItems: "center",  
+    shadowColor: "#000",  
+    shadowOffset: { width: 0, height: 4 },  
+    shadowOpacity: 0.3,  
+    shadowRadius: 8,  
+    elevation: 8,  
+  },  
+  modalContainer: {  
+    flex: 1,  
+    backgroundColor: "#fff",  
+  },  
+  modalHeader: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+    alignItems: "center",  
+    padding: 16,  
+    borderBottomWidth: 1,  
+    borderBottomColor: "#e1e4e8",  
+  },  
+  modalTitle: {  
     fontSize: 20,  
     fontWeight: "bold",  
     color: "#333",  
-    marginTop: 16,  
-    marginBottom: 8,  
   },  
-  infoDescription: {  
-    fontSize: 14,  
-    color: "#666",  
-    textAlign: "center",  
-    lineHeight: 20,  
-  },  
-  formSection: {  
-    backgroundColor: "#fff",  
-    borderRadius: 8,  
+  modalContent: {  
+    flex: 1,  
     padding: 16,  
   },  
-  inputGroup: {  
-    marginBottom: 20,  
+  detailSection: {  
+    marginBottom: 16,  
   },  
-  inputLabel: {  
+  detailRow: {  
+    flexDirection: "row",  
+    gap: 16,  
+  },  
+  detailLabel: {  
     fontSize: 16,  
     fontWeight: "500",  
-    color: "#333",  
-    marginBottom: 8,  
-  },  
-  passwordInputContainer: {  
-    flexDirection: "row",  
-    alignItems: "center",  
-    backgroundColor: "#f8f9fa",  
-    borderWidth: 1,  
-    borderColor: "#e1e4e8",  
-    borderRadius: 8,  
-  },  
-  passwordInput: {  
-    flex: 1,  
-    paddingHorizontal: 16,  
-    paddingVertical: 12,  
-    fontSize: 16,  
-    color: "#333",  
-  },  
-  eyeButton: {  
-    padding: 12,  
-  },  
-  inputError: {  
-    borderColor: "#f44336",  
-  },  
-  errorText: {  
-    fontSize: 14,  
-    color: "#f44336",  
-    marginTop: 4,  
-  },  
-  securityTips: {  
-    marginTop: 16,  
-    padding: 16,  
-    backgroundColor: "#f8f9fa",  
-    borderRadius: 8,  
-  },  
-  tipsTitle: {  
-    fontSize: 16,  
-    fontWeight: "600",  
-    color: "#333",  
-    marginBottom: 8,  
-  },  
-  tipItem: {  
-    fontSize: 14,  
     color: "#666",  
-    marginBottom: 4,  
+    marginBottom: 8,  
   },  
-  footer: {  
-    padding: 16,  
-    backgroundColor: "#fff",  
-    borderTopWidth: 1,  
-    borderTopColor: "#e1e4e8",  
+  detailValue: {  
+    fontSize: 16,  
+    color: "#333",  
   },  
-  changeButton: {  
+  actionButtons: {  
     flexDirection: "row",  
+    gap: 12,  
+    marginTop: 20,  
+  },  
+  actionButton: {  
+    flex: 1,  
+    paddingVertical: 12,  
+    borderRadius: 8,  
     alignItems: "center",  
     justifyContent: "center",  
-    backgroundColor: "#1a73e8",  
-    paddingVertical: 12,  
-    borderRadius: 8,  
-    gap: 8,  
   },  
-  changeButtonDisabled: {  
-    backgroundColor: "#ccc",  
-  },  
-  changeButtonText: {  
-    fontSize: 16,  
-    fontWeight: "bold",  
+  actionButtonText: {  
     color: "#fff",  
+    fontWeight: "bold",  
+    fontSize: 16,  
   },  
 })

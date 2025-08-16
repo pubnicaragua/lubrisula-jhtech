@@ -13,6 +13,8 @@ import {
 } from "react-native"  
 import { Feather } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
+import { useNavigation } from "@react-navigation/native"  
+import type { StackNavigationProp } from "@react-navigation/stack"  
 import { useAuth } from "../context/auth-context"  
 import * as clientService from "../services/supabase/client-service"  
 import * as vehicleService from "../services/supabase/vehicle-service"  
@@ -20,11 +22,13 @@ import * as orderService from "../services/supabase/order-service"
 import { CITAS_SERVICES } from "../services/supabase/citas-services"  
 import { Vehicle } from "../services/supabase/vehicle-service"  
 import { Client } from "../services/supabase/client-service"  
-import { Order } from '../types/order';  
+import { Order } from '../types/order'  
   
-// Tipos TypeScript para resolver errores    
-interface ClientDashboardScreenProps {  
-  navigation: any  
+// ✅ CORREGIDO: Tipos de navegación para tabs anidados del cliente  
+type ClientTabParamList = {  
+  ClientOrdersTab: { screen?: string; params?: any }  
+  ClientVehiclesTab: { screen?: string; params?: any }  
+  ProfileTab: { screen?: string; params?: any }  
 }  
   
 interface AppointmentType {  
@@ -44,7 +48,6 @@ interface StatsType {
   upcomingServices: number  
 }  
   
-// ✅ CORREGIDO: Interfaz para órdenes recientes con campo 'number'  
 interface RecentOrderData extends Order {  
   vehicleInfo?: string  
   statusColor?: string  
@@ -53,9 +56,10 @@ interface RecentOrderData extends Order {
   formattedTotal?: string  
 }  
   
-export default function ClientDashboardScreen({ navigation }: ClientDashboardScreenProps) {  
+export default function ClientDashboardScreen() {  
   const { user } = useAuth()  
-  
+  const navigation = useNavigation<StackNavigationProp<ClientTabParamList>>()  
+    
   const [isLoading, setIsLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
   const [clientData, setClientData] = useState<Client | null>(null)  
@@ -71,7 +75,46 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
   const [upcomingServices, setUpcomingServices] = useState<Vehicle[]>([])  
   const [recentOrders, setRecentOrders] = useState<RecentOrderData[]>([])  
   
-  // Cargar datos del dashboard del cliente    
+  // ✅ AGREGADO: Función para obtener mensaje de bienvenida personalizado  
+  const getWelcomeMessage = () => {  
+    if (!user) return "Bienvenido"  
+    const userName = user.name || clientData?.name || "Usuario"  
+    switch (user.role) {  
+      case 'client':  
+        return `Bienvenido, ${userName}`  
+      case 'technician':  
+        return `Bienvenido Técnico, ${userName}`  
+      case 'manager':  
+        return `Bienvenido Gerente, ${userName}`  
+      case 'admin':  
+        return `Bienvenido Administrador, ${userName}`  
+      case 'advisor':  
+        return `Bienvenido Asesor, ${userName}`  
+      default:  
+        return `Bienvenido, ${userName}`  
+    }  
+  }  
+  
+  // ✅ AGREGADO: Función para obtener subtítulo personalizado  
+  const getWelcomeSubtitle = () => {  
+    if (!user) return ""  
+    switch (user.role) {  
+      case 'client':  
+        return "Gestiona tus vehículos y servicios"  
+      case 'technician':  
+        return "Panel de trabajo y órdenes asignadas"  
+      case 'manager':  
+        return "Supervisión y gestión del taller"  
+      case 'admin':  
+        return "Administración completa del sistema"  
+      case 'advisor':  
+        return "Atención al cliente y ventas"  
+      default:  
+        return "Panel de control"  
+    }  
+  }  
+  
+  // ✅ CORREGIDO: Cargar datos usando getClientByUserId en lugar de getClientById  
   const loadDashboardData = useCallback(async () => {  
     try {  
       setIsLoading(true)  
@@ -79,8 +122,8 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
   
       if (!user?.id) return  
   
-      // Obtener datos del cliente usando el userId  
-      const client = await clientService.clientService.getClientById(user.id)  
+      // ✅ CORREGIDO: Usar getClientByUserId para buscar por user_id  
+      const client = await clientService.clientService.getClientByUserId(user.id)  
       if (client) {  
         setClientData(client)  
       }  
@@ -102,27 +145,26 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
       // Obtener citas del cliente usando el clientId  
       let clientAppointments: AppointmentType[] = []  
       if (client) {  
-        // Usar el servicio de citas existente  
         const allAppointments = await CITAS_SERVICES.GET_ALL_CITAS()  
         clientAppointments = allAppointments.filter(app => app.client_id === client.id)  
       }  
       setAppointments(clientAppointments)  
   
-      // Calcular estadísticas    
-      const activeOrders = clientOrders.filter(  
-        (order: Order) => order.status !== "completed" && order.status !== "delivered" && order.status !== "cancelled"  
+      // Calcular estadísticas  
+      const activeOrders = clientOrders.filter((order: Order) =>   
+        order.status !== "completed" &&   
+        order.status !== "delivered" &&   
+        order.status !== "cancelled"  
       )  
-      const completedOrders = clientOrders.filter(  
-        (order: Order) => order.status === "completed" || order.status === "delivered"  
+      const completedOrders = clientOrders.filter((order: Order) =>   
+        order.status === "completed" || order.status === "delivered"  
       )  
   
-      // ✅ CORREGIDO: Eliminar referencia a next_service_date que no existe  
-      // Calcular servicios próximos basándose en la última orden y kilometraje  
+      // Calcular servicios próximos basándose en kilometraje  
       const vehiclesWithUpcomingService = clientVehicles.filter((vehicle: Vehicle) => {  
-        // Lógica alternativa: vehículos que necesitan servicio basado en kilometraje  
         const currentKm = vehicle.kilometraje || 0  
-        const lastServiceKm = 0 // Esto se podría calcular desde el historial de órdenes  
-        return (currentKm - lastServiceKm) >= 5000 // Cada 5000 km necesita servicio  
+        const lastServiceKm = 0  
+        return (currentKm - lastServiceKm) >= 5000  
       })  
   
       setStats({  
@@ -132,25 +174,22 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
         upcomingServices: vehiclesWithUpcomingService.length,  
       })  
   
-      // Preparar datos para servicios próximos    
+      // Preparar datos para servicios próximos  
       const upcomingServicesData = vehiclesWithUpcomingService.map((vehicle: Vehicle) => {  
         return {  
           ...vehicle,  
-          daysToService: 30, // Valor por defecto  
-          // ✅ CORREGIDO: Eliminar referencia a images que no existe  
+          daysToService: 30,  
           mainImage: null,  
         }  
       })  
-  
       setUpcomingServices(upcomingServicesData)  
   
-      // Preparar datos para órdenes recientes    
+      // Preparar datos para órdenes recientes  
       const recentOrdersData = clientOrders  
         .sort((a: Order, b: Order) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())  
         .slice(0, 3)  
         .map((order: Order) => {  
           const vehicle = clientVehicles.find((v: Vehicle) => v.id === order.vehicleId)  
-  
           return {  
             ...order,  
             vehicleInfo: vehicle ? `${vehicle.marca} ${vehicle.modelo} (${vehicle.ano})` : "Vehículo no encontrado",  
@@ -160,7 +199,6 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
             formattedTotal: formatCurrency(order.total || 0),  
           }  
         })  
-  
       setRecentOrders(recentOrdersData)  
   
     } catch (error) {  
@@ -177,7 +215,7 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
     }, [loadDashboardData])  
   )  
   
-  // Función para obtener texto según estado    
+  // Función para obtener texto según estado  
   const getStatusText = (estado: string) => {  
     switch (estado) {  
       case "reception": return "Recepción"  
@@ -192,7 +230,7 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
     }  
   }  
   
-  // Función para obtener color según estado    
+  // Función para obtener color según estado  
   const getStatusColor = (estado: string) => {  
     switch (estado) {  
       case "reception": return "#1a73e8"  
@@ -207,7 +245,7 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
     }  
   }  
   
-  // Formatear moneda    
+  // Formatear moneda  
   const formatCurrency = (amount: number, currencyCode = "USD") => {  
     return amount.toLocaleString("es-ES", {  
       style: "currency",  
@@ -221,6 +259,33 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
     loadDashboardData()  
   }  
   
+  // ✅ CORREGIDO: Navegación anidada correcta para clientes  
+  const handleNavigateToOrders = () => {  
+    navigation.navigate("ClientOrdersTab", { screen: "ClientOrders" })  
+  }  
+  
+  const handleNavigateToVehicles = () => {  
+    navigation.navigate("ClientVehiclesTab", { screen: "ClientVehicles" })  
+  }  
+  
+  const handleNavigateToProfile = () => {  
+    navigation.navigate("ProfileTab", { screen: "Profile" })  
+  }  
+  
+  const handleOrderPress = (orderId: string) => {  
+    navigation.navigate("ClientOrdersTab", {   
+      screen: "OrderDetail",   
+      params: { orderId }   
+    })  
+  }  
+  
+  const handleVehiclePress = (vehicleId: string) => {  
+    navigation.navigate("ClientVehiclesTab", {   
+      screen: "VehicleDetail",   
+      params: { vehicleId }   
+    })  
+  }  
+  
   if (isLoading) {  
     return (  
       <View style={styles.loadingContainer}>  
@@ -232,15 +297,18 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
   return (  
     <ScrollView  
       style={styles.container}  
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#1a73e8"]} />}  
+      refreshControl={  
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#1a73e8"]} />  
+      }  
     >  
       <View style={styles.header}>  
         <Image  
-          source={{ uri: "https://images.pexels.com/photos/3785927/pexels-photo-3785927.jpeg" }}  
+          source={require('../assets/LOGO AUTOFLOWX.png')}  
           style={styles.logo}  
           resizeMode="contain"  
         />  
-        <Text style={styles.welcomeText}>Bienvenido, {clientData?.name || "Cliente"}</Text>  
+        <Text style={styles.welcomeText}>{getWelcomeMessage()}</Text>  
+        <Text style={styles.subtitleText}>{getWelcomeSubtitle()}</Text>  
         <Text style={styles.dateText}>  
           {new Date().toLocaleDateString("es-ES", {  
             weekday: "long",  
@@ -293,11 +361,69 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
         </View>  
       </View>  
   
+      {/* Servicios próximos */}  
+      <View style={styles.sectionContainer}>  
+        <View style={styles.sectionHeader}>  
+          <Text style={styles.sectionTitle}>Servicios Próximos</Text>  
+          <TouchableOpacity onPress={handleNavigateToVehicles}>  
+            <Text style={styles.seeAllText}>Ver todos</Text>  
+          </TouchableOpacity>  
+        </View>  
+  
+        {upcomingServices.length > 0 ? (  
+          upcomingServices.map((vehicle: any) => (  
+            <TouchableOpacity  
+              key={vehicle.id}  
+              style={styles.upcomingServiceCard}  
+              onPress={() => handleVehiclePress(vehicle.id)}  
+            >  
+              <View style={styles.serviceCardContent}>  
+                {vehicle.mainImage ? (  
+                  <Image source={{ uri: vehicle.mainImage }} style={styles.vehicleImage} />  
+                ) : (  
+                  <View style={styles.noImageContainer}>  
+                    <Feather name="truck" size={24} color="#ccc" />  
+                  </View>  
+                )}  
+  
+                <View style={styles.serviceInfo}>  
+                  <Text style={styles.vehicleName}>  
+                    {vehicle.marca} {vehicle.modelo}  
+                  </Text>  
+                  <Text style={styles.vehicleDetails}>  
+                    {vehicle.ano} • {vehicle.placa}  
+                  </Text>  
+  
+                  <View style={styles.serviceDateContainer}>  
+                    <Feather name="calendar" size={14} color={vehicle.daysToService <= 7 ? "#e53935" : "#f5a623"} />  
+                    <Text  
+                      style={[styles.serviceDateText, { color: vehicle.daysToService <= 7 ? "#e53935" : "#f5a623" }]}  
+                    >  
+                      {vehicle.daysToService === 0  
+                        ? "¡Servicio hoy!"  
+                        : vehicle.daysToService === 1  
+                          ? "¡Servicio mañana!"  
+                          : `Servicio en ${vehicle.daysToService} días`}  
+                    </Text>  
+                  </View>  
+                </View>  
+  
+                <Feather name="chevron-right" size={20} color="#999" />  
+              </View>  
+            </TouchableOpacity>  
+          ))  
+        ) : (  
+          <View style={styles.emptySection}>  
+            <Text style={styles.emptyText}>No hay servicios próximos programados</Text>  
+          </View>  
+        )}  
+      </View>  
+  
       {/* Órdenes recientes */}  
       <View style={styles.sectionContainer}>  
         <View style={styles.sectionHeader}>  
           <Text style={styles.sectionTitle}>Órdenes Recientes</Text>  
-          <TouchableOpacity onPress={() => navigation.navigate("ClientOrdersTab")}>  
+          <TouchableOpacity onPress={handleNavigateToOrders}>  
             <Text style={styles.seeAllText}>Ver todas</Text>  
           </TouchableOpacity>  
         </View>  
@@ -307,10 +433,9 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
             <TouchableOpacity  
               key={order.id}  
               style={styles.orderCard}  
-              onPress={() => navigation.navigate("OrderDetail", { orderId: order.id })}  
+              onPress={() => handleOrderPress(order.id)}  
             >  
               <View style={styles.orderHeader}>  
-                {/* ✅ CORREGIDO: Usar 'number' en lugar de 'orderNumber' */}  
                 <Text style={styles.orderNumber}>Orden #{order.number || order.id.slice(0, 8)}</Text>  
                 <View style={[styles.statusBadge, { backgroundColor: order.statusColor }]}>  
                   <Text style={styles.statusText}>{order.statusText}</Text>  
@@ -342,11 +467,47 @@ export default function ClientDashboardScreen({ navigation }: ClientDashboardScr
           </View>  
         )}  
       </View>  
+  
+      {/* Acciones rápidas */}  
+      <View style={styles.quickActionsContainer}>  
+        <Text style={styles.sectionTitle}>Acciones Rápidas</Text>  
+  
+        <View style={styles.quickActions}>  
+          <TouchableOpacity style={styles.actionButton} onPress={handleNavigateToOrders}>  
+            <View style={[styles.actionIcon, { backgroundColor: "#e8f0fe" }]}>  
+              <Feather name="clipboard" size={24} color="#1a73e8" />  
+            </View>  
+            <Text style={styles.actionText}>Mis Órdenes</Text>  
+          </TouchableOpacity>  
+  
+          <TouchableOpacity style={styles.actionButton} onPress={handleNavigateToVehicles}>  
+            <View style={[styles.actionIcon, { backgroundColor: "#fef8e8" }]}>  
+              <Feather name="truck" size={24} color="#f5a623" />  
+            </View>  
+            <Text style={styles.actionText}>Mis Vehículos</Text>  
+          </TouchableOpacity>  
+  
+          <TouchableOpacity style={styles.actionButton} onPress={handleNavigateToProfile}>  
+            <View style={[styles.actionIcon, { backgroundColor: "#e8f5e9" }]}>  
+              <Feather name="user" size={24} color="#4caf50" />  
+            </View>  
+            <Text style={styles.actionText}>Mi Perfil</Text>  
+          </TouchableOpacity>  
+        </View>  
+      </View>  
+  
+      <View style={styles.footer}>  
+        <Image  
+          source={require('../assets/LOGO AUTOFLOWX.png')}  
+          style={styles.footerLogo}  
+          resizeMode="contain"  
+        />  
+        <Text style={styles.footerText}>© {new Date().getFullYear()} AutoFlowX. Todos los derechos reservados.</Text>  
+      </View>  
     </ScrollView>  
   )  
 }  
   
-// Estilos permanecen iguales...  
 const styles = StyleSheet.create({  
   container: {  
     flex: 1,  
@@ -379,6 +540,13 @@ const styles = StyleSheet.create({
     fontWeight: "bold",  
     color: "#333",  
     marginBottom: 8,  
+  },  
+  subtitleText: {  
+    fontSize: 16,  
+    color: "#1a73e8",  
+    marginBottom: 8,  
+    textAlign: "center",  
+    fontWeight: "500",  
   },  
   dateText: {  
     fontSize: 14,  
@@ -455,6 +623,56 @@ const styles = StyleSheet.create({
     color: "#1a73e8",  
     fontWeight: "500",  
   },  
+  upcomingServiceCard: {  
+    backgroundColor: "#f8f9fa",  
+    borderRadius: 8,  
+    padding: 12,  
+    marginBottom: 12,  
+    borderWidth: 1,  
+    borderColor: "#e1e4e8",  
+  },  
+  serviceCardContent: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+  },  
+  vehicleImage: {  
+    width: 60,  
+    height: 60,  
+    borderRadius: 8,  
+    marginRight: 12,  
+  },  
+  noImageContainer: {  
+    width: 60,  
+    height: 60,  
+    borderRadius: 8,  
+    backgroundColor: "#f5f5f5",  
+    justifyContent: "center",  
+    alignItems: "center",  
+    marginRight: 12,  
+  },  
+  serviceInfo: {  
+    flex: 1,  
+  },  
+  vehicleName: {  
+    fontSize: 16,  
+    fontWeight: "bold",  
+    color: "#333",  
+    marginBottom: 4,  
+  },  
+  vehicleDetails: {  
+    fontSize: 14,  
+    color: "#666",  
+    marginBottom: 8,  
+  },  
+  serviceDateContainer: {  
+    flexDirection: "row",  
+    alignItems: "center",  
+  },  
+  serviceDateText: {  
+    fontSize: 12,  
+    fontWeight: "500",  
+    marginLeft: 4,  
+  },  
   orderCard: {  
     backgroundColor: "#f8f9fa",  
     borderRadius: 8,  
@@ -521,6 +739,31 @@ const styles = StyleSheet.create({
     color: "#4caf50",  
     textAlign: "right",  
   },  
+  quickActionsContainer: {  
+    padding: 16,  
+  },  
+  quickActions: {  
+    flexDirection: "row",  
+    justifyContent: "space-between",  
+  },  
+  actionButton: {  
+    flex: 1,  
+    alignItems: "center",  
+    marginHorizontal: 4,  
+  },  
+  actionIcon: {  
+    width: 60,  
+    height: 60,  
+    borderRadius: 30,  
+    justifyContent: "center",  
+    alignItems: "center",  
+    marginBottom: 8,  
+  },  
+  actionText: {  
+    fontSize: 12,  
+    color: "#333",  
+    textAlign: "center",  
+  },  
   emptySection: {  
     alignItems: "center",  
     paddingVertical: 40,  
@@ -530,4 +773,20 @@ const styles = StyleSheet.create({
     color: "#999",  
     textAlign: "center",  
   },  
-})
+  footer: {  
+    padding: 20,  
+    alignItems: "center",  
+    backgroundColor: "#fff",  
+    marginTop: 20,  
+  },  
+  footerLogo: {  
+    width: 100,  
+    height: 30,  
+    marginBottom: 8,  
+  },  
+  footerText: {  
+    fontSize: 12,  
+    color: "#666",  
+    textAlign: "center",  
+  },  
+}) 

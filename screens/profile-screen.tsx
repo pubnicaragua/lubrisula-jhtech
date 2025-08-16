@@ -14,26 +14,25 @@ import {
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useAuth } from "../context/auth-context"  
-import { userService } from "../services/supabase/user-service" 
-import { clientService, Client } from "../services/supabase/client-service"  
+import { supabase } from "../lib/supabase"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
-import { UiScreenNavProp } from "../types"
-
-
+import USER_SERVICE from "../services/supabase/user-service"  
+import { UiScreenNavProp } from "../types"  
+  
 export default function ProfileScreen({ navigation }: UiScreenNavProp) {  
   const { user, logout } = useAuth()  
-  const [loading, setLoading] = useState(true)  
+  const [loading, setLoading] = useState(false)  
   const [updating, setUpdating] = useState(false)  
-  const [userProfile, setUserProfile] = useState<Client | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
   const [editModalVisible, setEditModalVisible] = useState(false)  
   const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
-  
+    
+  // ✅ CORREGIDO: Usar datos del contexto directamente  
   const [editFormData, setEditFormData] = useState({  
-    name: "",  
-    email: "",  
-    phone: "",  
+    name: user?.name || "",  
+    email: user?.email || "",  
+    phone: user?.phone || "",  
     company: "",  
   })  
   
@@ -45,65 +44,72 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
   
   const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({})  
   
-  const loadUserProfile = useCallback(async () => {  
+  // ✅ CORREGIDO: Cargar solo el rol del usuario, no el perfil completo  
+  const loadUserRole = useCallback(async () => {  
     try {  
       setLoading(true)  
       setError(null)  
   
       if (!user?.id) return  
   
-      // Obtener perfil del usuario  
-      const profile = await clientService.getClientByUserId(user.id)  
-      setUserProfile(profile)  
+      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
+      if (!userTallerId) {  
+        setError("No se pudo obtener la información del taller")  
+        return  
+      }  
   
-      // Obtener rol del usuario  
-      const userTallerId = await userService.GET_TALLER_ID(user.id)  
-      if (!userTallerId) {
-        setError("No se pudo obtener la información del taller")
-        return
-      }
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+      setUserRole(userPermissions?.role || 'client')  
   
-      // Inicializar datos del formulario de edición  
-      if (profile) {
-        setEditFormData({  
-          name: profile.name || "",  
-          email: profile.email || "",  
-          phone: profile.phone || "",  
-          company: profile.company || "",  
-        })  
-      }
+      // ✅ CORREGIDO: Inicializar formulario con datos del contexto  
+      setEditFormData({  
+        name: user.name || "",  
+        email: user.email || "",  
+        phone: user.phone || "",  
+        company: "",  
+      })  
   
     } catch (error) {  
-      console.error("Error loading user profile:", error)  
-      setError("No se pudo cargar el perfil del usuario")  
+      console.error("Error loading user role:", error)  
+      setError("No se pudo cargar la información del usuario")  
     } finally {  
       setLoading(false)  
     }  
   }, [user])  
   
   useEffect(() => {  
-    loadUserProfile()  
-  }, [loadUserProfile])  
+    loadUserRole()  
+  }, [loadUserRole])  
   
+  // ✅ CORREGIDO: Actualizar perfil en Supabase directamente  
   const handleUpdateProfile = async () => {  
     try {  
       setUpdating(true)  
+      if (!user?.id) return  
   
-      if (!user?.id || !userProfile) return
-
-      const updatedProfile = {  
-        ...userProfile,  
-        ...editFormData,  
-        updatedAt: new Date().toISOString()  
+      // Actualizar en la tabla perfil_usuario  
+      const { error } = await supabase  
+        .from('perfil_usuario')  
+        .update({  
+          first_name: editFormData.name,  
+          email: editFormData.email,  
+          phone: editFormData.phone,  
+          updated_at: new Date().toISOString()  
+        })  
+        .eq('user_id', user.id)  
+  
+      if (error) {  
+        console.error("Error updating profile:", error)  
+        Alert.alert("Error", "No se pudo actualizar el perfil")  
+        return  
       }  
   
-      await clientService.updateClient(user.id, updatedProfile)  
-      setUserProfile(updatedProfile)  
       setEditModalVisible(false)  
-  
       Alert.alert("Éxito", "Perfil actualizado correctamente")  
+        
+      // Recargar datos  
+      await loadUserRole()  
+  
     } catch (error) {  
       console.error("Error updating profile:", error)  
       Alert.alert("Error", "No se pudo actualizar el perfil")  
@@ -114,38 +120,41 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
   
   const validatePasswordForm = () => {  
     const errors: Record<string, string> = {}  
-  
+      
     if (!passwordFormData.currentPassword) {  
       errors.currentPassword = "La contraseña actual es requerida"  
     }  
-  
     if (!passwordFormData.newPassword) {  
       errors.newPassword = "La nueva contraseña es requerida"  
     } else if (passwordFormData.newPassword.length < 6) {  
       errors.newPassword = "La contraseña debe tener al menos 6 caracteres"  
     }  
-  
     if (!passwordFormData.confirmPassword) {  
       errors.confirmPassword = "Confirma la nueva contraseña"  
     } else if (passwordFormData.newPassword !== passwordFormData.confirmPassword) {  
       errors.confirmPassword = "Las contraseñas no coinciden"  
     }  
-  
+      
     setPasswordErrors(errors)  
     return Object.keys(errors).length === 0  
   }  
   
+  // ✅ CORREGIDO: Cambiar contraseña usando Supabase Auth  
   const handleChangePassword = async () => {  
     if (!validatePasswordForm()) return  
   
     try {  
       setUpdating(true)  
   
-      if (!user?.id) return
-
-      // En un escenario real, aquí validarías la contraseña actual  
-      // y actualizarías la contraseña en el sistema de autenticación  
-      await userService.updatePassword(passwordFormData.currentPassword, passwordFormData.newPassword)  
+      const { error } = await supabase.auth.updateUser({  
+        password: passwordFormData.newPassword  
+      })  
+  
+      if (error) {  
+        console.error("Error changing password:", error)  
+        Alert.alert("Error", "No se pudo cambiar la contraseña")  
+        return  
+      }  
   
       setChangePasswordModalVisible(false)  
       setPasswordFormData({  
@@ -153,8 +162,8 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
         newPassword: "",  
         confirmPassword: "",  
       })  
-  
       Alert.alert("Éxito", "Contraseña cambiada correctamente")  
+  
     } catch (error) {  
       console.error("Error changing password:", error)  
       Alert.alert("Error", "No se pudo cambiar la contraseña")  
@@ -178,7 +187,8 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
     )  
   }  
   
-  const renderEditModal = () => (  
+   // Resto de los modales y renderizado permanecen iguales...  
+   const renderEditModal = () => (  
     <Modal  
       visible={editModalVisible}  
       animationType="slide"  
@@ -201,7 +211,7 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
             <TextInput  
               style={styles.input}  
               value={editFormData.name}  
-              onChangeText={(value) =>
+              onChangeText={(value) =>  
                 setEditFormData(prev => ({ ...prev, name: value }))  
               }  
               placeholder="Nombre completo"  
@@ -308,7 +318,7 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
               secureTextEntry  
             />  
             {passwordErrors.currentPassword && (  
-                              <Text style={styles.inputErrorText}>{passwordErrors.currentPassword}</Text>  
+              <Text style={styles.inputErrorText}>{passwordErrors.currentPassword}</Text>  
             )}  
           </View>  
   
@@ -324,7 +334,7 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
               secureTextEntry  
             />  
             {passwordErrors.newPassword && (  
-                              <Text style={styles.inputErrorText}>{passwordErrors.newPassword}</Text>  
+              <Text style={styles.inputErrorText}>{passwordErrors.newPassword}</Text>  
             )}  
           </View>  
   
@@ -340,7 +350,7 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
               secureTextEntry  
             />  
             {passwordErrors.confirmPassword && (  
-                              <Text style={styles.inputErrorText}>{passwordErrors.confirmPassword}</Text>  
+              <Text style={styles.inputErrorText}>{passwordErrors.confirmPassword}</Text>  
             )}  
           </View>  
         </ScrollView>  
@@ -387,7 +397,7 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
       <View style={styles.errorContainer}>  
         <MaterialIcons name="error" size={64} color="#f44336" />  
         <Text style={styles.errorText}>{error}</Text>  
-        <TouchableOpacity style={styles.retryButton} onPress={loadUserProfile}>  
+        <TouchableOpacity style={styles.retryButton} onPress={loadUserRole}>  
           <Text style={styles.retryButtonText}>Reintentar</Text>  
         </TouchableOpacity>  
       </View>  
@@ -400,19 +410,20 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
         <View style={styles.profileImageContainer}>  
           <Feather name="user" size={48} color="#1a73e8" />  
         </View>  
-        <Text style={styles.name}>{userProfile?.name || "Usuario"}</Text>  
+        {/* ✅ CORREGIDO: Usar datos del contexto directamente */}  
+        <Text style={styles.name}>{user?.name || "Usuario"}</Text>  
         <View style={styles.roleBadge}>  
           <Text style={styles.roleText}>  
             {userRole === 'client' ? 'Cliente' : userRole === 'admin' ? 'Administrador' : 'Técnico'}  
           </Text>  
         </View>  
-        <Text style={styles.email}>{userProfile?.email || "usuario@ejemplo.com"}</Text>  
+        <Text style={styles.email}>{user?.email || "usuario@ejemplo.com"}</Text>  
       </View>  
   
       <View style={styles.section}>  
         <Text style={styles.sectionTitle}>Configuración de la Cuenta</Text>  
   
-        <TouchableOpacity   
+        <TouchableOpacity  
           style={styles.menuItem}  
           onPress={() => setEditModalVisible(true)}  
         >  
@@ -423,7 +434,7 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
           <Feather name="chevron-right" size={20} color="#999" />  
         </TouchableOpacity>  
   
-        <TouchableOpacity   
+        <TouchableOpacity  
           style={styles.menuItem}  
           onPress={() => setChangePasswordModalVisible(true)}  
         >  
