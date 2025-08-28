@@ -34,12 +34,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       phone: '',  
       profilePic: ''  
     }  
-  
+
     try {  
       const { error } = await supabase  
         .from('perfil_usuario')  
         .insert({  
-          user_id: session.user.id,  
+          auth_id: session.user.id,  
           correo: session.user.email,  
           nombre: session.user.email?.split('@')[0] || 'Usuario',  
           apellido: '',  
@@ -48,14 +48,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           created_at: new Date().toISOString(),  
           actualizado: new Date().toISOString()  
         })  
-  
+
       if (error) {  
         console.warn("No se pudo crear perfil en BD:", error)  
       }  
     } catch (error) {  
       console.warn("Error al crear perfil:", error)  
     }  
-  
+
     return basicUser  
   }  
   
@@ -68,32 +68,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const { data: profile, error } = await supabase  
             .from('perfil_usuario')  
             .select('*')  
-            .eq('user_id', session.user.id)  
+            .eq('auth_id', session.user.id)  
             .single()  
   
           let userData: User  
   
-          if (error && error.code === 'PGRST116') {  
-            console.log("Perfil no encontrado, creando perfil básico")  
-            userData = await createBasicUserProfile(session)  
-          } else if (error) {  
-            console.error("Error al obtener perfil:", error)  
-            userData = await createBasicUserProfile(session)  
-          } else {  
-            userData = {  
-              id: session.user.id,  
-              email: session.user.email || '',  
-              name: `${profile.nombre || ''} ${profile.apellido || ''}`.trim() ||   
-                    profile.nombre ||   
-                    session.user.email?.split('@')[0] || 'Usuario',  
-              role: (profile.role as USER_ROLES_TYPE) || 'client',  
-              permissions: ROLE_PERMISSIONS[profile.role as USER_ROLES_TYPE] || ROLE_PERMISSIONS.client,  
-              phone: profile.telefono || '',  
-              profilePic: '',  
-              taller_id: profile.taller_id,  
-              isActive: profile.estado  
-            }  
-          }  
+          if (error && error.code === 'PGRST116') {
+            console.log("Perfil no encontrado, creando perfil básico")
+            userData = await createBasicUserProfile(session)
+          } else if (error) {
+            console.error("Error al obtener perfil:", error)
+            userData = await createBasicUserProfile(session)
+          } else {
+            // Mapear 'cliente' a 'client' para navegación y permisos correctos
+            let mappedRole = profile.role?.toLowerCase();
+            if (mappedRole === 'cliente' || mappedRole === 'client') mappedRole = 'client';
+            userData = {
+              id: session.user.id,
+              email: session.user.email || '',
+              name: `${profile.nombre || ''} ${profile.apellido || ''}`.trim() ||
+                    profile.nombre ||
+                    session.user.email?.split('@')[0] || 'Usuario',
+              role: (mappedRole as USER_ROLES_TYPE) || 'client',
+              permissions: ROLE_PERMISSIONS[mappedRole as USER_ROLES_TYPE] || ROLE_PERMISSIONS.client,
+              phone: profile.telefono || '',
+              profilePic: '',
+              taller_id: profile.taller_id,
+              isActive: profile.estado
+            }
+          }
   
           setUser(userData)  
           await AsyncStorage.setItem("user", JSON.stringify(userData))  
@@ -116,31 +119,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const { data: profile, error } = await supabase  
             .from('perfil_usuario')  
             .select('*')  
-            .eq('user_id', session.user.id)  
+            .eq('auth_id', session.user.id)  
             .single()  
   
           let userData: User  
   
-          if (error && error.code === 'PGRST116') {  
-            userData = await createBasicUserProfile(session)  
-          } else if (error) {  
-            console.error("Error al cargar perfil:", error)  
-            userData = await createBasicUserProfile(session)  
-          } else {  
-            userData = {  
-              id: session.user.id,  
-              email: session.user.email || '',  
-              name: `${profile.nombre || ''} ${profile.apellido || ''}`.trim() ||   
-                    profile.nombre ||   
-                    session.user.email?.split('@')[0] || 'Usuario',  
-              role: (profile.role as USER_ROLES_TYPE) || 'client',  
-              permissions: ROLE_PERMISSIONS[profile.role as USER_ROLES_TYPE] || ROLE_PERMISSIONS.client,  
-              phone: profile.telefono || '',  
-              profilePic: '',  
-              taller_id: profile.taller_id,  
-              isActive: profile.estado  
-            }  
-          }  
+          if (error && error.code === 'PGRST116') {
+            userData = await createBasicUserProfile(session)
+          } else if (error) {
+            console.error("Error al cargar perfil:", error)
+            userData = await createBasicUserProfile(session)
+          } else {
+            // Mapear 'cliente' a 'client' para navegación y permisos correctos
+            let mappedRole = profile.role?.toLowerCase();
+            if (mappedRole === 'cliente' || mappedRole === 'client') mappedRole = 'client';
+            userData = {
+              id: session.user.id,
+              email: session.user.email || '',
+              name: `${profile.nombre || ''} ${profile.apellido || ''}`.trim() ||
+                    profile.nombre ||
+                    session.user.email?.split('@')[0] || 'Usuario',
+              role: (mappedRole as USER_ROLES_TYPE) || 'client',
+              permissions: ROLE_PERMISSIONS[mappedRole as USER_ROLES_TYPE] || ROLE_PERMISSIONS.client,
+              phone: profile.telefono || '',
+              profilePic: '',
+              taller_id: profile.taller_id,
+              isActive: profile.estado
+            }
+          }
   
           setUser(userData)  
           await AsyncStorage.setItem("user", JSON.stringify(userData))  

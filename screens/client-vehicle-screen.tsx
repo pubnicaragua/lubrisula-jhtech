@@ -30,7 +30,7 @@ export default function ClientVehicleScreen({ route, navigation }: ClientVehicle
   const [refreshing, setRefreshing] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
   
-  // ✅ CORREGIDO: Usar getClientByUserId para buscar por user_id  
+  // Cliente por user_id
   const loadClientVehicles = useCallback(async () => {  
     try {  
       setLoading(true)  

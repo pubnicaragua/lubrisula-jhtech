@@ -49,46 +49,44 @@ export default function NewOrderScreen({ navigation, route }: Props) {
   const [estimatedCompletionDate, setEstimatedCompletionDate] = useState<string | undefined>(undefined)  
   const [notes, setNotes] = useState("")  
   
-  const loadInitialData = useCallback(async () => {  
-    try {  
-      setLoading(true)  
-      // Cargar clientes y vehículos  
-      const [clientsData, vehiclesData] = await Promise.all([  
-        clientService.getAllClients(),  
-        vehicleService.getAllVehicles()  
-      ])  
-  
-      setClients(clientsData)  
-      // ✅ CORREGIDO: Usar directamente sin mapeo ya que los tipos están sincronizados  
-      setVehicles(vehiclesData)  
-  
-      // Si viene con parámetros, preseleccionar cliente y/o vehículo  
-      if (params?.clientId) {  
-        const client = clientsData.find(c => c.id === params.clientId)  
-        if (client) {  
-          setSelectedClient(client)  
-          // Filtrar vehículos del cliente seleccionado  
-          const clientVehicles = vehiclesData.filter(v => v.client_id === params.clientId)  
-          // Si también viene vehicleId, preseleccionarlo  
-          if (params.vehicleId) {  
-            const vehicle = clientVehicles.find(v => v.id === params.vehicleId)  
-            if (vehicle) {  
-              setSelectedVehicle(vehicle)  
-            }  
-          }  
-        }  
-      }  
-    } catch (error) {  
-      console.error("Error loading initial data:", error)  
-      Alert.alert("Error", "No se pudieron cargar los datos iniciales")  
-    } finally {  
-      setLoading(false)  
-    }  
-  }, [params])  
-  
-  useFocusEffect(useCallback(() => {  
-    loadInitialData()  
-  }, [loadInitialData]))  
+  const loadInitialData = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Cargar todos los clientes y vehículos
+      const [clientsData, vehiclesData] = await Promise.all([
+        clientService.getAllClients(),
+        vehicleService.getAllVehicles()
+      ]);
+      setClients(clientsData);
+      setVehicles(vehiclesData);
+
+      // Si viene con parámetros, preseleccionar cliente y/o vehículo
+      if (params?.clientId) {
+        const client = clientsData.find(c => c.id === params.clientId);
+        if (client) {
+          setSelectedClient(client);
+          // Filtrar vehículos del cliente seleccionado
+          const clientVehicles = vehiclesData.filter(v => v.client_id === params.clientId);
+          if (params.vehicleId) {
+            const vehicle = clientVehicles.find(v => v.id === params.vehicleId);
+            if (vehicle) {
+              setSelectedVehicle(vehicle);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudieron cargar los datos iniciales');
+    } finally {
+      setLoading(false);
+    }
+  }, [params]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadInitialData();
+    }, [loadInitialData])
+  );
   
   const handleClientSelect = (client: Client) => {  
     setSelectedClient(client)  

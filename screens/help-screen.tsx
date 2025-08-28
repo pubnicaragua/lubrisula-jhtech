@@ -122,7 +122,7 @@ export default function HelpScreen() {
       description: "Chat directo con soporte",  
       icon: "message-circle",  
       action: () => {  
-        Linking.openURL("https://wa.me/50588888888?text=Hola, necesito ayuda con AutoFlowX")  
+  Linking.openURL("https://wa.me/50488888888?text=Hola, necesito ayuda con AutoFlowX")
       }  
     },  
     {  

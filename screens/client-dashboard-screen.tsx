@@ -126,7 +126,7 @@ export default function ClientDashboardScreen() {
         
       if (!user?.id) return  
   
-      // ✅ CORREGIDO: Usar getClientByUserId para buscar por user_id  
+  // Cliente por user_id
       const client = await clientService.getClientByUserId(user.id)  
       if (client) {  
         setClientData(client)  

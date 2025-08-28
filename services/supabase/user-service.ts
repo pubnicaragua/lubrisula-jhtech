@@ -39,7 +39,7 @@ export const userService = {
       const { data: profile, error: profileError } = await supabase  
         .from('perfil_usuario')  
         .select('*')  
-        .eq('user_id', user.id)  
+        .eq('auth_id', user.id)  
         .single()  
   
       if (profileError) {  
@@ -99,7 +99,7 @@ export const userService = {
       await supabase  
         .from('perfil_usuario')  
         .update({ actualizado: new Date().toISOString() })  
-        .eq('user_id', data.user.id)  
+        .eq('auth_id', data.user.id)  
   
       // Obtener el perfil completo del usuario  
       const userProfile = await this.getCurrentUserProfile()  
@@ -172,7 +172,7 @@ export const userService = {
       const { error: profileError } = await supabase  
         .from('perfil_usuario')  
         .insert([{  
-          user_id: authData.user.id,  
+          auth_id: authData.user.id,  
           correo: userData.email,  
           nombre: userData.firstName,  
           apellido: userData.lastName,  
@@ -237,7 +237,7 @@ export const userService = {
       const { data, error } = await supabase  
         .from('perfil_usuario')  
         .update(updateData)  
-        .eq('user_id', userId)  
+        .eq('auth_id', userId)  
         .select()  
         .single()  
   
@@ -288,7 +288,7 @@ export const userService = {
       const { data, error } = await supabase  
         .from('perfil_usuario')  
         .select('role')  
-        .eq('user_id', userId)  
+        .eq('auth_id', userId)  
         .single()  
   
       if (error || !data) {  
@@ -313,7 +313,7 @@ export const userService = {
       const { data, error } = await supabase  
         .from('perfil_usuario')  
         .select('role')  
-        .eq('user_id', userId)  
+        .eq('auth_id', userId)  
         .single()  
   
       if (error || !data) {  
@@ -346,7 +346,7 @@ export const userService = {
       }  
   
       return data.map((profile: any) => ({  
-        id: profile.user_id,  
+  id: profile.auth_id,  
         email: profile.correo || '',  
         phone: profile.telefono || '',  
         first_name: profile.nombre || '',  
@@ -382,7 +382,7 @@ export const userService = {
     const { data, error } = await supabase  
       .from('perfil_usuario')  
       .select('taller_id')  
-      .eq('user_id', userId)  
+      .eq('auth_id', userId)  
       .single()  
       
     if (error) {  
@@ -423,7 +423,7 @@ export const userService = {
       const { data, error } = await supabase  
         .from('perfil_usuario')  
         .select('role')  
-        .eq('user_id', userId)  
+        .eq('auth_id', userId)  
         .single()  
   
       if (error || !data) {  
@@ -470,7 +470,7 @@ export const userService = {
       const { data, error } = await supabase  
         .from('perfil_usuario')  
         .select('*')  
-        .eq('user_id', userId)  
+        .eq('auth_id', userId)  
         .single()  
   
       if (error) {  
@@ -479,7 +479,7 @@ export const userService = {
       }  
   
       return {  
-        id: data.user_id,  
+  id: data.auth_id,  
         email: data.correo || '',  
         name: `${data.nombre || ''} ${data.apellido || ''}`.trim() || data.correo,  
         role: data.role || 'client',  
@@ -510,7 +510,7 @@ export const userService = {
       }  
   
       return (data || []).map(profile => ({  
-        id: profile.user_id,  
+  id: profile.auth_id,  
         email: profile.correo || '',  
         phone: profile.telefono || '',  
         first_name: profile.nombre || '',  
@@ -544,7 +544,7 @@ export const userService = {
       const { data: profile, error } = await supabase
         .from('perfil_usuario')
         .select('*')
-        .eq('user_id', userId)
+        .eq('auth_id', userId)
         .single()
 
       if (error) {
@@ -555,7 +555,7 @@ export const userService = {
         }
       }
 
-      const requiredFields = ['user_id', 'role', 'taller_id']
+  const requiredFields = ['auth_id', 'role', 'taller_id']
       const missingFields = requiredFields.filter(field => !profile[field])
 
       return {

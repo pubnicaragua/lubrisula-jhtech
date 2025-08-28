@@ -51,7 +51,7 @@ export default function ClientDetailScreen({ route, navigation }: ClientDetailSc
     client_type: "Individual",  
   })  
   
-  // ✅ CORREGIDO: Usar getClientByUserId para buscar por user_id  
+  // Cliente por user_id
   const loadClientData = useCallback(async () => {  
     try {  
       setLoading(true)  

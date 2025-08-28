@@ -69,7 +69,7 @@ export default function NewClientScreen({ navigation }: UiScreenNavProp) {
         phone: formData.phone || undefined,  
         company: formData.company || undefined,  
         client_type: formData.client_type,  
-        user_id: user?.id,  
+  user_id: user?.id,  
         taller_id: user?.taller_id,  
       };  
   
@@ -132,7 +132,7 @@ export default function NewClientScreen({ navigation }: UiScreenNavProp) {
             style={[styles.input, errors.phone && styles.inputError]}  
             value={formData.phone}  
             onChangeText={(value) => updateFormData('phone', value)}  
-            placeholder="+505 8888-8888"  
+            placeholder="+504 8888-8888"  
             keyboardType="phone-pad"  
           />  
           {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}  

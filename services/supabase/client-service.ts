@@ -61,7 +61,7 @@ export const clientService = {
         .select('*')  
         .eq('user_id', userId)  
         .single()  
-  
+
       // ✅ CORREGIDO: Manejar error 406 (Not Acceptable) y PGRST116 (No rows found)  
       if (error && error.code !== 'PGRST116' && error.code !== 'PGRST406') throw error  
       return data  

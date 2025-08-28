@@ -72,7 +72,7 @@ export const accessService = {
       const { data: profile, error } = await supabase  
         .from('perfil_usuario')  
         .select('role, taller_id')  
-        .eq('user_id', userId)  
+  .eq('auth_id', userId)  
         .single()  
   
       if (error) {  

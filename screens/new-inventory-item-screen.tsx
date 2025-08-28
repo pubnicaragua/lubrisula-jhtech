@@ -89,7 +89,11 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
         Promise.resolve([]) // Placeholder for suppliers - not implemented in service  
       ])  
   
-      setCategories(categoriesData)  
+      // Deduplicate categories by id
+      const uniqueCategories = Array.from(
+        new Map(categoriesData.map(cat => [cat.id, cat])).values()
+      )
+      setCategories(uniqueCategories)
       setSuppliers(suppliersData)  
   
     } catch (error) {  
@@ -214,122 +218,109 @@ export default function NewInventoryItemScreen({ navigation }: { navigation: any
   )  
   
   return (  
-    <ScrollView style={styles.container}>  
-      <View style={styles.header}>  
-        <Text style={styles.title}>Nuevo Artículo</Text>  
-        <Text style={styles.subtitle}>Agregar artículo al inventario</Text>  
-      </View>  
-  
-      <View style={styles.form}>  
-        <View style={styles.section}>  
-          <Text style={styles.sectionTitle}>Información Básica</Text>  
-            
-          <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Nombre del Producto *</Text>  
-            <TextInput  
-              style={[styles.input, errors.producto && styles.inputError]}  
-              value={formData.producto}  
-              onChangeText={(value) => updateFormData('producto', value)}  
-              placeholder="Nombre del artículo"  
-              autoCapitalize="words"  
-            />  
-            {errors.producto && <Text style={styles.errorText}>{errors.producto}</Text>}  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Categoría *</Text>  
-            <TouchableOpacity  
-              style={[styles.selector, errors.categoria_id && styles.inputError]}  
-              onPress={() => setCategoryModalVisible(true)}  
-            >  
-              <Text style={[  
-                styles.selectorText,  
-                !formData.categoria_id && styles.placeholderText  
-              ]}>  
-                {getSelectedCategoryName()}  
-              </Text>  
-              <Feather name="chevron-down" size={20} color="#666" />  
-            </TouchableOpacity>  
-            {errors.categoria_id && <Text style={styles.errorText}>{errors.categoria_id}</Text>}  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Precio Unitario *</Text>  
-            <TextInput  
-              style={[styles.input, errors.precio_unitario && styles.inputError]}  
-              value={formData.precio_unitario?.toString()}  
-              onChangeText={(value) => updateFormData('precio_unitario', parseFloat(value) || 0)}  
-              placeholder="0.00"  
-              keyboardType="decimal-pad"  
-            />  
-            {errors.precio_unitario && <Text style={styles.errorText}>{errors.precio_unitario}</Text>}  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Cantidad Inicial *</Text>  
-            <TextInput  
-              style={[styles.input, errors.cantidad && styles.inputError]}  
-              value={formData.cantidad?.toString()}  
-              onChangeText={(value) => updateFormData('cantidad', parseInt(value) || 0)}  
-              placeholder="0"  
-              keyboardType="number-pad"  
-            />  
-            {errors.cantidad && <Text style={styles.errorText}>{errors.cantidad}</Text>}  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Stock Mínimo *</Text>  
-            <TextInput  
-              style={[styles.input, errors.minStock && styles.inputError]}  
-              value={formData.minStock?.toString()}  
-              onChangeText={(value) => updateFormData('minStock', parseInt(value) || 0)}  
-              placeholder="0"  
-              keyboardType="number-pad"  
-            />  
-            {errors.minStock && <Text style={styles.errorText}>{errors.minStock}</Text>}  
-          </View>  
-  
-          <View style={styles.inputGroup}>  
-            <Text style={styles.label}>Lugar de Compra</Text>  
-            <TextInput  
-              style={styles.input}  
-              value={formData.lugar_compra}  
-              onChangeText={(value) => updateFormData('lugar_compra', value)}  
-              placeholder="Proveedor o lugar de compra"  
-              autoCapitalize="words"  
-            />  
-          </View>  
-        </View>  
-      </View>  
-  
-      <View style={styles.footer}>  
-        <TouchableOpacity  
-          style={[styles.button, styles.cancelButton]}  
-          onPress={() => navigation.goBack()}  
-          disabled={loading}  
-        >  
-          <Text style={styles.cancelButtonText}>Cancelar</Text>  
-        </TouchableOpacity>  
-  
-        <TouchableOpacity  
-          style={[styles.button, styles.saveButton]}  
-          onPress={handleSave}  
-          disabled={loading}  
-        >  
-          {loading ? (  
-            <ActivityIndicator size="small" color="#fff" />  
-          ) : (  
-            <>  
-              <Feather name="save" size={20} color="#fff" />  
-              <Text style={styles.saveButtonText}>Guardar Artículo</Text>  
-            </>  
-          )}  
-        </TouchableOpacity>  
-      </View>  
-  
-      {renderCategoryModal()}  
-    </ScrollView>  
-  )  
+    <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Nuevo Artículo</Text>
+        <Text style={styles.subtitle}>Agregar artículo al inventario</Text>
+      </View>
+      <View style={styles.form}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Información Básica</Text>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Nombre del Producto *</Text>
+            <TextInput
+              style={[styles.input, errors.producto && styles.inputError]}
+              value={formData.producto}
+              onChangeText={(value) => updateFormData('producto', value)}
+              placeholder="Nombre del producto"
+              autoCapitalize="words"
+            />
+            {errors.producto && <Text style={styles.errorText}>{errors.producto}</Text>}
+          </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Categoría *</Text>
+            <TouchableOpacity
+              style={styles.selector}
+              onPress={() => setCategoryModalVisible(true)}
+            >
+              <Text style={formData.categoria_id ? styles.selectorText : styles.placeholderText}>
+                {getSelectedCategoryName()}
+              </Text>
+              <Feather name="chevron-down" size={20} color="#666" />
+            </TouchableOpacity>
+            {errors.categoria_id && <Text style={styles.errorText}>{errors.categoria_id}</Text>}
+          </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Precio Unitario *</Text>
+            <TextInput
+              style={[styles.input, errors.precio_unitario && styles.inputError]}
+              value={formData.precio_unitario?.toString()}
+              onChangeText={(value) => updateFormData('precio_unitario', parseFloat(value) || 0)}
+              placeholder="0.00"
+              keyboardType="decimal-pad"
+            />
+            {errors.precio_unitario && <Text style={styles.errorText}>{errors.precio_unitario}</Text>}
+          </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Cantidad Inicial *</Text>
+            <TextInput
+              style={[styles.input, errors.cantidad && styles.inputError]}
+              value={formData.cantidad?.toString()}
+              onChangeText={(value) => updateFormData('cantidad', parseInt(value) || 0)}
+              placeholder="0"
+              keyboardType="number-pad"
+            />
+            {errors.cantidad && <Text style={styles.errorText}>{errors.cantidad}</Text>}
+          </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Stock Mínimo *</Text>
+            <TextInput
+              style={[styles.input, errors.minStock && styles.inputError]}
+              value={formData.minStock?.toString()}
+              onChangeText={(value) => updateFormData('minStock', parseInt(value) || 0)}
+              placeholder="0"
+              keyboardType="number-pad"
+            />
+            {errors.minStock && <Text style={styles.errorText}>{errors.minStock}</Text>}
+          </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Lugar de Compra</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.lugar_compra}
+              onChangeText={(value) => updateFormData('lugar_compra', value)}
+              placeholder="Proveedor o lugar de compra"
+              autoCapitalize="words"
+            />
+          </View>
+        </View>
+      </View>
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={[styles.button, styles.cancelButton]}
+          onPress={() => navigation.goBack()}
+          disabled={loading}
+        >
+          <Text style={styles.cancelButtonText}>Cancelar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.button, styles.saveButton]}
+          onPress={handleSave}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Feather name="save" size={20} color="#fff" />
+              <Text style={styles.saveButtonText}>Guardar Artículo</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+      {renderCategoryModal()}
+    </ScrollView>
+  )
 }  
   
 // Estilos permanecen igual...  

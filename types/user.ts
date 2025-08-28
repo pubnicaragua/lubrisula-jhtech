@@ -111,7 +111,7 @@ export interface RegisterData extends CreateUserData {
 // ✅ AGREGADO: Tipos para relaciones de taller  
 export interface UserTaller {  
   id: string  
-  user_id: string  
+  auth_id: string
   taller_id: string  
   role: string  
   acceso: boolean  

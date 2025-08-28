@@ -102,7 +102,11 @@ export default function InventoryScreen({ navigation }: Props) {
   
       setInventoryItems(mappedInventory)  
       setFilteredItems(mappedInventory)  
-      setCategories(categoriesData)  
+      // Deduplicate categories by id
+      const uniqueCategories = Array.from(
+        new Map(categoriesData.map(cat => [cat.id, cat])).values()
+      )
+      setCategories(uniqueCategories)
       setSuppliers(suppliersData)  
   
       console.log("✅ InventoryScreen - Datos del inventario cargados exitosamente")  
@@ -334,23 +338,24 @@ export default function InventoryScreen({ navigation }: Props) {
                 Todas  
               </Text>  
             </TouchableOpacity>  
-            {categories.map((category) => (  
-              <TouchableOpacity  
-                key={category.id}  
-                style={[  
-                  styles.categoryButton,  
-                  selectedCategory === category.id && styles.categoryButtonSelected  
-                ]}  
-                onPress={() => handleCategoryChange(category.id)}  
-              >  
-                <Text style={[  
-                  styles.categoryButtonText,  
-                  selectedCategory === category.id && styles.categoryButtonTextSelected  
-                ]}>  
-                  {category.nombre}  
-                </Text>  
-              </TouchableOpacity>  
-            ))}  
+            {/* Deduplicate categories before rendering */}
+            {Array.from(new Map(categories.map(cat => [cat.id, cat])).values()).map((category) => (
+              <TouchableOpacity
+                key={category.id}
+                style={[
+                  styles.categoryButton,
+                  selectedCategory === category.id && styles.categoryButtonSelected
+                ]}
+                onPress={() => handleCategoryChange(category.id)}
+              >
+                <Text style={[
+                  styles.categoryButtonText,
+                  selectedCategory === category.id && styles.categoryButtonTextSelected
+                ]}>
+                  {category.nombre}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>  
         </View>  
   

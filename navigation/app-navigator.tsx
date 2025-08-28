@@ -316,11 +316,12 @@ const AppNavigator = () => {
   }  
   
   // Determinar qué navegador mostrar según el rol del usuario  
-  if (user?.role === "client") {  
-    return <ClientTabNavigator />  
-  } else {  
-    return <TechnicianTabNavigator />  
-  }  
+  // Soportar ambos valores: 'client' y 'cliente' para navegación de clientes
+  if (user?.role === "client" || user?.role === "cliente") {
+    return <ClientTabNavigator />
+  } else {
+    return <TechnicianTabNavigator />
+  }
 }  
   
 export default AppNavigator

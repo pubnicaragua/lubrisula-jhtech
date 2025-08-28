@@ -96,7 +96,7 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
           phone: editFormData.phone,  
           updated_at: new Date().toISOString()  
         })  
-        .eq('user_id', user.id)  
+  .eq('user_id', user.id)  
   
       if (error) {  
         console.error("Error updating profile:", error)  

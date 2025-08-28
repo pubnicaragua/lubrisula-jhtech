@@ -94,17 +94,17 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
   
       // Cargar tarjetas con información de vehículos  
       const { data: cardsData, error: cardsError } = await supabase  
-        .from('kanban_cards')  
-        .select(`  
-          *,  
-          vehicle:vehicle_id(  
-            marca,  
-            modelo,  
-            placa,  
-            client_id  
-          )  
-        `)  
-        .order('position', { ascending: true })  
+        .from('kanban_cards')
+        .select(`
+          *,
+          vehicle:vehicle_id(
+            marca,
+            modelo,
+            placa,
+            client_id
+          )
+        `)
+        .order('position', { ascending: true })
   
       if (cardsError) throw cardsError  
   

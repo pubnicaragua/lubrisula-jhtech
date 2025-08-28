@@ -341,7 +341,7 @@ const dashboardService = {
       const { data: userTaller, error } = await supabase  
         .from('usuarios_taller')  
         .select('*')  
-        .eq('user_id', userId)  
+  .eq('user_id', userId)  
         .eq('taller_id', tallerId)  
         .eq('acceso', true)  
         .single()  
@@ -357,7 +357,7 @@ const dashboardService = {
       const { data: userProfile, error: profileError } = await supabase  
         .from('perfil_usuario')  
         .select('*')  
-        .eq('user_id', userId)  
+  .eq('user_id', userId)  
         .single()  
   
       let role = 'client'  
