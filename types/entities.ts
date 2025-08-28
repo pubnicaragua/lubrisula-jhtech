@@ -19,17 +19,19 @@ export interface Vehicle {
   updated_at?: string;  
 }  
   
+// ✅ CORREGIDO: Unificar tipos de cliente para consistencia  
 export interface Client {  
-  id: string;  
-  name: string;  
-  email?: string;  
-  phone?: string;  
-  company?: string;  
-  client_type: 'individual' | 'business';  
-  user_id?: string;  
-  taller_id?: string;  
-  created_at: string;  
-  updated_at?: string;  
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  client_type?: 'Individual' | 'Empresa';
+  address?: string;
+  user_id?: string;
+  taller_id?: string;
+  created_at: string;
+  updated_at?: string;
 }  
   
 export interface Order {  
@@ -100,6 +102,30 @@ export interface Appointment {
   notes?: string;  
   created_at: string;  
   updated_at?: string;  
+}  
+  
+// ✅ AGREGADO: Tipo para CitasDetalleType (CRÍTICO)  
+export interface CitasDetalleType {  
+  id: string;
+  client_id: string;
+  vehiculo_id?: string;
+  tecnico_id?: string;
+  fecha: string;
+  hora: string;
+  tipo_servicio: string;
+  descripcion?: string;
+  estado: 'programada' | 'confirmada' | 'en_proceso' | 'completada' | 'cancelada';
+  notas?: string;
+  created_at: string;
+  updated_at?: string;
+  tipos_operacion?: { nombre?: string };
+  hora_inicio?: string;
+  hora_fin?: string;
+  tecnicos?: { nombre?: string; apellido?: string };
+  observaciones?: string;
+  clients?: { name: string };
+  vehicles?: { marca: string; modelo: string; placa: string };
+  technicians?: { name: string };
 }  
   
 // ✅ AGREGADO: Tipos para servicios  

@@ -17,55 +17,60 @@ import {
 export * from './navigation'  
 export * from './user'  
   
-// ✅ Re-exportaciones selectivas SOLO de tipos que existen  
-export type {   
-  Client,   
-  Vehicle   
-  // ❌ ELIMINADO: Taller - no existe en entities  
+// ✅ CORREGIDO: Re-exportaciones selectivas incluyendo CitasDetalleType  
+export type {  
+  Client,  
+  Vehicle,  
+  InventoryItem,  
+  Appointment,  
+  CitasDetalleType, // ✅ CRÍTICO: Exportar CitasDetalleType  
+  Service
 } from './entities'  
   
-export type {   
+export type {  
   CreateClientData,  
   UpdateClientData,  
   CreateVehicleData,  
-  UpdateVehicleData   
+  UpdateVehicleData  
 } from './operations'  
   
-export type {   
+export type {  
   ApiResponse  
-  // ❌ ELIMINADO: ApiError - no existe en api  
 } from './api'  
   
-export type {   
+export type {  
   ServicioType  
-  // ❌ ELIMINADO: CreateServiceData - no existe en services  
 } from './services'  
   
-export type {   
+export type {  
   DashboardStats  
-  // ❌ ELIMINADO: RevenueData - no existe en dashboard  
 } from './dashboard'  
   
-export type {   
+export type {  
   KanbanOrderType,  
   KanbanCardProps,  
   KanbanColumnProps,  
   KanbanScreenProps,  
-  TechnicianType   
+  TechnicianType  
 } from './canvan'  
   
-export type {   
+export type {  
   Order,  
   OrderStatus,  
   PaymentStatus,  
   CreateOrderData,  
-  UpdateOrderData   
+  UpdateOrderData,  
+  OrderItem,  
+  OrderComment,  
+  OrderImage,  
+  // RepairProcess,
+  CreateOrderItemData,  
+  CreateOrderCommentData  
 } from './order'  
   
-export type {   
+export type {  
   MaterialCategory,  
   Supplier  
-  // ❌ ELIMINADO: CreateInventoryData, UpdateInventoryData - no existen en inventory  
 } from './inventory'  
   
 // Tipos de moneda para los países de Centroamérica  
@@ -192,6 +197,6 @@ export type ReportsScreenProps = {
   
 // Common screen props type  
 export type UiScreenProps = {  
-  route: { params: any }  
+  route: { params?: any }  
   navigation: StackNavigationProp<any>  
 }

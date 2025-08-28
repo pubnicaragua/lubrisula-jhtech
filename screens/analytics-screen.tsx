@@ -23,7 +23,7 @@ import { inventoryService } from "../services/supabase/inventory-service"
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service"  
 import { Order } from '../types/order'  
-import { Client } from '../types/entities'  
+import { Client } from '../types'  
 import { Vehicle } from '../types/entities'  
   
 const { width: screenWidth } = Dimensions.get("window")  

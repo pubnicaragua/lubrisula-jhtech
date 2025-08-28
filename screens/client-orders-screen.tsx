@@ -20,7 +20,7 @@ import orderService from "../services/supabase/order-service"
 import clientService from "../services/supabase/client-service"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service"  
-import { Client } from "../types"  
+import { Client } from '../types'  
 import { Order, OrderStatus } from '../types/order'  
 import { RootStackParamList } from '../types/navigation'  
   
@@ -185,7 +185,7 @@ export default function ClientOrdersScreen({ route }: { route?: { params?: { cli
       <View style={styles.orderFooter}>  
         <View style={styles.orderFooterLeft}>  
           <Text style={styles.orderDate}>  
-            {new Date(item.created_at).toLocaleDateString("es-HN")}  
+            {new Date(item.createdAt).toLocaleDateString("es-HN")}  
           </Text>  
           <Text style={styles.paymentStatus}>Pago: Pendiente</Text>  
         </View>  

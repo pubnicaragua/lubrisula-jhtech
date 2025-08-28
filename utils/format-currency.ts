@@ -19,7 +19,7 @@ export const formatCurrency = (
     currency: currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-    // Usar la configuración regional de Nicaragua
+  // Usar la configuración regional de Honduras
     localeMatcher: 'best fit'
   })
   .format(amount)

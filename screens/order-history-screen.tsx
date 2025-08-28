@@ -131,7 +131,7 @@ export default function OrderHistoryScreen({ navigation, route }: Props) {
     // Filtrar por término de búsqueda  
     if (searchTerm) {  
       filtered = filtered.filter(order =>  
-        order.number?.toLowerCase().includes(searchTerm.toLowerCase()) ||  
+  (order.number ?? order.id)?.toLowerCase().includes(searchTerm.toLowerCase()) ||  
         order.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||  
         order.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||  
         order.vehicleInfo?.toLowerCase().includes(searchTerm.toLowerCase())  

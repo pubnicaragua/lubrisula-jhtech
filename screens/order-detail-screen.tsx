@@ -1,4 +1,5 @@
 "use client"  
+  
 import { useState, useCallback } from "react"  
 import {  
   View,  
@@ -194,7 +195,7 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
       {/* Header de la orden */}  
       <View style={styles.header}>  
         <View style={styles.orderTitleContainer}>  
-          <Text style={styles.orderNumber}>Orden #{order.number || order.id.slice(0, 8)}</Text>  
+          <Text style={styles.orderNumber}>Orden #{order.number ?? order.id?.slice(0, 8)}</Text>  
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>  
             <Text style={styles.statusText}>{getStatusText(order.status)}</Text>  
           </View>  
@@ -373,7 +374,7 @@ const styles = StyleSheet.create({
   },  
   retryButton: {  
     backgroundColor: "#1a73e8",  
-    paddingHorizontal: 20,  
+paddingHorizontal: 20,  
     paddingVertical: 10,  
     borderRadius: 8,  
   },  

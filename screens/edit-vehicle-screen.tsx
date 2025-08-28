@@ -15,29 +15,24 @@ import { useAuth } from "../context/auth-context"
 import { vehicleService } from "../services/supabase/vehicle-service"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service"  
+import type { UiScreenProps } from '../types'  
   
-interface EditVehicleScreenProps {  
-  route: { params: { vehicleId: string } }  
-  navigation: any  
-}  
-  
-export default function EditVehicleScreen({ route, navigation }: EditVehicleScreenProps) {  
+export default function EditVehicleScreen({ route, navigation }: UiScreenProps) {  
   console.log("🚗 EditVehicleScreen - Iniciando con vehicleId:", route.params.vehicleId)  
-    
   const { vehicleId } = route.params  
   const { user } = useAuth()  
-    
   const [loading, setLoading] = useState(true)  
   const [saving, setSaving] = useState(false)  
   const [vehicle, setVehicle] = useState<any>(null)  
   const [error, setError] = useState<string | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
     
+  // ✅ CORREGIDO: Usar nombres de campos del schema real  
   const [formData, setFormData] = useState({  
-    make: "",  
-    model: "",  
-    year: "",  
-    license_plate: "",  
+    marca: "",  
+    modelo: "",  
+    ano: "",  
+    placa: "",  
     color: "",  
     vin: "",  
   })  
@@ -47,7 +42,7 @@ export default function EditVehicleScreen({ route, navigation }: EditVehicleScre
       console.log("🔄 EditVehicleScreen - Cargando datos del vehículo:", vehicleId)  
       setLoading(true)  
       setError(null)  
-  
+        
       if (!user?.id) {  
         console.error("❌ EditVehicleScreen - Usuario no autenticado")  
         return  
@@ -64,7 +59,7 @@ export default function EditVehicleScreen({ route, navigation }: EditVehicleScre
   
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       console.log("🔐 EditVehicleScreen - Permisos usuario:", userPermissions)  
-      setUserRole(userPermissions?.rol || 'client')  
+      setUserRole(userPermissions?.role || 'client')  
   
       // Cargar datos del vehículo  
       const vehicleData = await vehicleService.getVehicleById(vehicleId)  
@@ -76,22 +71,23 @@ export default function EditVehicleScreen({ route, navigation }: EditVehicleScre
       }  
   
       // Verificar permisos de acceso  
-      if (userPermissions?.rol === 'client' && vehicleData.client_id !== user.id) {  
+      if (userPermissions?.role === 'client' && vehicleData.client_id !== user.id) {  
         console.error("❌ EditVehicleScreen - Sin permisos para editar este vehículo")  
         setError("No tienes permisos para editar este vehículo")  
         return  
       }  
   
       setVehicle(vehicleData)  
+        
+      // ✅ CORREGIDO: Usar campos reales del schema  
       setFormData({  
-        make: vehicleData.make || "",  
-        model: vehicleData.model || "",  
-        year: vehicleData.year?.toString() || "",  
-        license_plate: vehicleData.license_plate || "",  
+        marca: vehicleData.marca || "",  
+        modelo: vehicleData.modelo || "",  
+        ano: vehicleData.ano?.toString() || "",  
+        placa: vehicleData.placa || "",  
         color: vehicleData.color || "",  
         vin: vehicleData.vin || "",  
       })  
-  
     } catch (error) {  
       console.error("❌ EditVehicleScreen - Error cargando datos:", error)  
       setError("No se pudo cargar la información del vehículo")  
@@ -108,10 +104,15 @@ export default function EditVehicleScreen({ route, navigation }: EditVehicleScre
     try {  
       console.log("💾 EditVehicleScreen - Guardando cambios:", formData)  
       setSaving(true)  
-  
+        
+      // ✅ CORREGIDO: Usar campos del schema real  
       const updateData = {  
-        ...formData,  
-        year: parseInt(formData.year) || null,  
+        marca: formData.marca,  
+        modelo: formData.modelo,  
+        ano: formData.ano,  
+        placa: formData.placa,  
+        color: formData.color,  
+        vin: formData.vin,  
       }  
   
       await vehicleService.updateVehicle(vehicleId, updateData)  
@@ -120,7 +121,6 @@ export default function EditVehicleScreen({ route, navigation }: EditVehicleScre
       Alert.alert("Éxito", "Vehículo actualizado correctamente", [  
         { text: "OK", onPress: () => navigation.goBack() }  
       ])  
-  
     } catch (error) {  
       console.error("❌ EditVehicleScreen - Error guardando:", error)  
       Alert.alert("Error", "No se pudo actualizar el vehículo")  
@@ -166,8 +166,8 @@ export default function EditVehicleScreen({ route, navigation }: EditVehicleScre
             <Text style={styles.inputLabel}>Marca *</Text>  
             <TextInput  
               style={styles.input}  
-              value={formData.make}  
-              onChangeText={(value) => setFormData(prev => ({ ...prev, make: value }))}  
+              value={formData.marca}  
+              onChangeText={(value) => setFormData(prev => ({ ...prev, marca: value }))}  
               placeholder="Ej: Toyota"  
             />  
           </View>  
@@ -176,8 +176,8 @@ export default function EditVehicleScreen({ route, navigation }: EditVehicleScre
             <Text style={styles.inputLabel}>Modelo *</Text>  
             <TextInput  
               style={styles.input}  
-              value={formData.model}  
-              onChangeText={(value) => setFormData(prev => ({ ...prev, model: value }))}  
+              value={formData.modelo}  
+              onChangeText={(value) => setFormData(prev => ({ ...prev, modelo: value }))}  
               placeholder="Ej: Corolla"  
             />  
           </View>  
@@ -186,8 +186,8 @@ export default function EditVehicleScreen({ route, navigation }: EditVehicleScre
             <Text style={styles.inputLabel}>Año *</Text>  
             <TextInput  
               style={styles.input}  
-              value={formData.year}  
-              onChangeText={(value) => setFormData(prev => ({ ...prev, year: value }))}  
+              value={formData.ano}  
+              onChangeText={(value) => setFormData(prev => ({ ...prev, ano: value }))}  
               placeholder="Ej: 2020"  
               keyboardType="numeric"  
             />  
@@ -197,8 +197,8 @@ export default function EditVehicleScreen({ route, navigation }: EditVehicleScre
             <Text style={styles.inputLabel}>Placa *</Text>  
             <TextInput  
               style={styles.input}  
-              value={formData.license_plate}  
-              onChangeText={(value) => setFormData(prev => ({ ...prev, license_plate: value }))}  
+              value={formData.placa}  
+              onChangeText={(value) => setFormData(prev => ({ ...prev, placa: value }))}  
               placeholder="Ej: ABC-123"  
               autoCapitalize="characters"  
             />  
@@ -219,7 +219,8 @@ export default function EditVehicleScreen({ route, navigation }: EditVehicleScre
             <TextInput  
               style={styles.input}  
               value={formData.vin}  
-              onChangeText={(value) => setFormData(prev => ({ ...prev, vin: value }))}  
+              onChangeText={(value) => setFormData(prev => ({ ...prev  
+                , vin: value }))}  
               placeholder="Número de identificación del vehículo"  
               autoCapitalize="characters"  
             />  
@@ -333,7 +334,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,  
   },  
   inputLabel: {  
-    fontSize: 16,fontWeight: "500",  
+    fontSize: 16,  
+    fontWeight: "500",  
     color: "#333",  
     marginBottom: 8,  
   },  

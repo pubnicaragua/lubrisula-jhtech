@@ -13,87 +13,86 @@ import {
 } from "react-native"  
 import { Feather } from "@expo/vector-icons"  
 import { useAuth } from "../context/auth-context"  
-import CLIENTS_SERVICES, { Client } from "../services/supabase/client-service"  
-import { UiScreenNavProp, CreateClientType } from "../types"
-
-
+import { clientService } from "../services/supabase/client-service" // ✅ CORREGIDO: Usar importación consistente  
+import { UiScreenNavProp, CreateClientType } from '../types'  
+  
 export default function NewClientScreen({ navigation }: UiScreenNavProp) {  
   const { user } = useAuth()  
   const [loading, setLoading] = useState(false)  
-  const [formData, setFormData] = useState<{
-    name: string;
-    email: string;
-    phone: string;
-    company: string;
-    client_type: 'Individual' | 'Empresa';
-  }>({
-    name: "",
-    email: "",
-    phone: "",
-    company: "",
-    client_type: "Individual",
-  })
-  
+  const [formData, setFormData] = useState<{  
+    name: string;  
+    email: string;  
+    phone: string;  
+    company: string;  
+    client_type: 'Individual' | 'Empresa';  
+  }>({  
+    name: "",  
+    email: "",  
+    phone: "",  
+    company: "",  
+    client_type: "Individual",  
+  })  
+    
   const [errors, setErrors] = useState<Record<string, string>>({})  
-  
+    
   const validateForm = () => {  
     const newErrors: Record<string, string> = {}  
-  
+    
     if (!formData.name?.trim()) {  
       newErrors.name = "El nombre es requerido"  
     }  
-  
+    
     if (!formData.email?.trim()) {  
       newErrors.email = "El email es requerido"  
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {  
       newErrors.email = "El email no es válido"  
     }  
-  
+    
     if (!formData.phone?.trim()) {  
       newErrors.phone = "El teléfono es requerido"  
     }  
-  
+    
     setErrors(newErrors)  
     return Object.keys(newErrors).length === 0  
   }  
+    
+  const handleSubmit = async () => {  
+    if (!validateForm()) {  
+      return;  
+    }  
   
-  const handleSubmit = async () => {
-    if (!formData.name.trim()) {
-      Alert.alert("Error", "El nombre es obligatorio");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const clientData: CreateClientType = {
-        name: formData.name,
-        email: formData.email || undefined,
-        phone: formData.phone || undefined,
-        company: formData.company || undefined,
-        client_type: formData.client_type,
-        user_id: user?.id,
-        taller_id: user?.taller_id,
-      };
-
-      await CLIENTS_SERVICES.createClient(clientData);
-      Alert.alert("Éxito", "Cliente creado correctamente");
-      navigation.goBack();
-    } catch (error) {
-      console.error("Error creating client:", error);
-      Alert.alert("Error", "No se pudo crear el cliente");
-    } finally {
-      setLoading(false);
-    }
-  };
+    setLoading(true);  
+    try {  
+      const clientData: CreateClientType = {  
+        name: formData.name,  
+        email: formData.email || undefined,  
+        phone: formData.phone || undefined,  
+        company: formData.company || undefined,  
+        client_type: formData.client_type,  
+        user_id: user?.id,  
+        taller_id: user?.taller_id,  
+      };  
   
-  const updateFormData = (field: keyof typeof formData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-    // Clear error for this field
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: "" }))
-    }
-  }
-  
+      // ✅ CORREGIDO: Usar clientService consistente  
+      await clientService.createClient(clientData);  
+      Alert.alert("Éxito", "Cliente creado correctamente");  
+      navigation.goBack();  
+    } catch (error) {  
+      console.error("Error creating client:", error);  
+      Alert.alert("Error", "No se pudo crear el cliente");  
+    } finally {  
+      setLoading(false);  
+    }  
+  };  
+    
+  const updateFormData = (field: keyof typeof formData, value: string) => {  
+    setFormData(prev => ({ ...prev, [field]: value }))  
+    // Clear error for this field  
+    if (errors[field]) {  
+      setErrors(prev => ({ ...prev, [field]: "" }))  
+    }  
+  }  
+    
   return (  
     <ScrollView style={styles.container}>  
       <View style={styles.header}>  
@@ -140,7 +139,7 @@ export default function NewClientScreen({ navigation }: UiScreenNavProp) {
         </View>  
   
         <View style={styles.inputGroup}>  
-          <Text style={styles.label}>Empresa (Opcional)</Text> 
+          <Text style={styles.label}>Empresa (Opcional)</Text>  
           <TextInput  
             style={styles.input}  
             value={formData.company}  

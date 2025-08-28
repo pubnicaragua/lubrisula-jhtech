@@ -180,26 +180,27 @@ export class InventoryService {
   
   // Actualizar stock (para uso en órdenes)  
   // Actualizar stock (para uso en órdenes)  
-  async updateStock(id: string, newQuantity: number): Promise<void> {  
-    try {  
-      if (newQuantity < 0) {  
-        throw new Error('La cantidad no puede ser negativa')  
-      }  
-  
-      const { error } = await supabase  
-        .from('inventario')  
-        .update({ cantidad: newQuantity })  
-        .eq('id', id)  
-  
-      if (error) {  
-        console.error('Error updating stock:', error)  
-        throw new Error(`Error al actualizar stock: ${error.message}`)  
-      }  
-    } catch (error) {  
-      console.error('Error in updateStock:', error)  
-      throw error  
-    }  
-  }  
+  async updateStock(id: string, newQuantity: number): Promise<boolean> {
+    try {
+      if (newQuantity < 0) {
+        throw new Error('Stock quantity cannot be negative')
+      }
+
+      const { error } = await supabase
+        .from('inventario')
+        .update({ cantidad: newQuantity, updated_at: new Date().toISOString() })
+        .eq('id', id)
+
+      if (error) {
+        console.error('Error updating stock:', error)
+        throw error
+      }
+      return true
+    } catch (error) {
+      console.error('Error updating stock:', error)
+      throw error
+    }
+  }
   
   // Obtener categorías de inventario  
   async getInventoryCategories(): Promise<MaterialCategory[]> {  

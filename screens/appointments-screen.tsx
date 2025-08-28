@@ -20,7 +20,7 @@ import { useAuth } from "../context/auth-context"
 import { CITAS_SERVICES } from "../services/supabase/citas-services"
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service" 
-import { CitasDetalleType } from "../types"
+// import { CitasDetalleType } from "../types"
 
 type AppointmentsScreenProps = {
   navigation: StackNavigationProp<any>
@@ -28,10 +28,12 @@ type AppointmentsScreenProps = {
 
 export default function AppointmentsScreen({ navigation }: AppointmentsScreenProps) {  
   const { user } = useAuth()  
-  const [appointments, setAppointments] = useState<CitasDetalleType[]>([])  
+  // const [appointments, setAppointments] = useState<CitasDetalleType[]>([])
+  const [appointments, setAppointments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
-  const [selectedAppointment, setSelectedAppointment] = useState<CitasDetalleType | null>(null)  
+  // const [selectedAppointment, setSelectedAppointment] = useState<CitasDetalleType | null>(null)
+  const [selectedAppointment, setSelectedAppointment] = useState<any | null>(null)
   const [detailModalVisible, setDetailModalVisible] = useState(false)  
   const [error, setError] = useState<string | null>(null)  
   const [userRole, setUserRole] = useState<string | null>(null)  
@@ -51,11 +53,11 @@ export default function AppointmentsScreen({ navigation }: AppointmentsScreenPro
         return        
       }
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+  setUserRole(userPermissions?.role || 'client')  
   
       // Cargar citas según el rol  
       let allAppointments = []  
-      if (userPermissions?.rol === 'client') {  
+  if (userPermissions?.role === 'client') {  
         // Cliente solo ve sus citas  
         const clientAppointments = await CITAS_SERVICES.GET_ALL_CITAS()  
         allAppointments = clientAppointments.filter(appointment => appointment.client_id === user.id)  
@@ -120,7 +122,8 @@ export default function AppointmentsScreen({ navigation }: AppointmentsScreenPro
     return appointment.estado === filterStatus  
   })  
   
-  const renderAppointmentItem = ({ item }: { item: CitasDetalleType }) => (  
+  // const renderAppointmentItem = ({ item }: { item: CitasDetalleType }) => (
+  const renderAppointmentItem = ({ item }: { item: any }) => (
     <TouchableOpacity  
       style={styles.appointmentCard}  
       onPress={() => {  

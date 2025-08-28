@@ -30,11 +30,7 @@ import { Vehicle } from '../services/supabase/vehicle-service'
   
 type UpdateOrderNavigationProp = StackNavigationProp<RootStackParamList, 'UpdateOrder'>  
 type UpdateOrderRouteProp = RouteProp<RootStackParamList, 'UpdateOrder'>  
-  
-interface Props {  
-  navigation: UpdateOrderNavigationProp  
-  route: UpdateOrderRouteProp  
-}  
+import type { UiScreenProps } from '../types'
   
 interface OrderFormData {  
   description: string  
@@ -48,7 +44,7 @@ interface OrderFormData {
   total: number  
 }  
   
-export default function UpdateOrderScreen({ navigation, route }: Props) {  
+export default function UpdateOrderScreen({ navigation, route }: UiScreenProps) {
   const { orderId } = route.params  
   const { user } = useAuth()  
   const [loading, setLoading] = useState(true)  

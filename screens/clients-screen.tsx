@@ -1,4 +1,5 @@
 "use client"  
+  
 import { useState, useCallback, useEffect } from "react"  
 import {  
   View,  
@@ -316,7 +317,6 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
   )  
 }  
   
-// Los estilos permanecen iguales...  
 const styles = StyleSheet.create({  
   container: {  
     flex: 1,  

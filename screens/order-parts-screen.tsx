@@ -28,13 +28,9 @@ import { InventoryItem, mapLegacyFields } from '../types/inventory'
   
 type OrderPartsNavigationProp = StackNavigationProp<RootStackParamList, 'OrderParts'>  
 type OrderPartsRouteProp = RouteProp<RootStackParamList, 'OrderParts'>  
+import type { UiScreenProps } from '../types'
   
-interface Props {  
-  navigation: OrderPartsNavigationProp  
-  route: OrderPartsRouteProp  
-}  
-  
-export default function OrderPartsScreen({ navigation, route }: Props) {  
+export default function OrderPartsScreen({ navigation, route }: UiScreenProps) {
   const { orderId } = route.params  
   const { user } = useAuth()  
   
@@ -412,7 +408,7 @@ export default function OrderPartsScreen({ navigation, route }: Props) {
       {order && (  
         <View style={styles.orderInfo}>  
           {/* ✅ CORREGIDO: Usar 'number' en lugar de 'orderNumber' */}  
-          <Text style={styles.orderNumber}>Orden #{order.number || order.id.slice(0, 8)}</Text>  
+          <Text style={styles.orderNumber}>Orden #{order.number ?? order.id?.slice(0, 8)}</Text>  
           <Text style={styles.orderDescription}>{order.description}</Text>  
         </View>  
       )}  

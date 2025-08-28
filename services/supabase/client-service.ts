@@ -1,22 +1,22 @@
-import { supabase } from '../../lib/supabase';  
+import { supabase } from '../../lib/supabase'  
   
 // ✅ CORREGIDO: Tipo Client sincronizado con schema real  
 export type Client = {  
-  id: string;  
-  name: string;  
-  email?: string;  
-  phone?: string;  
-  company?: string;  
-  client_type: 'Individual' | 'Empresa';  
-  user_id?: string;  
-  taller_id?: string;  
-  created_at: string;  
-  updated_at?: string;  
-};  
+  id: string  
+  name: string  
+  email?: string  
+  phone?: string  
+  company?: string  
+  client_type: 'Individual' | 'Empresa'  
+  user_id?: string  
+  taller_id?: string  
+  created_at: string  
+  updated_at?: string  
+}  
   
 // ✅ CORREGIDO: Tipos para operaciones CRUD  
-export type CreateClientData = Omit<Client, 'id' | 'created_at' | 'updated_at'>;  
-export type UpdateClientData = Partial<Omit<Client, 'id' | 'created_at'>>;  
+export type CreateClientData = Omit<Client, 'id' | 'created_at' | 'updated_at'>  
+export type UpdateClientData = Partial<Omit<Client, 'id' | 'created_at'>>  
   
 export const clientService = {  
   // Get all clients  
@@ -25,13 +25,13 @@ export const clientService = {
       const { data, error } = await supabase  
         .from('clients')  
         .select('*')  
-        .order('name');  
+        .order('name')  
   
-      if (error) throw error;  
-      return data || [];  
+      if (error) throw error  
+      return data || []  
     } catch (error) {  
-      console.error('Error fetching clients:', error);  
-      throw error;  
+      console.error('Error fetching clients:', error)  
+      throw error  
     }  
   },  
   
@@ -42,13 +42,14 @@ export const clientService = {
         .from('clients')  
         .select('*')  
         .eq('id', id)  
-        .single();  
+        .single()  
   
-      if (error && error.code !== 'PGRST116') throw error;  
-      return data;  
+      // ✅ CORREGIDO: Manejar error 406 (Not Acceptable) y PGRST116 (No rows found)  
+      if (error && error.code !== 'PGRST116' && error.code !== 'PGRST406') throw error  
+      return data  
     } catch (error) {  
-      console.error(`Error fetching client with ID ${id}:`, error);  
-      throw error;  
+      console.error(`Error fetching client with ID ${id}:`, error)  
+      throw error  
     }  
   },  
   
@@ -59,13 +60,14 @@ export const clientService = {
         .from('clients')  
         .select('*')  
         .eq('user_id', userId)  
-        .single();  
+        .single()  
   
-      if (error && error.code !== 'PGRST116') throw error;  
-      return data;  
+      // ✅ CORREGIDO: Manejar error 406 (Not Acceptable) y PGRST116 (No rows found)  
+      if (error && error.code !== 'PGRST116' && error.code !== 'PGRST406') throw error  
+      return data  
     } catch (error) {  
-      console.error(`Error fetching client with user ID ${userId}:`, error);  
-      return null;  
+      console.error(`Error fetching client with user ID ${userId}:`, error)  
+      return null  
     }  
   },  
   
@@ -76,19 +78,19 @@ export const clientService = {
         ...clientData,  
         created_at: new Date().toISOString(),  
         updated_at: new Date().toISOString(),  
-      };  
+      }  
   
       const { data, error } = await supabase  
         .from('clients')  
         .insert([newClient])  
         .select()  
-        .single();  
+        .single()  
   
-      if (error) throw error;  
-      return data;  
+      if (error) throw error  
+      return data  
     } catch (error) {  
-      console.error('Error creating client:', error);  
-      throw error;  
+      console.error('Error creating client:', error)  
+      throw error  
     }  
   },  
   
@@ -98,20 +100,27 @@ export const clientService = {
       const updateData = {  
         ...updates,  
         updated_at: new Date().toISOString(),  
-      };  
+      }  
   
       const { data, error } = await supabase  
         .from('clients')  
         .update(updateData)  
         .eq('id', id)  
         .select()  
-        .single();  
+        .single()  
   
-      if (error) throw error;  
-      return data;  
+      // ✅ CORREGIDO: Manejar error 406 específicamente  
+      if (error) {  
+        if (error.code === 'PGRST406') {  
+          console.warn(`Client with ID ${id} not found for update`)  
+          return null  
+        }  
+        throw error  
+      }  
+      return data  
     } catch (error) {  
-      console.error(`Error updating client with ID ${id}:`, error);  
-      throw error;  
+      console.error(`Error updating client with ID ${id}:`, error)  
+      throw error  
     }  
   },  
   
@@ -121,34 +130,33 @@ export const clientService = {
       const { error } = await supabase  
         .from('clients')  
         .delete()  
-        .eq('id', id);  
+        .eq('id', id)  
   
-      if (error) throw error;  
-      return true;  
+      if (error) throw error  
+      return true  
     } catch (error) {  
-      console.error(`Error deleting client with ID ${id}:`, error);  
-      throw error;  
+      console.error(`Error deleting client with ID ${id}:`, error)  
+      throw error  
     }  
   },  
   
   // Search clients  
   searchClients: async (query: string): Promise<Client[]> => {  
     try {  
-      if (!query.trim()) return [];  
+      if (!query.trim()) return []  
   
-      const searchTerm = `%${query}%`;  
-  
+      const searchTerm = `%${query}%`  
       const { data, error } = await supabase  
         .from('clients')  
         .select('*')  
         .or(`name.ilike.${searchTerm},email.ilike.${searchTerm},phone.ilike.${searchTerm}`)  
-        .order('name');  
+        .order('name')  
   
-      if (error) throw error;  
-      return data || [];  
+      if (error) throw error  
+      return data || []  
     } catch (error) {  
-      console.error('Error searching clients:', error);  
-      throw error;  
+      console.error('Error searching clients:', error)  
+      throw error  
     }  
   },  
   
@@ -159,26 +167,26 @@ export const clientService = {
         .from('clients')  
         .select('*')  
         .eq('taller_id', tallerId)  
-        .order('name');  
+        .order('name')  
   
-      if (error) throw error;  
-      return data || [];  
+      if (error) throw error  
+      return data || []  
     } catch (error) {  
-      console.error(`Error fetching clients for taller ID ${tallerId}:`, error);  
-      throw error;  
+      console.error(`Error fetching clients for taller ID ${tallerId}:`, error)  
+      throw error  
     }  
   },  
   
   // Initialize clients  
   initializeClients: async (): Promise<void> => {  
     try {  
-      const clients = await clientService.getAllClients();  
-      console.log(`Initialized ${clients.length} clients`);  
+      const clients = await clientService.getAllClients()  
+      console.log(`Initialized ${clients.length} clients`)  
     } catch (error) {  
-      console.error('Error initializing clients:', error);  
-      throw error;  
+      console.error('Error initializing clients:', error)  
+      throw error  
     }  
   },  
-};  
+}  
   
-export default clientService;
+export default clientService

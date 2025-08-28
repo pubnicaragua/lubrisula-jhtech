@@ -25,7 +25,8 @@ import { clientService } from "../services/supabase/client-service"
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service"  
 // ✅ CORREGIDO: Importar tipos centralizados  
-import { Vehicle, Client, Order, UiScreenProps } from "../types"  
+import { Vehicle, Client, Order } from '../types'
+import type { UiScreenProps } from '../types'
   
 interface AppointmentType {  
   id: string  
@@ -38,7 +39,7 @@ interface AppointmentType {
   notas?: string  
 }  
   
-export default function VehicleDetailScreen({ route, navigation }: UiScreenProps) {  
+export default function VehicleDetailScreen({ route, navigation }: UiScreenProps) {
   const { vehicleId } = route.params  
   const { user } = useAuth()  
   const [vehicle, setVehicle] = useState<Vehicle | null>(null)  
@@ -68,7 +69,7 @@ export default function VehicleDetailScreen({ route, navigation }: UiScreenProps
   
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
       // ✅ CORREGIDO: Usar 'rol' según el tipo UserPermissions real  
-      setUserRole(userPermissions?.rol || 'client')  
+  setUserRole(userPermissions?.role || 'client')
   
       // Cargar datos del vehículo  
       const vehicleData = await vehicleService.getVehicleById(vehicleId)  
@@ -85,7 +86,7 @@ export default function VehicleDetailScreen({ route, navigation }: UiScreenProps
       // Cargar órdenes del vehículo  
       const vehicleOrders = await orderService.getOrdersByVehicleId(vehicleId)  
       const sortedOrders = vehicleOrders.sort((a: Order, b: Order) =>  
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()  
+  new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()  
       )  
       setOrders(sortedOrders)  
   
@@ -315,7 +316,7 @@ export default function VehicleDetailScreen({ route, navigation }: UiScreenProps
                   </Text>  
                   <View style={styles.orderFooter}>  
                     <Text style={styles.orderDate}>  
-                      {new Date(item.created_at).toLocaleDateString("es-ES")}  
+                      {new Date(item.createdAt).toLocaleDateString("es-ES")}  
                     </Text>  
                     <Text style={styles.orderTotal}>${(item.total || 0).toFixed(2)}</Text>  
                   </View>  

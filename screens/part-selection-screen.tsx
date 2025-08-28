@@ -1,3 +1,4 @@
+import React from "react"
 "use client"  
   
 import { useState, useCallback } from "react"  
@@ -33,7 +34,9 @@ interface Props {
 }  
   
 export default function PartSelectionScreen({ navigation, route }: Props) {  
-  const { onPartSelect, selectedParts = [], multiSelect = true } = route.params || {}  
+  const { onPartSelect, orderId } = route.params || {}
+  const [selectedParts, setSelectedParts] = React.useState<any[]>([])
+  const [multiSelect, setMultiSelect] = React.useState(true)
   const { user } = useAuth()  
     
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])  
@@ -72,11 +75,11 @@ export default function PartSelectionScreen({ navigation, route }: Props) {
       }  
   
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+  setUserRole(userPermissions?.role || 'client')
   
       // Inicializar cantidades para partes ya seleccionadas  
       const initialQuantities: Record<string, number> = {}  
-      selectedParts.forEach((part) => {  
+  selectedParts.forEach((part: any) => {
         initialQuantities[part.id] = 1  
       })  
       setQuantities(initialQuantities)  
@@ -89,7 +92,7 @@ export default function PartSelectionScreen({ navigation, route }: Props) {
         
       // Extraer categorías únicas  
       const categoryNames = [...new Set(mappedItems.map(item => item.categoria_nombre || item.category).filter(Boolean))]  
-      setCategories(categoryNames)  
+  setCategories(categoryNames.filter((c): c is string => typeof c === 'string'))
   
       // Filtrar solo items con stock disponible  
       const inStockItems = mappedItems.filter(item => (item.cantidad || item.stock || 0) > 0)  

@@ -68,7 +68,7 @@ export default function NotificationsScreen() {
       }  
         
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+  setUserRole(userPermissions?.role || 'client')  
   
       // Cargar configuraciones guardadas  
       const savedSettings = await AsyncStorage.getItem('notificationSettings')  
@@ -116,7 +116,7 @@ export default function NotificationsScreen() {
   
       // Filtrar notificaciones según el rol  
       let filteredNotifications = mockNotifications  
-      if (userPermissions?.rol === 'client') {  
+  if (userPermissions?.role === 'client') {  
         filteredNotifications = mockNotifications.filter(notif =>   
           notif.type !== "warning" || !notif.message.includes("inventario")  
         )  

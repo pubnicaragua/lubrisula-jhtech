@@ -1,12 +1,36 @@
+// Tipos extendidos para reportes y vistas enriquecidas
+export interface EnhancedClient {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  client_type?: 'Individual' | 'Empresa';
+  address?: string;
+  totalOrders?: number;
+  totalSpent?: number;
+}
+
+export interface EnhancedVehicle {
+  id: string;
+  marca: string;
+  modelo: string;
+  ano: number;
+  placa: string;
+  client_id?: string;
+  totalOrders?: number;
+  totalSpent?: number;
+}
 // types/operations.ts - Tipos para operaciones CRUD  
 export interface CreateClientData {  
-  name: string           // ✅ Requerido  
-  user_id: string        // ✅ Requerido  
-  phone: string          // ✅ Requerido  
-  email: string          // ✅ Requerido  
-  company?: string       // ✅ Opcional  
-  client_type: 'Individual' | 'Empresa'  // ✅ Requerido  
-  taller_id: string      // ✅ Requerido  
+  name: string           // ✅ Requerido
+  user_id: string        // ✅ Requerido
+  phone: string          // ✅ Requerido
+  email: string          // ✅ Requerido
+  company?: string       // ✅ Opcional
+  client_type?: 'Individual' | 'Empresa'  // ✅ Opcional
+  address?: string       // ✅ Opcional
+  taller_id: string      // ✅ Requerido
 }  
   
 export interface UpdateClientData {  

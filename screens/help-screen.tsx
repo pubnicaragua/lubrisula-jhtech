@@ -113,7 +113,7 @@ export default function HelpScreen() {
       description: "Lun-Vie 8:00 AM - 6:00 PM",  
       icon: "phone",  
       action: () => {  
-        Linking.openURL("tel:+50588888888")  
+  Linking.openURL("tel:+50488888888")  
       }  
     },  
     {  

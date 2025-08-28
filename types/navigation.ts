@@ -65,7 +65,7 @@ export type RootStackParamList = {
   
 // ✅ CORREGIDO: Tipos específicos para cada stack  
 export type ClientStackParamList = Pick<RootStackParamList,  
-  'Clients' | 'ClientDetail' | 'NewClient' | 'OrderDetail' | 'NewOrder' | 'VehicleDetail'>  
+  'Clients' | 'ClientDetail' | 'NewClient' | 'OrderDetail' | 'NewOrder' | 'VehicleDetail' | 'EditVehicle'>  
   
 export type ClientVehiclesStackParamList = Pick<RootStackParamList,  
   'ClientVehicles' | 'VehicleDetail' | 'OrderDetail' | 'NewOrder' | 'NewVehicle' | 'EditVehicle'>  
@@ -77,7 +77,7 @@ export type InventoryStackParamList = Pick<RootStackParamList,
   'Inventory' | 'InventoryItemDetail'    | 'NewInventoryItem'>  
   
   export type OrdersStackParamList = Pick<RootStackParamList,  
-    'Kanban' | 'OrderDetail' | 'UpdateOrder' | 'OrderParts' | 'VehicleDetail' | 'NewOrder' | 'ServiceSelection' | 'PartSelection'>  
+    'Kanban' | 'OrderDetail' | 'UpdateOrder' | 'OrderParts' | 'VehicleDetail' | 'NewOrder' | 'ServiceSelection' | 'PartSelection' | 'EditVehicle'>  
     
   // ✅ AGREGADO: Stack de citas  
   export type AppointmentsStackParamList = Pick<RootStackParamList,  

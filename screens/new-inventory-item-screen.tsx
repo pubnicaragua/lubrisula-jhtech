@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,  
     borderTopColor: "#e1e4e8",  
   },  
-  button: {  
+    button: {  
     flex: 1,  
     flexDirection: "row",  
     justifyContent: "center",  

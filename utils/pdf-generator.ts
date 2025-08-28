@@ -265,7 +265,7 @@ export const generateOrderPDF = async (
         </tr>  
         <tr>  
           <td>${language === 'es' ? 'Fecha:' : 'Date:'}</td>  
-          <td>${formatDate(order.created_at)}</td>  
+          <td>${formatDate(order.createdAt)}</td>
         </tr>  
         <tr>  
           <td>${language === 'es' ? 'Estado:' : 'Status:'}</td>  

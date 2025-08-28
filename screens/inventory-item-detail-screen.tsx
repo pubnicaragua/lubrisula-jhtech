@@ -94,10 +94,12 @@ export default function InventoryItemDetailScreen({ navigation, route }: Props) 
       }  
         
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+      // ✅ CORREGIDO: Usar 'role' en lugar de 'rol'  
+      setUserRole(userPermissions?.role || 'client')  
   
       // Solo staff puede ver detalles de inventario  
-      if (userPermissions?.rol === 'client') {  
+      // ✅ CORREGIDO: Usar 'role' en lugar de 'rol'  
+      if (userPermissions?.role === 'client') {  
         setError("No tienes permisos para ver detalles del inventario")  
         return  
       }  
@@ -397,7 +399,7 @@ export default function InventoryItemDetailScreen({ navigation, route }: Props) 
                 />  
               </View>  
   
-              <View style={styles.formGroupHalf}>  
+              <View style={styles.formGroupHalf}> 
                 <Text style={styles.formLabel}>Cantidad</Text>  
                 <TextInput  
                   style={styles.formInput}  

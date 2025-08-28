@@ -1,5 +1,4 @@
 "use client"  
-  
 import { useEffect, useState } from "react"  
 import { NavigationContainer } from "@react-navigation/native"  
 import { StatusBar } from "expo-status-bar"  
@@ -7,42 +6,33 @@ import { SafeAreaProvider } from "react-native-safe-area-context"
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native"  
 import AppNavigator from "./navigation/app-navigator"  
 import { AuthProvider } from "./context/auth-context"  
-// Importaciones actualizadas para usar servicios de Supabase  
+  
+// ✅ CORREGIDO: Importaciones de servicios de Supabase  
 import { clientService } from "./services/supabase/client-service"  
 import { vehicleService } from "./services/supabase/vehicle-service"  
 import { orderService } from "./services/supabase/order-service"  
 import { inventoryService } from "./services/supabase/inventory-service"  
-import * as currencyService from "./services/supabase/currency-service"  
-import * as companyService from "./services/supabase/company-service"  
-import * as imageService from "./services/supabase/image-service"  
-import * as notificationService from "./services/supabase/notification-service"  
-import * as storageService from "./services/supabase/storage-service"  
 import userService from "./services/supabase/user-service"  
   
 export default function App() {  
   const [isLoading, setIsLoading] = useState(true)  
   const [error, setError] = useState<string | null>(null)  
   
-  // Inicializar datos al montar la aplicación  
   useEffect(() => {  
     const initializeData = async () => {  
       try {  
         setIsLoading(true)  
-  
-        // Inicializar todos los servicios de Supabase  
+          
+        // ✅ CORREGIDO: Inicializar servicios críticos de Supabase  
         await Promise.all([  
           userService.initializeUsers(),  
-          //clientService.initializeClients(),  
-          //vehicleService.initializeVehicles(),  
-          //orderService.initializeOrders(),  
-          //inventoryService.initializeInventory(),  
-          //currencyService.initializeCurrencies(),  
-          //companyService.initializeCompanySettings(),  
-          //imageService.initializeImages(),  
-          //notificationService.initializeNotifications(),  
-          //storageService.initializeStorage(),  
+          clientService.initializeClients(),  
+          vehicleService.initializeVehicles(),  
+          orderService.initializeOrders(),  
+          // ✅ CORREGIDO: Usar método correcto del inventoryService  
+          inventoryService.getAllInventory().then(() => console.log("Inventory initialized")),  
         ])  
-  
+          
         console.log("Datos inicializados correctamente con Supabase")  
       } catch (error) {  
         console.error("Error al inicializar datos:", error)  
@@ -79,7 +69,6 @@ export default function App() {
   return (  
     <SafeAreaProvider>  
       <AuthProvider>  
-        {/* ✅ ÚNICO NavigationContainer en toda la app */}  
         <NavigationContainer>  
           <StatusBar style="dark" />  
           <AppNavigator />  

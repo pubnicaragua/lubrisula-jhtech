@@ -10,18 +10,20 @@ import {
   RefreshControl,  
   Image,  
   Alert,  
+  ActivityIndicator,  
 } from "react-native"  
 import { Feather } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useNavigation } from "@react-navigation/native"  
 import type { StackNavigationProp } from "@react-navigation/stack"  
 import { useAuth } from "../context/auth-context"  
-import * as clientService from "../services/supabase/client-service"  
-import * as vehicleService from "../services/supabase/vehicle-service"  
-import * as orderService from "../services/supabase/order-service"  
-import { CITAS_SERVICES } from "../services/supabase/citas-services"  
-import { Vehicle } from "../services/supabase/vehicle-service"  
+  
+// ✅ CORREGIDO: Importaciones correctas de servicios  
+import { clientService } from "../services/supabase/client-service"  
+import { vehicleService } from "../services/supabase/vehicle-service"  
+import { orderService } from "../services/supabase/order-service"  
 import { Client } from "../services/supabase/client-service"  
+import { Vehicle } from "../services/supabase/vehicle-service"  
 import { Order } from '../types/order'  
   
 // ✅ CORREGIDO: Tipos de navegación para tabs anidados del cliente  
@@ -79,6 +81,7 @@ export default function ClientDashboardScreen() {
   const getWelcomeMessage = () => {  
     if (!user) return "Bienvenido"  
     const userName = user.name || clientData?.name || "Usuario"  
+      
     switch (user.role) {  
       case 'client':  
         return `Bienvenido, ${userName}`  
@@ -98,6 +101,7 @@ export default function ClientDashboardScreen() {
   // ✅ AGREGADO: Función para obtener subtítulo personalizado  
   const getWelcomeSubtitle = () => {  
     if (!user) return ""  
+      
     switch (user.role) {  
       case 'client':  
         return "Gestiona tus vehículos y servicios"  
@@ -114,16 +118,16 @@ export default function ClientDashboardScreen() {
     }  
   }  
   
-  // ✅ CORREGIDO: Cargar datos usando getClientByUserId en lugar de getClientById  
+  // ✅ CORREGIDO: Cargar datos usando getClientByUserId  
   const loadDashboardData = useCallback(async () => {  
     try {  
       setIsLoading(true)  
       setRefreshing(true)  
-  
+        
       if (!user?.id) return  
   
       // ✅ CORREGIDO: Usar getClientByUserId para buscar por user_id  
-      const client = await clientService.clientService.getClientByUserId(user.id)  
+      const client = await clientService.getClientByUserId(user.id)  
       if (client) {  
         setClientData(client)  
       }  
@@ -131,32 +135,29 @@ export default function ClientDashboardScreen() {
       // Obtener vehículos del cliente usando el clientId  
       let clientVehicles: Vehicle[] = []  
       if (client) {  
-        clientVehicles = await vehicleService.vehicleService.getVehiclesByClientId(client.id)  
+        clientVehicles = await vehicleService.getVehiclesByClientId(client.id)  
       }  
       setVehicles(clientVehicles)  
   
       // Obtener órdenes del cliente usando el clientId  
       let clientOrders: Order[] = []  
       if (client) {  
-        clientOrders = await orderService.orderService.getOrdersByClientId(client.id)  
+        clientOrders = await orderService.getOrdersByClientId(client.id)  
       }  
       setOrders(clientOrders)  
   
-      // Obtener citas del cliente usando el clientId  
+      // Obtener citas del cliente (placeholder por ahora)  
       let clientAppointments: AppointmentType[] = []  
-      if (client) {  
-        const allAppointments = await CITAS_SERVICES.GET_ALL_CITAS()  
-        clientAppointments = allAppointments.filter(app => app.client_id === client.id)  
-      }  
       setAppointments(clientAppointments)  
   
       // Calcular estadísticas  
-      const activeOrders = clientOrders.filter((order: Order) =>   
-        order.status !== "completed" &&   
-        order.status !== "delivered" &&   
+      const activeOrders = clientOrders.filter((order: Order) =>  
+        order.status !== "completed" &&  
+        order.status !== "delivered" &&  
         order.status !== "cancelled"  
       )  
-      const completedOrders = clientOrders.filter((order: Order) =>   
+  
+      const completedOrders = clientOrders.filter((order: Order) =>  
         order.status === "completed" || order.status === "delivered"  
       )  
   
@@ -273,22 +274,23 @@ export default function ClientDashboardScreen() {
   }  
   
   const handleOrderPress = (orderId: string) => {  
-    navigation.navigate("ClientOrdersTab", {   
-      screen: "OrderDetail",   
-      params: { orderId }   
+    navigation.navigate("ClientOrdersTab", {  
+      screen: "OrderDetail",  
+      params: { orderId }  
     })  
   }  
   
   const handleVehiclePress = (vehicleId: string) => {  
-    navigation.navigate("ClientVehiclesTab", {   
-      screen: "VehicleDetail",   
-      params: { vehicleId }   
+    navigation.navigate("ClientVehiclesTab", {  
+      screen: "VehicleDetail",  
+      params: { vehicleId }  
     })  
   }  
   
   if (isLoading) {  
     return (  
       <View style={styles.loadingContainer}>  
+        <ActivityIndicator size="large" color="#1a73e8" />  
         <Text style={styles.loadingText}>Cargando datos...</Text>  
       </View>  
     )  
@@ -369,7 +371,6 @@ export default function ClientDashboardScreen() {
             <Text style={styles.seeAllText}>Ver todos</Text>  
           </TouchableOpacity>  
         </View>  
-  
         {upcomingServices.length > 0 ? (  
           upcomingServices.map((vehicle: any) => (  
             <TouchableOpacity  
@@ -385,7 +386,6 @@ export default function ClientDashboardScreen() {
                     <Feather name="truck" size={24} color="#ccc" />  
                   </View>  
                 )}  
-  
                 <View style={styles.serviceInfo}>  
                   <Text style={styles.vehicleName}>  
                     {vehicle.marca} {vehicle.modelo}  
@@ -393,21 +393,26 @@ export default function ClientDashboardScreen() {
                   <Text style={styles.vehicleDetails}>  
                     {vehicle.ano} • {vehicle.placa}  
                   </Text>  
-  
                   <View style={styles.serviceDateContainer}>  
-                    <Feather name="calendar" size={14} color={vehicle.daysToService <= 7 ? "#e53935" : "#f5a623"} />  
+                    <Feather   
+                      name="calendar"   
+                      size={14}   
+                      color={vehicle.daysToService <= 7 ? "#e53935" : "#f5a623"}   
+                    />  
                     <Text  
-                      style={[styles.serviceDateText, { color: vehicle.daysToService <= 7 ? "#e53935" : "#f5a623" }]}  
+                      style={[  
+                        styles.serviceDateText,  
+                        { color: vehicle.daysToService <= 7 ? "#e53935" : "#f5a623" }  
+                      ]}  
                     >  
                       {vehicle.daysToService === 0  
                         ? "¡Servicio hoy!"  
                         : vehicle.daysToService === 1  
-                          ? "¡Servicio mañana!"  
-                          : `Servicio en ${vehicle.daysToService} días`}  
+                        ? "¡Servicio mañana!"  
+                        : `Servicio en ${vehicle.daysToService} días`}  
                     </Text>  
                   </View>  
                 </View>  
-  
                 <Feather name="chevron-right" size={20} color="#999" />  
               </View>  
             </TouchableOpacity>  
@@ -427,7 +432,6 @@ export default function ClientDashboardScreen() {
             <Text style={styles.seeAllText}>Ver todas</Text>  
           </TouchableOpacity>  
         </View>  
-  
         {recentOrders.length > 0 ? (  
           recentOrders.map((order: RecentOrderData) => (  
             <TouchableOpacity  
@@ -436,28 +440,26 @@ export default function ClientDashboardScreen() {
               onPress={() => handleOrderPress(order.id)}  
             >  
               <View style={styles.orderHeader}>  
-                <Text style={styles.orderNumber}>Orden #{order.number || order.id.slice(0, 8)}</Text>  
+                <Text style={styles.orderNumber}>  
+                  Orden #{order.number ?? order.id?.slice(0, 8)}  
+                </Text>  
                 <View style={[styles.statusBadge, { backgroundColor: order.statusColor }]}>  
                   <Text style={styles.statusText}>{order.statusText}</Text>  
                 </View>  
               </View>  
-  
               <Text style={styles.orderDescription} numberOfLines={2}>  
                 {order.description}  
               </Text>  
-  
               <View style={styles.orderFooter}>  
                 <View style={styles.orderVehicleInfo}>  
                   <Feather name="truck" size={14} color="#666" />  
                   <Text style={styles.orderVehicleText}>{order.vehicleInfo}</Text>  
                 </View>  
-  
                 <View style={styles.orderDateInfo}>  
                   <Feather name="calendar" size={14} color="#666" />  
                   <Text style={styles.orderDateText}>{order.formattedDate}</Text>  
                 </View>  
               </View>  
-  
               <Text style={styles.orderTotal}>{order.formattedTotal}</Text>  
             </TouchableOpacity>  
           ))  
@@ -471,7 +473,6 @@ export default function ClientDashboardScreen() {
       {/* Acciones rápidas */}  
       <View style={styles.quickActionsContainer}>  
         <Text style={styles.sectionTitle}>Acciones Rápidas</Text>  
-  
         <View style={styles.quickActions}>  
           <TouchableOpacity style={styles.actionButton} onPress={handleNavigateToOrders}>  
             <View style={[styles.actionIcon, { backgroundColor: "#e8f0fe" }]}>  
@@ -502,7 +503,9 @@ export default function ClientDashboardScreen() {
           style={styles.footerLogo}  
           resizeMode="contain"  
         />  
-        <Text style={styles.footerText}>© {new Date().getFullYear()} AutoFlowX. Todos los derechos reservados.</Text>  
+        <Text style={styles.footerText}>  
+          © {new Date().getFullYear()} AutoFlowX. Todos los derechos reservados.  
+        </Text>  
       </View>  
     </ScrollView>  
   )  
@@ -789,4 +792,4 @@ const styles = StyleSheet.create({
     color: "#666",  
     textAlign: "center",  
   },  
-}) 
+})

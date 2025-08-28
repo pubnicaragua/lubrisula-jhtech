@@ -19,18 +19,14 @@ import { useAuth } from "../context/auth-context"
 import { CITAS_SERVICES } from "../services/supabase/citas-services"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service"  
-import { CitasDetalleType } from "../types"  
+import { CitasDetalleType } from '../types'  
 import { RootStackParamList } from "../types/navigation"  
   
 type AppointmentDetailNavigationProp = StackNavigationProp<RootStackParamList, 'AppointmentDetail'>  
 type AppointmentDetailRouteProp = RouteProp<RootStackParamList, 'AppointmentDetail'>  
+import type { UiScreenProps } from '../types'
   
-interface Props {  
-  navigation: AppointmentDetailNavigationProp  
-  route: AppointmentDetailRouteProp  
-}  
-  
-export default function AppointmentDetailScreen({ navigation, route }: Props) {  
+export default function AppointmentDetailScreen({ navigation, route }: UiScreenProps) {
   const { appointmentId } = route.params  
   const { user } = useAuth()  
     
@@ -56,7 +52,7 @@ export default function AppointmentDetailScreen({ navigation, route }: Props) {
       }  
   
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+  setUserRole(userPermissions?.role || 'client')
   
       // Cargar todas las citas y filtrar por ID  
       const allAppointments = await CITAS_SERVICES.GET_ALL_CITAS()  
@@ -68,7 +64,7 @@ export default function AppointmentDetailScreen({ navigation, route }: Props) {
       }  
   
       // Verificar permisos de acceso  
-      if (userPermissions?.rol === 'client' && appointmentDetail.client_id !== user.id) {  
+  if (userPermissions?.role === 'client' && appointmentDetail.client_id !== user.id) {
         setError("No tienes permisos para ver esta cita")  
         return  
       }  

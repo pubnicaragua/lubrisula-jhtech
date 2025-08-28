@@ -68,10 +68,10 @@ export default function EditOrderScreen() {
       }  
         
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+  setUserRole(userPermissions?.role || 'client')  
   
       // Solo staff puede editar órdenes  
-      if (userPermissions?.rol === 'client') {  
+  if (userPermissions?.role === 'client') {  
         setError("No tienes permisos para editar órdenes")  
         return  
       }  
@@ -85,12 +85,12 @@ export default function EditOrderScreen() {
   
       setOrder(orderData)  
       setFormData({  
-        description: orderData.description || "",  
-        diagnosis: orderData.diagnosis || "",  
-        priority: orderData.priority || "normal",  
-        estimatedCompletionDate: orderData.estimatedCompletionDate || "",  
-        notes: orderData.notes || "",  
-        status: orderData.status,  
+  description: orderData.description || "",  
+  diagnosis: orderData.diagnosis || "",  
+  priority: (orderData as any).priority || "normal",  
+  estimatedCompletionDate: orderData.estimatedCompletionDate || "",  
+  notes: orderData.notes || "",  
+  status: orderData.status,
       })  
   
     } catch (error) {  
@@ -131,7 +131,8 @@ export default function EditOrderScreen() {
         updatedAt: new Date().toISOString(),  
       }  
   
-      await orderService.updateOrder(orderId, updateData)  
+  // Ajustar tipo de estimatedCompletionDate a string | undefined
+  await orderService.updateOrder(orderId, { ...updateData, estimatedCompletionDate: updateData.estimatedCompletionDate || undefined })
         
       Alert.alert(  
         "Éxito",   
@@ -229,7 +230,7 @@ export default function EditOrderScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>  
           <Feather name="arrow-left" size={24} color="#333" />  
         </TouchableOpacity>  
-        <Text style={styles.headerTitle}>Editar Orden #{order.number}</Text>  
+  <Text style={styles.headerTitle}>Editar Orden #{order.id}</Text>
         <TouchableOpacity   
           style={[styles.saveButton, saving && styles.saveButtonDisabled]}  
           onPress={handleSaveOrder}  

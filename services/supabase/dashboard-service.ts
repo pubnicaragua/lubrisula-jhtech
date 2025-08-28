@@ -290,7 +290,7 @@ const dashboardService = {
           id: order.id,  
           type: 'order',  
           // ✅ CORREGIDO: Usar number en lugar de orderNumber  
-          title: `Orden #${order.number || order.id.slice(0, 8)}`,  
+          title: `Orden #${order.number ?? order.id?.slice(0, 8)}`,
           description: order.description || 'Sin descripción',  
           // ✅ CORREGIDO: Usar createdAt en lugar de created_at  
           timestamp: order.createdAt,  

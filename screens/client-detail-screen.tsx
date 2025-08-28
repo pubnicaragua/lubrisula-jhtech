@@ -15,7 +15,8 @@ import {
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
-import { clientService } from "../services/supabase/client-service"  
+import { clientService } from "../services/supabase/client-service"
+import { Client } from '../types'
 import { vehicleService } from "../services/supabase/vehicle-service"  
 import { orderService } from "../services/supabase/order-service"  
   
@@ -62,7 +63,7 @@ export default function ClientDetailScreen({ route, navigation }: ClientDetailSc
       }  
   
       // ✅ CORREGIDO: Usar getClientByUserId en lugar de getClientById  
-      const clientData = await clientService.getClientByUserId(user.id)  
+  const clientData = await clientService.getClientByUserId(user.id)
       if (!clientData) {  
         setError("Cliente no encontrado")  
         return  
@@ -327,7 +328,7 @@ export default function ClientDetailScreen({ route, navigation }: ClientDetailSc
                   onChangeText={(value) =>  
                     setEditFormData(prev => ({ ...prev, phone: value }))  
                   }  
-                  placeholder="+505 8888-8888"  
+                  placeholder="+504 8888-8888"  
                   keyboardType="phone-pad"  
                 />  
               </View>  

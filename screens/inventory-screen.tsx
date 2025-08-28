@@ -70,14 +70,15 @@ export default function InventoryScreen({ navigation }: Props) {
   
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
       console.log("🔐 InventoryScreen - Permisos obtenidos:", userPermissions)  
-      setUserRole(userPermissions?.rol || 'client')  
-  
-      // ✅ CORREGIDO: Solo clientes son bloqueados del inventario  
-      if (userPermissions?.rol === 'client') {  
-        console.error("❌ InventoryScreen - Cliente sin permisos para ver inventario")  
-        setError("No tienes permisos para ver el inventario")  
-        return  
-      }  
+
+      setUserRole(userPermissions?.role || 'client')
+
+      // Permitir acceso a técnicos y admin, bloquear solo clientes
+      if (userPermissions?.role === 'client') {
+        console.error("❌ InventoryScreen - Cliente sin permisos para ver inventario")
+        setError("No tienes permisos para ver el inventario")
+        return
+      }
   
       console.log("✅ InventoryScreen - Usuario autorizado, cargando datos del inventario")  
   

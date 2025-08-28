@@ -172,19 +172,34 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
     }  
   }  
   
-  const handleLogout = () => {  
-    Alert.alert(  
-      "Cerrar Sesión",  
-      "¿Estás seguro de que quieres cerrar sesión?",  
-      [  
-        { text: "Cancelar", style: "cancel" },  
-        {  
-          text: "Cerrar Sesión",  
-          style: "destructive",  
-          onPress: logout  
-        }  
-      ]  
-    )  
+  const handleLogout = async () => {
+    // Detectar si estamos en web
+    const isWeb = typeof window !== 'undefined' && typeof window.document !== 'undefined';
+    if (isWeb) {
+      const confirmed = window.confirm('¿Estás seguro de que quieres cerrar sesión?');
+      if (confirmed) {
+        await logout();
+        // Redirigir a login o recargar página
+        if (window.location) {
+          window.location.href = '/login';
+        } else {
+          window.location.reload();
+        }
+      }
+    } else {
+      Alert.alert(
+        'Cerrar Sesión',
+        '¿Estás seguro de que quieres cerrar sesión?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Cerrar Sesión',
+            style: 'destructive',
+            onPress: logout,
+          },
+        ]
+      );
+    }
   }  
   
    // Resto de los modales y renderizado permanecen iguales...  
@@ -241,7 +256,7 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
               onChangeText={(value) =>  
                 setEditFormData(prev => ({ ...prev, phone: value }))  
               }  
-              placeholder="+505 8888-8888"  
+              placeholder="+504 8888-8888"  
               keyboardType="phone-pad"  
             />  
           </View>  

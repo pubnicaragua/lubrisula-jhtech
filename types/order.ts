@@ -1,7 +1,7 @@
 // ✅ CORREGIDO: Tipos completos para órdenes  
-export type OrderStatus =   
+export type OrderStatus =  
   | 'reception'  
-  | 'diagnosis'   
+  | 'diagnosis'  
   | 'waiting_parts'  
   | 'in_progress'  
   | 'quality_check'  
@@ -32,6 +32,8 @@ export interface Order {
   notes?: string;  
   createdAt: string;  
   updatedAt?: string;  
+  // ✅ AGREGADO: Campo number que falta en las pantallas  
+  number?: string;  
   // Arrays relacionados  
   images: OrderImage[];  
   comments: OrderComment[];  
@@ -58,6 +60,7 @@ export interface CreateOrderData {
   paymentNotes?: string;  
   paidAmount?: number;  
   notes?: string;  
+  number?: string;  
 }  
   
 // ✅ CORREGIDO: Tipos para actualizar orden  
@@ -75,6 +78,7 @@ export interface UpdateOrderData {
   paymentNotes?: string;  
   paidAmount?: number;  
   notes?: string;  
+  number?: string;  
 }  
   
 // ✅ CORREGIDO: Tipos para items de orden  

@@ -91,7 +91,7 @@ export default function SettingsScreen({ navigation, route }: Props) {
       }  
         
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+  setUserRole(userPermissions?.role || 'client')  
   
       // Cargar configuraciones del usuario (simulado por ahora)  
       // En una implementación real, estas vendrían de la base de datos  
@@ -104,11 +104,11 @@ export default function SettingsScreen({ navigation, route }: Props) {
       })  
   
       // Solo admin puede ver configuraciones de empresa  
-      if (userPermissions?.rol === 'admin') {  
+  if (userPermissions?.role === 'admin') {  
         setCompanySettings({  
           name: 'AutoFlowX Taller',  
           address: 'Dirección del taller',  
-          phone: '+505 1234-5678',  
+          phone: '+504 1234-5678',  
           email: 'info@autoflowx.com',  
           taxId: 'J0310000000000',  
           currency: 'USD',  
@@ -401,7 +401,7 @@ export default function SettingsScreen({ navigation, route }: Props) {
                 style={styles.formInput}  
                 value={companySettings.phone}  
                 onChangeText={(value) => handleCompanySettingChange('phone', value)}  
-                placeholder="+505 1234-5678"  
+                placeholder="+504 1234-5678"  
                 keyboardType="phone-pad"  
               />  
             </View>  

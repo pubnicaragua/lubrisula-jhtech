@@ -80,10 +80,10 @@ export default function FinancialReportsScreen() {
       }  
         
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+  setUserRole(userPermissions?.role || 'client')  
   
       // Solo staff puede ver reportes financieros  
-      if (userPermissions?.rol === 'client') {  
+  if (userPermissions?.role === 'client') {  
         setError("No tienes permisos para ver los reportes financieros")  
         return  
       }  
@@ -245,7 +245,7 @@ export default function FinancialReportsScreen() {
     }  
   }  
   
-  const renderFinancialCard = (title: string, value: string, subtitle?: string, icon: string, color: string, trend?: number) => (  
+  const renderFinancialCard = (title: string, value: string, icon: string, color: string, subtitle?: string, trend?: number) => (
     <View style={[styles.financialCard, { borderLeftColor: color }]}>  
       <View style={styles.cardHeader}>  
         <View style={[styles.cardIcon, { backgroundColor: `${color}20` }]}>  
@@ -340,7 +340,7 @@ export default function FinancialReportsScreen() {
         {renderFinancialCard(  
           "Ingresos Totales",  
           formatCurrency(financialData.revenue.total),  
-          undefined,  
+          "",
           "dollar-sign",  
           "#4caf50"  
         )}  
@@ -348,7 +348,7 @@ export default function FinancialReportsScreen() {
         {renderFinancialCard(  
           "Gastos Totales",  
           formatCurrency(financialData.expenses.total),  
-          undefined,  
+          "",
           "trending-down",  
           "#f44336"  
         )}  
@@ -364,7 +364,7 @@ export default function FinancialReportsScreen() {
         {renderFinancialCard(  
           "Flujo de Caja",  
           formatCurrency(financialData.cashFlow.balance),  
-          undefined,  
+          "",
           "activity",  
           "#9c27b0"          )}  
           </View>  

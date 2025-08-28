@@ -378,13 +378,24 @@ export const userService = {
   
   // Función GET_TALLER_ID  
   async GET_TALLER_ID(userId: string): Promise<string | null> {  
-    try {  
-      return 'default-taller-id'  
-    } catch (error) {  
-      console.error('Error in GET_TALLER_ID:', error)  
+  try {  
+    const { data, error } = await supabase  
+      .from('perfil_usuario')  
+      .select('taller_id')  
+      .eq('user_id', userId)  
+      .single()  
+      
+    if (error) {  
+      console.error('Error getting taller_id:', error)  
       return null  
     }  
-  },  
+      
+    return data?.taller_id || null  
+  } catch (error) {  
+    console.error('Error in GET_TALLER_ID:', error)  
+    return null  
+  }  
+},  
   
   // Verificar credenciales de usuario  
   async VERIFY_USER_CREDENTIALS(email: string, password: string) {  
@@ -521,7 +532,46 @@ export const userService = {
   // Get user taller (alias for GET_TALLER_ID)  
   async getUserTaller(userId: string): Promise<string | null> {  
     return this.GET_TALLER_ID(userId)  
-  }  
+  },
+
+  // NUEVO: Método para validar integridad del perfil
+  async validateUserProfile(userId: string): Promise<{
+    isValid: boolean
+    missingFields: string[]
+    profile?: any
+  }> {
+    try {
+      const { data: profile, error } = await supabase
+        .from('perfil_usuario')
+        .select('*')
+        .eq('user_id', userId)
+        .single()
+
+      if (error) {
+        return {
+          isValid: false,
+          missingFields: ['profile_not_found'],
+          profile: null
+        }
+      }
+
+      const requiredFields = ['user_id', 'role', 'taller_id']
+      const missingFields = requiredFields.filter(field => !profile[field])
+
+      return {
+        isValid: missingFields.length === 0,
+        missingFields,
+        profile
+      }
+    } catch (error) {
+      console.error('Error validating user profile:', error)
+      return {
+        isValid: false,
+        missingFields: ['validation_error'],
+        profile: null
+      }
+    }
+  }
 }  
   
 // Exportación por defecto del userService  

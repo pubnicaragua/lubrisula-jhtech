@@ -13,8 +13,6 @@ import {
 } from "react-native"  
 import { Feather, MaterialIcons } from "@expo/vector-icons"  
 import { useFocusEffect } from "@react-navigation/native"  
-import { StackNavigationProp } from '@react-navigation/stack'  
-import { RouteProp } from '@react-navigation/native'  
 import { useAuth } from "../context/auth-context"  
 import { orderService } from "../services/supabase/order-service"  
 import { clientService } from "../services/supabase/client-service"  
@@ -22,18 +20,8 @@ import { inventoryService } from "../services/supabase/inventory-service"
 import { reportsService } from "../services/supabase/reports-service"  
 import ACCESOS_SERVICES from "../services/supabase/access-service"  
 import USER_SERVICE from "../services/supabase/user-service"  
-import { RootStackParamList } from '../types/navigation'  
-import { Order } from '../types/order'  
-import { Client } from '../types/client'  
-import { InventoryItem } from '../types/inventory'  
-  
-type ReportsNavigationProp = StackNavigationProp<RootStackParamList, 'Reports'>  
-type ReportsRouteProp = RouteProp<RootStackParamList, 'Reports'>  
-  
-interface Props {  
-  navigation: ReportsNavigationProp  
-  route: ReportsRouteProp  
-}  
+// ✅ CORREGIDO: Importar tipos desde el módulo principal  
+import { Order, Client, InventoryItem, UiScreenProps } from '../types'
   
 interface ReportData {  
   orders: Order[]  
@@ -57,7 +45,7 @@ interface ReportData {
   }[]  
 }  
   
-export default function ReportsScreen({ navigation, route }: Props) {  
+export default function ReportsScreen({ navigation, route }: UiScreenProps) {  
   const { user } = useAuth()  
   const [loading, setLoading] = useState(true)  
   const [refreshing, setRefreshing] = useState(false)  
@@ -70,26 +58,27 @@ export default function ReportsScreen({ navigation, route }: Props) {
     try {  
       setLoading(true)  
       setError(null)  
-  
+        
       if (!user?.id) return  
   
       // Validar permisos del usuario  
       const userId = user.id as string  
       const userTallerId = await USER_SERVICE.GET_TALLER_ID(userId)  
+        
       if (!userTallerId) {  
         setError("No se pudo obtener la información del taller")  
         return  
       }  
   
       const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(userId, userTallerId)  
-      setUserRole(userPermissions?.rol || 'client')  
+      setUserRole(userPermissions?.role || 'client')  
   
       // Solo staff puede ver reportes  
-      if (userPermissions?.rol === 'client') {  
+      if (userPermissions?.role === 'client') {  
         console.log("❌ ReportsScreen - Cliente sin permisos para reportes")  
         setError("No tienes permisos para ver los reportes")  
         return  
-      }
+      }  
   
       // Usar el servicio de reportes para obtener estadísticas  
       const dashboardStats = await reportsService.getDashboardStats()  
@@ -114,7 +103,6 @@ export default function ReportsScreen({ navigation, route }: Props) {
         stats: dashboardStats,  
         monthlyData,  
       })  
-  
     } catch (error) {  
       console.error("Error loading report data:", error)  
       setError("No se pudieron cargar los datos del reporte")  
@@ -124,11 +112,9 @@ export default function ReportsScreen({ navigation, route }: Props) {
     }  
   }, [user, selectedPeriod])  
   
-  useFocusEffect(  
-    useCallback(() => {  
-      loadReportData()  
-    }, [loadReportData])  
-  )  
+  useFocusEffect(useCallback(() => {  
+    loadReportData()  
+  }, [loadReportData]))  
   
   const onRefresh = () => {  
     setRefreshing(true)  
@@ -283,12 +269,13 @@ export default function ReportsScreen({ navigation, route }: Props) {
         <Text style={styles.sectionTitle}>Estado de las Órdenes</Text>  
         <View style={styles.statusDistribution}>  
           {[  
-            { status: 'completada', label: 'Completadas', color: '#4caf50' },  
-            { status: 'en_proceso', label: 'En Proceso', color: '#ff9800' },  
-            { status: 'esperando_repuestos', label: 'Esperando Repuestos', color: '#9c27b0' },  
-            { status: 'recepcion', label: 'En Recepción', color: '#2196f3' },  
+            { status: 'completed', label: 'Completadas', color: '#4caf50' },  
+            { status: 'in_progress', label: 'En Proceso', color: '#ff9800' },  
+            { status: 'waiting_parts', label: 'Esperando Repuestos', color: '#9c27b0' },  
+            { status: 'reception', label: 'En Recepción', color: '#2196f3' },  
           ].map((item) => {  
-            const count = reportData.orders.filter(order => order.estado === item.status).length  
+            // ✅ CORREGIDO: Usar campo 'status' en lugar de 'estado'  
+            const count = reportData.orders.filter(  order => order.status === item.status).length  
             const percentage = formatPercentage(count, stats.totalOrders)  
             return (  
               <View key={item.status} style={styles.statusItem}>  
@@ -312,10 +299,12 @@ export default function ReportsScreen({ navigation, route }: Props) {
         {reportData.clients  
           .map(client => ({  
             ...client,  
-            orderCount: reportData.orders.filter(order => order.client_id === client.id).length,  
+            // ✅ CORREGIDO: Usar 'clientId' en lugar de 'client_id'  
+            orderCount: reportData.orders.filter(order => order.clientId === client.id).length,  
             totalSpent: reportData.orders  
-              .filter(order => order.client_id === client.id)  
-              .reduce((sum, order) => sum + (order.costo || 0), 0)  
+              .filter(order => order.clientId === client.id)  
+              // ✅ CORREGIDO: Usar 'total' en lugar de 'costo'  
+              .reduce((sum, order) => sum + (order.total || 0), 0)  
           }))  
           .sort((a, b) => b.totalSpent - a.totalSpent)  
           .slice(0, 5)  

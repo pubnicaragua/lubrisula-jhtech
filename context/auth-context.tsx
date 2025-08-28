@@ -24,7 +24,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null)  
   const [isLoading, setIsLoading] = useState(true)  
   
-  // ✅ CORREGIDO: Función helper usando campos reales del schema  
   const createBasicUserProfile = async (session: any): Promise<User> => {  
     const basicUser: User = {  
       id: session.user.id,  
@@ -36,7 +35,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       profilePic: ''  
     }  
   
-    // ✅ CORREGIDO: Usar campos del schema real (nombre, apellido, correo, etc.)  
     try {  
       const { error } = await supabase  
         .from('perfil_usuario')  
@@ -65,9 +63,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const checkSession = async () => {  
       try {  
         const { data: { session } } = await supabase.auth.getSession()  
-  
+          
         if (session?.user) {  
-          // ✅ CORREGIDO: Consultar perfil con manejo robusto de errores  
           const { data: profile, error } = await supabase  
             .from('perfil_usuario')  
             .select('*')  
@@ -77,18 +74,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           let userData: User  
   
           if (error && error.code === 'PGRST116') {  
-            // No se encontró perfil, crear uno básico  
             console.log("Perfil no encontrado, creando perfil básico")  
             userData = await createBasicUserProfile(session)  
           } else if (error) {  
             console.error("Error al obtener perfil:", error)  
             userData = await createBasicUserProfile(session)  
           } else {  
-            // ✅ CORREGIDO: Mapear campos del schema real  
             userData = {  
               id: session.user.id,  
               email: session.user.email || '',  
-              name: `${profile.nombre || ''} ${profile.apellido || ''}`.trim() || profile.nombre || session.user.email?.split('@')[0] || 'Usuario',  
+              name: `${profile.nombre || ''} ${profile.apellido || ''}`.trim() ||   
+                    profile.nombre ||   
+                    session.user.email?.split('@')[0] || 'Usuario',  
               role: (profile.role as USER_ROLES_TYPE) || 'client',  
               permissions: ROLE_PERMISSIONS[profile.role as USER_ROLES_TYPE] || ROLE_PERMISSIONS.client,  
               phone: profile.telefono || '',  
@@ -113,7 +110,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
     checkSession()  
   
-    // ✅ CORREGIDO: Listener de cambios de autenticación con campos reales  
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {  
       if (event === 'SIGNED_IN' && session?.user) {  
         try {  
@@ -131,11 +127,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.error("Error al cargar perfil:", error)  
             userData = await createBasicUserProfile(session)  
           } else {  
-            // ✅ CORREGIDO: Mapear campos del schema real  
             userData = {  
               id: session.user.id,  
               email: session.user.email || '',  
-              name: `${profile.nombre || ''} ${profile.apellido || ''}`.trim() || profile.nombre || session.user.email?.split('@')[0] || 'Usuario',  
+              name: `${profile.nombre || ''} ${profile.apellido || ''}`.trim() ||   
+                    profile.nombre ||   
+                    session.user.email?.split('@')[0] || 'Usuario',  
               role: (profile.role as USER_ROLES_TYPE) || 'client',  
               permissions: ROLE_PERMISSIONS[profile.role as USER_ROLES_TYPE] || ROLE_PERMISSIONS.client,  
               phone: profile.telefono || '',  
@@ -191,11 +188,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {  
       const { error } = await supabase.auth.signOut()  
       if (error) throw error  
-      await AsyncStorage.removeItem("user")  
+      await AsyncStorage.clear()  
       setUser(null)  
     } catch (error) {  
-      console.error("Error al cerrar sesión:", error)  
-      throw error  
+      console.error('Error al cerrar sesión:', error)  
     }  
   }  
   
