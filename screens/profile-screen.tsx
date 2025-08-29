@@ -44,38 +44,35 @@ export default function ProfileScreen({ navigation }: UiScreenNavProp) {
   
   const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({})  
   
-  // ✅ CORREGIDO: Cargar solo el rol del usuario, no el perfil completo  
-  const loadUserRole = useCallback(async () => {  
-    try {  
-      setLoading(true)  
-      setError(null)  
-  
-      if (!user?.id) return  
-  
-      const userTallerId = await USER_SERVICE.GET_TALLER_ID(user.id)  
-      if (!userTallerId) {  
-        setError("No se pudo obtener la información del taller")  
-        return  
-      }  
-  
-      const userPermissions = await ACCESOS_SERVICES.GET_PERMISOS_USUARIO(user.id, userTallerId)  
-      setUserRole(userPermissions?.role || 'client')  
-  
-      // ✅ CORREGIDO: Inicializar formulario con datos del contexto  
-      setEditFormData({  
-        name: user.name || "",  
-        email: user.email || "",  
-        phone: user.phone || "",  
-        company: "",  
-      })  
-  
-    } catch (error) {  
-      console.error("Error loading user role:", error)  
-      setError("No se pudo cargar la información del usuario")  
-    } finally {  
-      setLoading(false)  
-    }  
-  }, [user])  
+  // Cargar el rol directamente desde perfil_usuario
+  const loadUserRole = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      if (!user?.id) return
+      const { data: profile, error: profileError } = await supabase
+        .from('perfil_usuario')
+        .select('role')
+        .eq('auth_id', user.id)
+        .single()
+      if (profileError) {
+        setError('No se pudo cargar el rol del usuario')
+        return
+      }
+      setUserRole(profile?.role || 'client')
+      setEditFormData({
+        name: user.name || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        company: "",
+      })
+    } catch (error) {
+      console.error("Error loading user role:", error)
+      setError("No se pudo cargar el rol del usuario")
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
   
   useEffect(() => {  
     loadUserRole()  

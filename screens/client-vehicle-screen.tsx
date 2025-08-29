@@ -16,6 +16,7 @@ import { useFocusEffect } from "@react-navigation/native"
 import { useAuth } from "../context/auth-context"  
 import { vehicleService } from "../services/supabase/vehicle-service"  
 import { clientService } from "../services/supabase/client-service"  
+import { supabase } from '../lib/supabase'
   
 interface ClientVehicleScreenProps {  
   route: any  
@@ -41,18 +42,49 @@ export default function ClientVehicleScreen({ route, navigation }: ClientVehicle
         return  
       }  
   
-      // ✅ CORREGIDO: Usar getClientByUserId en lugar de getClientById  
-      const clientData = await clientService.getClientByUserId(user.id)  
+      // Intentar obtener cliente, si no existe, crearlo automáticamente  
+      let clientData = await clientService.getClientByUserId(user.id)  
       if (!clientData) {  
-        setError("Cliente no encontrado")  
-        return  
+        // Obtener datos del perfil para crear el cliente automáticamente  
+        const { data: profile } = await supabase  
+          .from('perfil_usuario')  
+          .select('*')  
+          .eq('auth_id', user.id)  
+          .single()  
+        if (profile && (profile.role === 'client' || profile.role === 'cliente')) {  
+          // Crear cliente automáticamente  
+          const { data: newClient, error: clientError } = await supabase  
+            .from('clients')  
+            .insert({  
+              user_id: user.id,  
+              name: `${profile.nombre} ${profile.apellido}`.trim(),  
+              email: profile.correo,  
+              phone: profile.telefono || '',  
+              company: '',  
+              client_type: 'Individual',  
+              taller_id: profile.taller_id,  
+              activo: true,  
+              created_at: new Date().toISOString(),  
+              updated_at: new Date().toISOString()  
+            })  
+            .select()  
+            .single()  
+          if (clientError) {  
+            setError(`Error creando cliente: ${clientError.message}`)  
+            return  
+          }  
+          clientData = newClient  
+        } else {  
+          setError("Perfil de usuario no encontrado o rol incorrecto")  
+          return  
+        }  
       }  
-  
-      setClient(clientData)  
-  
-      // Obtener vehículos del cliente  
-      const clientVehicles = await vehicleService.getVehiclesByClientId(clientData.id)  
-      setVehicles(clientVehicles)  
+      if (clientData) {
+        setClient(clientData)
+        // Obtener vehículos del cliente  
+        const clientVehicles = await vehicleService.getVehiclesByClientId(clientData.id)
+        setVehicles(clientVehicles)
+      }
   
     } catch (error) {  
       console.error("Error loading client vehicles:", error)  

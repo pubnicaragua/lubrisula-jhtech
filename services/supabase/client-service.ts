@@ -54,22 +54,20 @@ export const clientService = {
   },  
   
   // Get client by user ID  
-  getClientByUserId: async (userId: string): Promise<Client | null> => {  
-    try {  
-      const { data, error } = await supabase  
-        .from('clients')  
-        .select('*')  
-        .eq('user_id', userId)  
-        .single()  
-
-      // ✅ CORREGIDO: Manejar error 406 (Not Acceptable) y PGRST116 (No rows found)  
-      if (error && error.code !== 'PGRST116' && error.code !== 'PGRST406') throw error  
-      return data  
-    } catch (error) {  
-      console.error(`Error fetching client with user ID ${userId}:`, error)  
-      return null  
-    }  
-  },  
+  getClientByUserId: async (userId: string): Promise<Client | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+      if (error && error.code !== 'PGRST116' && error.code !== 'PGRST406') throw error;
+      return data;
+    } catch (error) {
+      console.error(`Error fetching client by user ID ${userId}:`, error);
+      return null;
+    }
+  },
   
   // Create client  
   createClient: async (clientData: CreateClientData): Promise<Client> => {  

@@ -1,3 +1,4 @@
+import { useCitasDetection } from '../hooks/useCitasDetection'
 "use client"  
   
 import { useState, useCallback, useEffect } from "react"  
@@ -67,7 +68,8 @@ export default function ClientDashboardScreen() {
   const [clientData, setClientData] = useState<Client | null>(null)  
   const [vehicles, setVehicles] = useState<Vehicle[]>([])  
   const [orders, setOrders] = useState<Order[]>([])  
-  const [appointments, setAppointments] = useState<AppointmentType[]>([])  
+  const [appointments, setAppointments] = useState<AppointmentType[]>([])
+  const { citas } = useCitasDetection()
   const [stats, setStats] = useState<StatsType>({  
     totalVehicles: 0,  
     activeOrders: 0,  
@@ -147,8 +149,17 @@ export default function ClientDashboardScreen() {
       setOrders(clientOrders)  
   
       // Obtener citas del cliente (placeholder por ahora)  
-      let clientAppointments: AppointmentType[] = []  
-      setAppointments(clientAppointments)  
+      // Obtener citas del cliente (ahora funcional)
+      let clientAppointments: AppointmentType[] = citas.map((cita: any) => ({
+        id: cita.id,
+        client_id: cita.client_id,
+        vehiculo_id: cita.vehiculo_id,
+        fecha: cita.fecha,
+        hora: cita.hora,
+        tipo_servicio: cita.tipo_servicio,
+        estado: cita.estado,
+      }))
+      setAppointments(clientAppointments)
   
       // Calcular estadísticas  
       const activeOrders = clientOrders.filter((order: Order) =>  

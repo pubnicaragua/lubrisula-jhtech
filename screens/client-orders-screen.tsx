@@ -69,11 +69,8 @@ export default function ClientOrdersScreen({ route }: { route?: { params?: { cli
   
       // ✅ CORREGIDO: Usar getClientByUserId para clientes  
       let clientData: Client | null = null  
-      if (userPermissions?.role === 'client') {  
-        clientData = await clientService.getClientByUserId(userId)  
-      } else {  
-        clientData = await clientService.getClientById(clientId as string)  
-      }  
+  // Siempre buscar por user_id para clientes
+  clientData = await clientService.getClientByUserId(userId)
   
       if (!clientData) {  
         setError("Cliente no encontrado")  

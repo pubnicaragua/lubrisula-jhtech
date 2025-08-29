@@ -16,7 +16,7 @@ import {
   RefreshControl,  
 } from "react-native"  
 import { Feather } from "@expo/vector-icons"  
-import { useFocusEffect } from "@react-navigation/native"  
+import { useFocusEffect, useNavigationState } from "@react-navigation/native"  
 import { useAuth } from "../context/auth-context"  
 // ✅ CORREGIDO: Importaciones corregidas  
 import { vehicleService } from "../services/supabase/vehicle-service"  
@@ -40,6 +40,8 @@ interface AppointmentType {
 }  
   
 export default function VehicleDetailScreen({ route, navigation }: UiScreenProps) {
+  // Obtener las rutas disponibles en el stack actual
+  const availableRoutes = useNavigationState(state => state.routeNames)
   const { vehicleId } = route.params  
   const { user } = useAuth()  
   const [vehicle, setVehicle] = useState<Vehicle | null>(null)  
@@ -224,10 +226,11 @@ export default function VehicleDetailScreen({ route, navigation }: UiScreenProps
         {client && (  
           <View style={styles.section}>  
             <Text style={styles.sectionTitle}>Propietario</Text>  
-            <TouchableOpacity  
-              style={styles.clientCard}  
-              onPress={() => navigation.navigate("ClientDetail", { clientId: client.id })}  
-            >  
+            {availableRoutes.includes("ClientDetail") && (
+              <TouchableOpacity  
+                style={styles.clientCard}  
+                onPress={() => navigation.navigate("ClientDetail", { clientId: client.id })}  
+              >  
               <View style={styles.clientAvatar}>  
                 <Feather name="user" size={24} color="#1a73e8" />  
               </View>  
@@ -237,7 +240,8 @@ export default function VehicleDetailScreen({ route, navigation }: UiScreenProps
                 <Text style={styles.clientPhone}>{client.phone}</Text>  
               </View>  
               <Feather name="chevron-right" size={20} color="#999" />  
-            </TouchableOpacity>  
+              </TouchableOpacity>  
+            )}
           </View>  
         )}  
   
@@ -286,42 +290,47 @@ export default function VehicleDetailScreen({ route, navigation }: UiScreenProps
         <View style={styles.section}>  
           <View style={styles.sectionHeader}>  
             <Text style={styles.sectionTitle}>Historial de Órdenes</Text>  
-            <TouchableOpacity  
-              style={styles.newOrderButton}  
-              onPress={() => navigation.navigate("NewOrder", { preselectedVehicle: vehicle.id })}  
-            >  
+            {availableRoutes.includes("NewOrder") && (
+              <TouchableOpacity  
+                style={styles.newOrderButton}  
+                onPress={() => navigation.navigate("NewOrder", { preselectedVehicle: vehicle.id })}  
+              >  
               <Feather name="plus" size={16} color="#fff" />  
               <Text style={styles.newOrderButtonText}>Nueva Orden</Text>  
-            </TouchableOpacity>  
+              </TouchableOpacity>  
+            )}
           </View>  
   
           {orders.length > 0 ? (  
             <FlatList  
               data={orders}  
               keyExtractor={(item) => item.id}  
-              renderItem={({ item }) => (  
-                <TouchableOpacity  
-                  style={styles.orderCard}  
-                  onPress={() => navigation.navigate("OrderDetail", { orderId: item.id })}  
-                >  
-                  <View style={styles.orderHeader}>  
-                    {/* ✅ CORREGIDO: Usar id como fallback si no existe number */}  
-                    <Text style={styles.orderNumber}>#{item.id.slice(0, 8)}</Text>  
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>  
-                      <Text style={styles.statusText}>{item.status}</Text>  
-                    </View>  
-                  </View>  
-                  <Text style={styles.orderDescription} numberOfLines={2}>  
-                    {item.description}  
-                  </Text>  
-                  <View style={styles.orderFooter}>  
-                    <Text style={styles.orderDate}>  
-                      {new Date(item.createdAt).toLocaleDateString("es-ES")}  
-                    </Text>  
-                    <Text style={styles.orderTotal}>${(item.total || 0).toFixed(2)}</Text>  
-                  </View>  
-                </TouchableOpacity>  
-              )}  
+              renderItem={({ item }) => {
+                if (!availableRoutes.includes("OrderDetail")) return null;
+                return (
+                  <TouchableOpacity
+                    style={styles.orderCard}
+                    onPress={() => navigation.navigate("OrderDetail", { orderId: item.id })}
+                  >
+                    <View style={styles.orderHeader}>
+                      {/* ✅ CORREGIDO: Usar id como fallback si no existe number */}
+                      <Text style={styles.orderNumber}>#{item.id.slice(0, 8)}</Text>
+                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>  
+                        <Text style={styles.statusText}>{item.status}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.orderDescription} numberOfLines={2}>
+                      {item.description}
+                    </Text>
+                    <View style={styles.orderFooter}>
+                      <Text style={styles.orderDate}>
+                        {new Date(item.createdAt).toLocaleDateString("es-ES")}
+                      </Text>
+                      <Text style={styles.orderTotal}>${(item.total || 0).toFixed(2)}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
               scrollEnabled={false}  
             />  
           ) : (  
@@ -336,49 +345,54 @@ export default function VehicleDetailScreen({ route, navigation }: UiScreenProps
         <View style={styles.section}>  
           <View style={styles.sectionHeader}>  
             <Text style={styles.sectionTitle}>Citas Programadas</Text>  
-            <TouchableOpacity  
-              style={styles.newAppointmentButton}  
-              onPress={() => navigation.navigate("NewAppointment", { preselectedVehicle: vehicle.id })}  
-            >  
+            {availableRoutes.includes("NewAppointment") && (
+              <TouchableOpacity  
+                style={styles.newAppointmentButton}  
+                onPress={() => navigation.navigate("NewAppointment", { preselectedVehicle: vehicle.id })}  
+              >  
               <Feather name="calendar" size={16} color="#fff" />  
               <Text style={styles.newAppointmentButtonText}>Nueva Cita</Text>  
-            </TouchableOpacity>  
+              </TouchableOpacity>  
+            )}
           </View>  
   
           {appointments.length > 0 ? (  
             <FlatList  
               data={appointments}  
               keyExtractor={(item) => item.id}  
-              renderItem={({ item }) => (  
-                <TouchableOpacity  
-                  style={styles.appointmentCard}  
-                  onPress={() => navigation.navigate("AppointmentDetail", { appointmentId: item.id })}  
-                >  
-                                    <View style={styles.appointmentHeader}>  
-                    <Text style={styles.appointmentService}>{item.tipo_servicio}</Text>  
-                    <View style={[styles.statusBadge, { backgroundColor: getAppointmentStatusColor(item.estado) }]}>  
-                      <Text style={styles.statusText}>{item.estado}</Text>  
-                    </View>  
-                  </View>  
-                  <View style={styles.appointmentDateTime}>  
-                    <View style={styles.appointmentDateInfo}>  
-                      <Feather name="calendar" size={14} color="#666" />  
-                      <Text style={styles.appointmentDate}>  
-                        {new Date(item.fecha).toLocaleDateString("es-ES")}  
-                      </Text>  
-                    </View>  
-                    <View style={styles.appointmentTimeInfo}>  
-                      <Feather name="clock" size={14} color="#666" />  
-                      <Text style={styles.appointmentTime}>{item.hora}</Text>  
-                    </View>  
-                  </View>  
-                  {item.notas && (  
-                    <Text style={styles.appointmentNotes} numberOfLines={2}>  
-                      {item.notas}  
-                    </Text>  
-                  )}  
-                </TouchableOpacity>  
-              )}  
+              renderItem={({ item }) => {
+                if (!availableRoutes.includes("AppointmentDetail")) return null;
+                return (
+                  <TouchableOpacity
+                    style={styles.appointmentCard}
+                    onPress={() => navigation.navigate("AppointmentDetail", { appointmentId: item.id })}
+                  >
+                    <View style={styles.appointmentHeader}>
+                      <Text style={styles.appointmentService}>{item.tipo_servicio}</Text>
+                      <View style={[styles.statusBadge, { backgroundColor: getAppointmentStatusColor(item.estado) }]}>  
+                        <Text style={styles.statusText}>{item.estado}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.appointmentDateTime}>
+                      <View style={styles.appointmentDateInfo}>
+                        <Feather name="calendar" size={14} color="#666" />
+                        <Text style={styles.appointmentDate}>
+                          {new Date(item.fecha).toLocaleDateString("es-ES")}
+                        </Text>
+                      </View>
+                      <View style={styles.appointmentTimeInfo}>
+                        <Feather name="clock" size={14} color="#666" />
+                        <Text style={styles.appointmentTime}>{item.hora}</Text>
+                      </View>
+                    </View>
+                    {item.notas && (
+                      <Text style={styles.appointmentNotes} numberOfLines={2}>
+                        {item.notas}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
               scrollEnabled={false}  
             />  
           ) : (  
