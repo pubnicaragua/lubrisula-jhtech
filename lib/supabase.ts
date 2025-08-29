@@ -14,12 +14,25 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 // Create a custom AsyncStorage adapter for Supabase
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  db: {
+    schema: 'public',
+  },
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: Platform.OS !== 'web', // Disable URL session detection for web
+    detectSessionInUrl: Platform.OS !== 'web',
   },
+  global: {
+    headers: {
+      'x-my-custom-header': 'autoflowx-app',
+    },
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10 // Limitar eventos por segundo
+    }
+  }
 });
 
 // Helper function to handle Supabase errors

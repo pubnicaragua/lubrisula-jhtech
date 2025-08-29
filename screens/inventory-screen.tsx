@@ -106,7 +106,7 @@ export default function InventoryScreen({ navigation }: Props) {
       const uniqueCategories = Array.from(
         new Map(categoriesData.map(cat => [cat.id, cat])).values()
       )
-      setCategories(uniqueCategories)
+  setCategories(uniqueCategories.slice(0, 8))
       setSuppliers(suppliersData)  
   
       console.log("✅ InventoryScreen - Datos del inventario cargados exitosamente")  
@@ -339,7 +339,7 @@ export default function InventoryScreen({ navigation }: Props) {
               </Text>  
             </TouchableOpacity>  
             {/* Deduplicate categories before rendering */}
-            {Array.from(new Map(categories.map(cat => [cat.id, cat])).values()).map((category) => (
+            {categories.map((category) => (
               <TouchableOpacity
                 key={category.id}
                 style={[

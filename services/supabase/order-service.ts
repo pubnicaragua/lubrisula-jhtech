@@ -76,15 +76,12 @@ const handleSupabaseError = (error: any, context: string) => {
   
 // Estados válidos del sistema  
 export const ORDER_STATUSES = [  
-  'reception',  
-  'diagnosis',  
-  'waiting_parts',  
-  'in_progress',  
-  'quality_check',  
-  'completed',  
-  'delivered',  
-  'cancelled'  
-] as const  
+  'Pendiente',
+  'En Proceso',
+  'Completada',
+  'Cancelada',
+  'Entregada',
+] as const;
   
 // Validación de estado  
 export const isValidOrderStatus = (status: string): boolean => {  
@@ -203,22 +200,34 @@ export const orderService = {
   // Create a new order  
   createOrder: async (orderData: ExtendedCreateOrderData): Promise<Order> => {  
     try {  
-      const orderNumber = `ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`  
-  
-      const newOrder = {  
-        client_id: orderData.clientId,  
-        vehiculo_id: orderData.vehicleId,  
-        tecnico_id: orderData.technicianId,  
-        descripcion: orderData.description,  
-        diagnostico: orderData.diagnosis,  
-        estado: orderData.status || 'reception',  
-        costo: orderData.total || 0,  
-        fecha_creacion: new Date().toISOString(),  
-        fecha_entrega: orderData.estimatedCompletionDate,  
-        prioridad: orderData.priority || 'normal',  
-        observacion: orderData.notes || '',  
-        numero_orden: orderNumber,  
-      }  
+      // Mapear estado interno a valores válidos del constraint
+      const estadoMap: Record<string, string> = {
+        'reception': 'Pendiente',
+        'diagnosis': 'En Proceso',
+        'waiting_parts': 'En Proceso',
+        'in_progress': 'En Proceso',
+        'quality_check': 'En Proceso',
+        'completed': 'Completada',
+        'delivered': 'Entregada',
+        'cancelled': 'Cancelada',
+      };
+      const estadoDB = estadoMap[orderData.status || 'reception'] || 'Pendiente';
+      const newOrder: any = {
+        client_id: orderData.clientId,
+        vehiculo_id: orderData.vehicleId,
+        descripcion: orderData.description,
+        estado: estadoDB,
+        costo: orderData.total || 0,
+        fecha_creacion: new Date().toISOString(),
+        fecha_entrega: orderData.estimatedCompletionDate,
+        prioridad: orderData.priority || 'normal',
+        observacion: orderData.notes || '',
+        // numero_orden: se autogenera por la base de datos
+      };
+      // Solo enviar tecnico_id si es bigint (número)
+      if (orderData.technicianId && !isNaN(Number(orderData.technicianId))) {
+        newOrder.tecnico_id = Number(orderData.technicianId);
+      }
   
       const { data, error } = await supabase  
         .from('ordenes_trabajo')  

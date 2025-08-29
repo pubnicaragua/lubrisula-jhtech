@@ -1,6 +1,6 @@
 "use client"  
   
-import { useState, useCallback, useEffect } from "react"  
+import { useState, useCallback, useEffect, useRef } from "react"  
 import {  
   View,  
   Text,  
@@ -49,74 +49,94 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
   const [searchQuery, setSearchQuery] = useState("")  
   const [sortBy, setSortBy] = useState<"name" | "date" | "orders">("name")  
   const [userRole, setUserRole] = useState<string | null>(null)  
+  // Paginación
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const loadingMoreRef = useRef(false);
   
-  const loadClients = useCallback(async () => {  
-    try {  
-      setLoading(true)  
-      if (!user?.id) return  
+  const loadClients = useCallback(async (reset = false) => {
+    try {
+      if (reset) {
+        setPage(1);
+        setHasMore(true);
+        setClients([]);
+      }
+      setLoading(true);
+      if (!user?.id) return;
+
+      const userTallerId = await userService.GET_TALLER_ID(user.id);
+      if (!userTallerId) {
+        Alert.alert("Error", "No se pudo cargar la información de permisos");
+        return;
+      }
+
+      const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId);
+      setUserRole(userPermissions?.role || 'client');
+
+      if (userPermissions?.role === 'client') {
+        const clientData = await clientService.getClientByUserId(user.id);
+        if (clientData) {
+          setClients([clientData]);
+          setFilteredClients([clientData]);
+        }
+        setHasMore(false);
+        return;
+      }
+
+      // Paginación para staff
+      let from = (reset ? 0 : (page - 1) * PAGE_SIZE);
+      let to = from + PAGE_SIZE - 1;
+  // Cargar clientes primero
+  const allClients = await clientService.getAllClients();
+  setClients(allClients);
+  setFilteredClients(allClients);
+  setHasMore(false);
+
+  // Luego cargar datos relacionados
+  const [allOrders, allVehicles] = await Promise.all([
+    orderService.getAllOrders(),
+    vehicleService.getAllVehicles()
+      ]);
+      const stats: Record<string, ClientStatsType> = {};
+  allClients.forEach((client: Client) => {
+        const clientOrders = allOrders.filter((order: Order) => order.clientId === client.id);
+        const clientVehicles = allVehicles.filter((vehicle: Vehicle) => vehicle.client_id === client.id);
+        const totalSpent = clientOrders.reduce((sum: number, order: Order) => sum + (order.total || 0), 0);
+        const lastOrder = clientOrders.sort((a: Order, b: Order) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )[0];
+        stats[client.id] = {
+          totalOrders: clientOrders.length,
+          totalSpent,
+          vehicleCount: clientVehicles.length,
+          lastOrderDate: lastOrder?.createdAt
+        };
+      });
+      setClientStats(stats);
+    } catch (error) {
+      console.error('Error loading clients:', error);
+      Alert.alert('Error', 'No se pudieron cargar los clientes');
+    } finally {
+      setLoading(false);
+      loadingMoreRef.current = false;
+    }
+  }, [user?.id, page]);
   
-      // Validar permisos del usuario  
-      const userTallerId = await userService.GET_TALLER_ID(user.id)  
-      if (!userTallerId) {  
-        Alert.alert("Error", "No se pudo cargar la información de permisos")  
-        return  
-      }  
-  
-      const userPermissions = await accessService.GET_PERMISOS_USUARIO(user.id, userTallerId)  
-      // ✅ CORREGIDO: Usar 'role' en lugar de 'rol'  
-      setUserRole(userPermissions?.role || 'client')  
-  
-      // Si es cliente, solo mostrar su información  
-      if (userPermissions?.role === 'client') {  
-        const clientData = await clientService.getClientByUserId(user.id)  
-        if (clientData) {  
-          setClients([clientData])  
-          setFilteredClients([clientData])  
-        }  
-        return  
-      }  
-  
-      // Para staff, cargar todos los clientes  
-      const [allClients, allOrders, allVehicles] = await Promise.all([  
-        clientService.getAllClients(), // ✅ CORREGIDO: Usar método existente  
-        orderService.getAllOrders(),  
-        vehicleService.getAllVehicles()  
-      ])  
-  
-      // Calcular estadísticas para cada cliente  
-      const stats: Record<string, ClientStatsType> = {}  
-      allClients.forEach((client: Client) => {  
-        const clientOrders = allOrders.filter((order: Order) => order.clientId === client.id)  
-        const clientVehicles = allVehicles.filter((vehicle: Vehicle) => vehicle.client_id === client.id)  
-        const totalSpent = clientOrders.reduce((sum: number, order: Order) => sum + (order.total || 0), 0)  
-        const lastOrder = clientOrders.sort((a: Order, b: Order) =>   
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()  
-        )[0]  
-  
-        stats[client.id] = {  
-          totalOrders: clientOrders.length,  
-          totalSpent,  
-          vehicleCount: clientVehicles.length,  
-          lastOrderDate: lastOrder?.createdAt // ✅ CORREGIDO: usar createdAt  
-        }  
-      })  
-  
-      setClientStats(stats)  
-      setClients(allClients)  
-      setFilteredClients(allClients)  
-    } catch (error) {  
-      console.error('Error loading clients:', error)  
-      Alert.alert('Error', 'No se pudieron cargar los clientes')  
-    } finally {  
-      setLoading(false)  
-    }  
-  }, [user?.id])  
-  
-  useFocusEffect(  
-    useCallback(() => {  
-      loadClients()  
-    }, [loadClients])  
-  )  
+  useFocusEffect(
+    useCallback(() => {
+      loadClients(true);
+    }, [user?.id])
+  );
+
+  // Lazy loading: cargar más clientes al llegar al final
+  const handleLoadMore = () => {
+    if (!loading && hasMore && !loadingMoreRef.current) {
+      loadingMoreRef.current = true;
+      setPage(prev => prev + 1);
+      loadClients();
+    }
+  };
   
   // Filtrar y ordenar clientes  
   useEffect(() => {  
@@ -145,11 +165,11 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
     setFilteredClients(filtered)  
   }, [clients, searchQuery, sortBy, clientStats])  
   
-  const onRefresh = async () => {  
-    setRefreshing(true)  
-    await loadClients()  
-    setRefreshing(false)  
-  }  
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadClients(true);
+    setRefreshing(false);
+  };
   
   const formatCurrency = (amount: number) => {  
     return amount.toLocaleString("es-ES", {  
@@ -166,18 +186,18 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
       vehicleCount: 0  
     }  
   
-    return (  
-      <TouchableOpacity  
-        style={styles.clientCard}  
-        onPress={() => navigation.navigate("ClientDetail", { clientId: client.id })}  
-      >  
-        <View style={styles.clientHeader}>  
-          <View style={styles.clientAvatar}>  
-            <Text style={styles.clientInitials}>  
-              {client.name?.split(" ").map((n: string) => n[0]).join("") || "?"}  
-            </Text>  
-          </View>  
-          <View style={styles.clientInfo}>  
+    return (
+      <TouchableOpacity
+        style={styles.clientCard}
+        onPress={() => navigation.navigate("ClientDetail", { clientId: client.id })}
+      >
+        <View style={styles.clientHeader}>
+          <View style={styles.clientAvatar}>
+            <Text style={styles.clientInitials}>
+              {client.name?.split(" ").map((n: string) => n[0]).join("") || "?"}
+            </Text>
+          </View>
+          <View style={styles.clientInfo}>
             <Text style={styles.clientName}>{client.name}</Text>  
             <View style={styles.clientContact}>  
               <Feather name="phone" size={12} color="#666" />  
@@ -248,71 +268,61 @@ export default function ClientsScreen({ navigation }: ClientsScreenProps) {
         )}  
       </View>  
   
-      <View style={styles.searchContainer}>  
-        <View style={styles.searchInputContainer}>  
-          <Feather name="search" size={20} color="#666" style={styles.searchIcon} />  
-          <TextInput  
-            style={styles.searchInput}  
-            placeholder="Buscar clientes..."  
-            value={searchQuery}  
-            onChangeText={setSearchQuery}  
-          />  
-        </View>  
-      </View>  
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputContainer}>
+          <Feather name="search" size={20} color="#666" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar clientes..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#999"
+          />
+        </View>
+        <View style={styles.sortContainer}>
+          <TouchableOpacity
+            style={[styles.sortButton, sortBy === "date" && styles.sortButtonActive]}
+            onPress={() => setSortBy("date")}
+          >
+            <Text style={[styles.sortButtonText, sortBy === "date" && styles.sortButtonTextActive]}>Fecha</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.sortButton, sortBy === "orders" && styles.sortButtonActive]}
+            onPress={() => setSortBy("orders")}
+          >
+            <Text style={[styles.sortButtonText, sortBy === "orders" && styles.sortButtonTextActive]}>Órdenes</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
   
-      <View style={styles.sortContainer}>  
-        <Text style={styles.sortLabel}>Ordenar por:</Text>  
-        <View style={styles.sortButtons}>  
-          <TouchableOpacity  
-            style={[styles.sortButton, sortBy === "name" && styles.sortButtonActive]}  
-            onPress={() => setSortBy("name")}  
-          >  
-            <Text style={[styles.sortButtonText, sortBy === "name" && styles.sortButtonTextActive]}>  
-              Nombre  
-            </Text>  
-          </TouchableOpacity>  
-          <TouchableOpacity  
-            style={[styles.sortButton, sortBy === "date" && styles.sortButtonActive]}  
-            onPress={() => setSortBy("date")}  
-          >  
-            <Text style={[styles.sortButtonText, sortBy === "date" && styles.sortButtonTextActive]}>  
-              Fecha  
-            </Text>  
-          </TouchableOpacity>  
-          <TouchableOpacity  
-            style={[styles.sortButton, sortBy === "orders" && styles.sortButtonActive]}  
-            onPress={() => setSortBy("orders")}  
-          >  
-            <Text style={[styles.sortButtonText, sortBy === "orders" && styles.sortButtonTextActive]}>  
-              Órdenes  
-            </Text>  
-          </TouchableOpacity>  
-        </View>  
-      </View>  
-  
-      <FlatList  
-        data={filteredClients}  
-        renderItem={renderClientCard}  
-        keyExtractor={(item) => item.id}  
-        contentContainerStyle={styles.listContainer}  
-        refreshControl={  
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#1a73e8"]} />  
-        }  
-        ListEmptyComponent={  
-          <View style={styles.emptyContainer}>  
-            <Feather name="users" size={64} color="#ccc" />  
-            <Text style={styles.emptyText}>No hay clientes registrados</Text>  
-            {userRole !== 'client' && (  
-              <TouchableOpacity  
-                style={styles.emptyButton}  
-                onPress={() => navigation.navigate("NewClient")}  
-              >  
-                <Text style={styles.emptyButtonText}>Agregar primer cliente</Text>  
-              </TouchableOpacity>  
-            )}  
-          </View>  
-        }  
-      />  
+      <FlatList
+        data={filteredClients}
+        keyExtractor={(item) => item.id}
+        renderItem={renderClientCard}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#007bff" />
+              <Text style={styles.loadingText}>Cargando clientes...</Text>
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No se encontraron clientes</Text>
+            </View>
+          )
+        }
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={hasMore && !loading ? (
+          <View style={{ padding: 16 }}>
+            <ActivityIndicator size="small" color="#007bff" />
+          </View>
+        ) : null}
+      />
     </View>  
   )  
 }  
@@ -330,9 +340,10 @@ const styles = StyleSheet.create({
   },  
   loadingText: {  
     marginTop: 10,  
-    fontSize: 16,  
-    color: "#666",  
-  },  
+  },
+  listContent: {
+    paddingBottom: 16,
+  },
   header: {  
     flexDirection: "row",  
     justifyContent: "space-between",  

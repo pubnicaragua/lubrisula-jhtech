@@ -35,25 +35,26 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const initializeData = async () => {
+    const initializeApp = async () => {
       try {
         setIsLoading(true)
-        await Promise.all([
-          userService.initializeUsers(),
+        // Inicializa solo lo crítico (usuarios)
+        await userService.initializeUsers()
+        setIsLoading(false)
+        // Los demás servicios se cargan en background
+        Promise.all([
           clientService.initializeClients(),
           vehicleService.initializeVehicles(),
           orderService.initializeOrders(),
-          inventoryService.getAllInventory().then(() => console.log("Inventory initialized")),
-        ])
-        console.log("Datos inicializados correctamente con Supabase")
+          inventoryService.getAllInventory()
+        ]).catch(console.error)
       } catch (error) {
-        console.error("Error al inicializar datos:", error)
-        setError("Error al inicializar la aplicación. Por favor, verifique su conexión a internet y reinicie.")
-      } finally {
+        console.error("Error al inicializar:", error)
+        setError("Error de conexión")
         setIsLoading(false)
       }
     }
-    initializeData()
+    initializeApp()
   }, [])
 
   if (isLoading) {

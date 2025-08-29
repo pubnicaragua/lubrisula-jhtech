@@ -67,16 +67,13 @@ export default function UpdateOrderScreen({ navigation, route }: UiScreenProps) 
   })  
   const [showStatusModal, setShowStatusModal] = useState(false)  
   
-  const ORDER_STATUSES = [  
-    { id: 'reception', label: 'Recepción', color: '#ff9800' },  
-    { id: 'diagnosis', label: 'Diagnóstico', color: '#2196f3' },  
-    { id: 'waiting_parts', label: 'Esperando Repuestos', color: '#9c27b0' },  
-    { id: 'in_progress', label: 'En Proceso', color: '#ff5722' },  
-    { id: 'quality_check', label: 'Control de Calidad', color: '#607d8b' },  
-    { id: 'completed', label: 'Completada', color: '#4caf50' },  
-    { id: 'delivered', label: 'Entregada', color: '#8bc34a' },  
-    { id: 'cancelled', label: 'Cancelada', color: '#f44336' },  
-  ]  
+  const ORDER_STATUSES = [
+    { id: 'Pendiente', label: 'Pendiente', color: '#ff9800' },
+    { id: 'En Proceso', label: 'En Proceso', color: '#ff5722' },
+    { id: 'Completada', label: 'Completada', color: '#4caf50' },
+    { id: 'Cancelada', label: 'Cancelada', color: '#f44336' },
+    { id: 'Entregada', label: 'Entregada', color: '#8bc34a' },
+  ]
   
   const loadOrderData = useCallback(async () => {  
     try {  

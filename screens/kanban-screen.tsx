@@ -84,38 +84,37 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
         return  
       }  
   
-      // Cargar columnas del Kanban  
-      const { data: columnsData, error: columnsError } = await supabase  
-        .from('kanban_columns')  
-        .select('*')  
-        .order('position', { ascending: true })  
-  
-      if (columnsError) throw columnsError  
-  
-      // Cargar tarjetas con información de vehículos  
-      const { data: cardsData, error: cardsError } = await supabase  
-        .from('kanban_cards')
-        .select(`
-          *,
-          vehicle:vehicle_id(
-            marca,
-            modelo,
-            placa,
-            client_id
-          )
-        `)
-        .order('position', { ascending: true })
-  
-      if (cardsError) throw cardsError  
-  
-      // Organizar tarjetas por columnas  
-      const columnsWithCards = columnsData.map(column => ({  
-        ...column,  
-        cards: cardsData.filter(card => card.column_id === column.id)  
-      }))  
-  
-      setColumns(columnsWithCards)  
-  
+      // Cargar columnas del Kanban primero
+      const { data: columnsData, error: columnsError } = await supabase
+        .from('kanban_columns')
+        .select('id, title, color, position')
+        .order('position', { ascending: true });
+      if (columnsError) throw columnsError;
+
+      // Cargar tarjetas solo después de tener columnas
+      let cardsData = [];
+      let cardsError = null;
+      if (columnsData && columnsData.length > 0) {
+        const cardsResult = await supabase
+          .from('kanban_cards')
+          .select(`
+            id, column_id, vehicle_id, position, title, description, priority, created_at,
+            vehicle:vehicle_id(
+              marca, modelo, placa, client_id
+            )
+          `)
+          .order('position', { ascending: true });
+        cardsData = cardsResult.data || [];
+        cardsError = cardsResult.error;
+        if (cardsError) throw cardsError;
+      }
+
+      // Organizar tarjetas por columnas
+      const columnsWithCards = columnsData.map(column => ({
+        ...column,
+        cards: cardsData.filter(card => card.column_id === column.id)
+      }));
+      setColumns(columnsWithCards);
     } catch (error) {  
       console.error("Error loading kanban data:", error)  
       setError("No se pudieron cargar los datos del tablero")  
@@ -182,42 +181,55 @@ export default function KanbanScreen({ navigation }: KanbanScreenProps) {
         return  
       }  
   
-      // Por simplicidad, usar el primer vehículo (en una implementación real, mostrarías un selector)  
-      const selectedVehicle = vehicles[0]  
-  
-      // Obtener la posición más alta en la columna  
-      const { data: maxPositionData } = await supabase  
-        .from('kanban_cards')  
-        .select('position')  
-        .eq('column_id', columnId)  
-        .order('position', { ascending: false })  
-        .limit(1)  
-  
-      const newPosition = maxPositionData?.[0]?.position ? maxPositionData[0].position + 1 : 1  
-  
-      // Crear nueva tarjeta  
-      const { error } = await supabase  
-        .from('kanban_cards')  
-        .insert({  
-          column_id: columnId,  
-          vehicle_id: selectedVehicle.id,  
-          position: newPosition,  
-          title: `${selectedVehicle.marca} ${selectedVehicle.modelo}`,  
-          description: `Placa: ${selectedVehicle.placa}`,  
-          priority: 'normal'  
-        })  
-  
-      if (error) throw error  
-  
-      // Recargar datos  
-      loadKanbanData()  
-      Alert.alert("Éxito", "Nueva tarjeta creada correctamente")  
-  
-    } catch (error) {  
-      console.error("Error creating card:", error)  
-      Alert.alert("Error", "No se pudo crear la tarjeta")  
-    }  
-  }  
+      // Por simplicidad, usar el primer vehículo (en una implementación real, mostrarías un selector)
+      const selectedVehicle = vehicles[0];
+
+      // Obtener el cliente del vehículo
+      let clientName = '';
+      if (selectedVehicle.client_id) {
+        // Buscar el cliente en la base de datos
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('name')
+          .eq('id', selectedVehicle.client_id)
+          .maybeSingle();
+        clientName = clientData?.name || '';
+      }
+
+      // Obtener la posición más alta en la columna
+      const { data: maxPositionData } = await supabase
+        .from('kanban_cards')
+        .select('position')
+        .eq('column_id', columnId)
+        .order('position', { ascending: false })
+        .limit(1);
+
+      const newPosition = maxPositionData?.[0]?.position ? maxPositionData[0].position + 1 : 1;
+
+      // Crear nueva tarjeta (agregando client_name)
+      const { error } = await supabase
+        .from('kanban_cards')
+        .insert({
+          column_id: columnId,
+          vehicle_id: selectedVehicle.id,
+          position: newPosition,
+          title: `${selectedVehicle.marca} ${selectedVehicle.modelo}`,
+          description: `Placa: ${selectedVehicle.placa}`,
+          priority: 'normal',
+          client_name: clientName || 'Sin cliente',
+        });
+
+      if (error) throw error;
+
+      // Recargar datos
+      loadKanbanData();
+      Alert.alert("Éxito", "Nueva tarjeta creada correctamente");
+
+    } catch (error) {
+      console.error("Error creating card:", error);
+      Alert.alert("Error", "No se pudo crear la tarjeta");
+    }
+  }
   
   // Renderizar tarjeta  
   const renderCard = (card: KanbanCard) => {  

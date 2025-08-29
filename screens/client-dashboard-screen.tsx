@@ -23,6 +23,7 @@ import { useAuth } from "../context/auth-context"
 import { clientService } from "../services/supabase/client-service"  
 import { vehicleService } from "../services/supabase/vehicle-service"  
 import { orderService } from "../services/supabase/order-service"  
+import { supabase } from "../lib/supabase"
 import { Client } from "../services/supabase/client-service"  
 import { Vehicle } from "../services/supabase/vehicle-service"  
 import { Order } from '../types/order'  
@@ -121,34 +122,35 @@ export default function ClientDashboardScreen() {
   }  
   
   // ✅ CORREGIDO: Cargar datos usando getClientByUserId  
-  const loadDashboardData = useCallback(async () => {  
-    try {  
-      setIsLoading(true)  
-      setRefreshing(true)  
-        
-      if (!user?.id) return  
-  
-  // Cliente por user_id
-      const client = await clientService.getClientByUserId(user.id)  
-      if (client) {  
-        setClientData(client)  
-      }  
-  
-      // Obtener vehículos del cliente usando el clientId  
-      let clientVehicles: Vehicle[] = []  
-      if (client) {  
-        clientVehicles = await vehicleService.getVehiclesByClientId(client.id)  
-      }  
-      setVehicles(clientVehicles)  
-  
-      // Obtener órdenes del cliente usando el clientId  
-      let clientOrders: Order[] = []  
-      if (client) {  
-        clientOrders = await orderService.getOrdersByClientId(client.id)  
-      }  
-      setOrders(clientOrders)  
-  
-      // Obtener citas del cliente (placeholder por ahora)  
+  const loadDashboardData = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      setRefreshing(true)
+      if (!user?.id) return
+
+      // Consulta optimizada: cliente, vehículos y órdenes en un solo select
+      const { data: dashboardData, error } = await supabase
+        .from('clients')
+        .select(`
+          id, name, email,
+          vehicles:vehicles!client_id (
+            id, marca, modelo, placa, kilometraje
+          ),
+          orders:ordenes_trabajo!client_id (
+            id, estado, costo, fecha_creacion
+          )
+        `)
+        .eq('user_id', user.id)
+        .single()
+
+      if (error) throw error
+
+      if (dashboardData) {
+        setClientData(dashboardData)
+        setVehicles(dashboardData.vehicles || [])
+        setOrders(dashboardData.orders || [])
+      }
+
       // Obtener citas del cliente (ahora funcional)
       let clientAppointments: AppointmentType[] = citas.map((cita: any) => ({
         id: cita.id,
@@ -160,27 +162,27 @@ export default function ClientDashboardScreen() {
         estado: cita.estado,
       }))
       setAppointments(clientAppointments)
-  
-      // Calcular estadísticas  
-      const activeOrders = clientOrders.filter((order: Order) =>  
-        order.status !== "completed" &&  
-        order.status !== "delivered" &&  
-        order.status !== "cancelled"  
-      )  
-  
-      const completedOrders = clientOrders.filter((order: Order) =>  
-        order.status === "completed" || order.status === "delivered"  
-      )  
-  
-      // Calcular servicios próximos basándose en kilometraje  
-      const vehiclesWithUpcomingService = clientVehicles.filter((vehicle: Vehicle) => {  
-        const currentKm = vehicle.kilometraje || 0  
-        const lastServiceKm = 0  
-        return (currentKm - lastServiceKm) >= 5000  
-      })  
+
+      // Calcular estadísticas
+      const activeOrders = (dashboardData.orders || []).filter((order: any) =>
+        order.estado !== "completed" &&
+        order.estado !== "delivered" &&
+        order.estado !== "cancelled"
+      )
+
+      const completedOrders = (dashboardData.orders || []).filter((order: any) =>
+        order.estado === "completed" || order.estado === "delivered"
+      )
+
+      // Calcular servicios próximos basándose en kilometraje
+      const vehiclesWithUpcomingService = (dashboardData.vehicles || []).filter((vehicle: any) => {
+        const currentKm = vehicle.kilometraje || 0
+        const lastServiceKm = 0
+        return (currentKm - lastServiceKm) >= 5000
+      })
   
       setStats({  
-        totalVehicles: clientVehicles.length,  
+  totalVehicles: (dashboardData.vehicles || []).length,
         activeOrders: activeOrders.length,  
         completedOrders: completedOrders.length,  
         upcomingServices: vehiclesWithUpcomingService.length,  
@@ -197,11 +199,11 @@ export default function ClientDashboardScreen() {
       setUpcomingServices(upcomingServicesData)  
   
       // Preparar datos para órdenes recientes  
-      const recentOrdersData = clientOrders  
+  const recentOrdersData = (dashboardData.orders || [])
         .sort((a: Order, b: Order) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())  
         .slice(0, 3)  
         .map((order: Order) => {  
-          const vehicle = clientVehicles.find((v: Vehicle) => v.id === order.vehicleId)  
+          const vehicle = (dashboardData.vehicles || []).find((v: Vehicle) => v.id === order.vehicleId)
           return {  
             ...order,  
             vehicleInfo: vehicle ? `${vehicle.marca} ${vehicle.modelo} (${vehicle.ano})` : "Vehículo no encontrado",  

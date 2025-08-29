@@ -43,16 +43,13 @@ interface EnhancedOrder extends Order {
   vehicleInfo?: string  
 }  
   
-const ORDER_STATUSES = [  
-  { id: 'reception', label: 'Recepción', color: '#ff9800', icon: 'inbox' },  
-  { id: 'diagnosis', label: 'Diagnóstico', color: '#2196f3', icon: 'search' },  
-  { id: 'waiting_parts', label: 'Esperando Repuestos', color: '#9c27b0', icon: 'clock' },  
-  { id: 'in_progress', label: 'En Proceso', color: '#ff5722', icon: 'tool' },  
-  { id: 'quality_check', label: 'Control de Calidad', color: '#607d8b', icon: 'check-circle' },  
-  { id: 'completed', label: 'Completada', color: '#4caf50', icon: 'check' },  
-  { id: 'delivered', label: 'Entregada', color: '#8bc34a', icon: 'truck' },  
-  { id: 'cancelled', label: 'Cancelada', color: '#f44336', icon: 'x-circle' },  
-]  
+const ORDER_STATUSES = [
+  { id: 'Pendiente', label: 'Pendiente', color: '#ff9800', icon: 'inbox' },
+  { id: 'En Proceso', label: 'En Proceso', color: '#ff5722', icon: 'tool' },
+  { id: 'Completada', label: 'Completada', color: '#4caf50', icon: 'check' },
+  { id: 'Cancelada', label: 'Cancelada', color: '#f44336', icon: 'x-circle' },
+  { id: 'Entregada', label: 'Entregada', color: '#8bc34a', icon: 'truck' },
+]
   
 export default function OrderStatusScreen({ navigation, route }: Props) {  
   const { user } = useAuth()  
