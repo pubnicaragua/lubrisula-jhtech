@@ -105,25 +105,25 @@ export default function VehicleInspectionModal({
     }  
   }  
   
-  // Actualizar campo de inspección  
-  const updateInspectionField = (section: string, field: string, key: string, value: any) => {  
-    setInspectionData(prev => ({  
-      ...prev,  
-      [section]: {  
-        ...prev[section as keyof typeof prev.interiores],  
-        [field]: {  
-          ...prev[section as keyof typeof prev.interiores][field as keyof typeof prev.interiores.documentos],  
-          [key]: value  
-        }  
-      }  
-    }))  
-  }  
+  // Actualizar campo de inspección
+  const updateInspectionField = (section: keyof HojaIngresoType, field: string, key: string, value: any) => {
+    setInspectionData(prev => ({
+      ...prev,
+      [section]: {
+        ...(prev[section] as any),
+        [field]: {
+          ...(prev[section] as any)[field],
+          [key]: value
+        }
+      }
+    }))
+  }
   
-  // Manejar cambio de switch (si/no)  
-  const handleSwitchChange = (section: string, field: string, value: boolean) => {  
-    updateInspectionField(section, field, 'si', value)  
-    updateInspectionField(section, field, 'no', !value)  
-  }  
+  // Manejar cambio de switch (si/no)
+  const handleSwitchChange = (section: string, field: string, value: boolean) => {
+    updateInspectionField(section as keyof HojaIngresoType, field, 'si', value)
+    updateInspectionField(section as keyof HojaIngresoType, field, 'no', !value)
+  }
   
   // Guardar inspección  
   const saveInspection = async () => {  
@@ -171,12 +171,12 @@ export default function VehicleInspectionModal({
               />  
             </View>  
               
-            <TextInput  
-              style={styles.quantityInput}  
-              placeholder="Cantidad"  
-              value={item.cantidad}  
-              onChangeText={(text) => updateInspectionField(section, key, 'cantidad', text)}  
-            />  
+            <TextInput
+              style={styles.quantityInput}
+              placeholder="Cantidad"
+              value={item.cantidad}
+              onChangeText={(text) => updateInspectionField(section as keyof HojaIngresoType, key, 'cantidad', text)}
+            />
           </View>  
         </View>  
       ))}  
